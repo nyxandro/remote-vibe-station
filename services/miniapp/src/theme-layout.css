@@ -1,0 +1,328 @@
+/**
+ * Theme and layout extensions for Mini App.
+ * Keeps new UI features outside legacy `styles.css` to contain complexity.
+ */
+
+/* Theme tokens for day/night modes; dark mode overrides are selector-driven. */
+:root {
+  --focus-ring: 0 0 0 3px rgba(27, 108, 255, 0.2);
+  --toolbar-bg: #f8faff;
+}
+
+/* Explicit focus ring for keyboard accessibility on custom inputs/buttons. */
+.input:focus,
+.input:focus-visible,
+.icon-tool-btn:focus,
+.icon-tool-btn:focus-visible,
+.stream-toggle:focus,
+.stream-toggle:focus-visible,
+.terminal-send-btn:focus,
+.terminal-send-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Active project header row: name left, stream action right. */
+.active-project-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Stream toggle keeps one-click behavior in project context. */
+.stream-toggle {
+  border: 1px solid #9db8ff;
+  background: #ffffff;
+  color: #1b3f91;
+  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.stream-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.stream-toggle-on {
+  color: #065f46;
+  border-color: #86efac;
+  background: #ecfdf5;
+}
+
+/* File toolbar becomes a compact icon strip for future tools. */
+.files-toolbar {
+  background: var(--toolbar-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.icon-tool-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1c2230;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.icon-tool-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Keep path visible but flexible between compact icon buttons. */
+.files-path {
+  margin: 0 6px;
+  flex: 1 1 auto;
+}
+
+/* Terminal occupies the whole viewport section with messenger-like input dock. */
+.terminal-shell {
+  min-height: max(300px, calc(100vh - 185px));
+  height: max(300px, calc(100vh - 185px));
+}
+
+.terminal-output {
+  flex: 1 1 auto;
+  min-height: 300px;
+  max-height: none;
+  margin: 0;
+}
+
+.terminal-input-row {
+  margin-top: 10px;
+}
+
+.terminal-send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.terminal-send-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Settings tab keeps a simple split action for theme mode. */
+.settings-shell {
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-accordion-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fbff;
+  overflow: hidden;
+}
+
+.settings-accordion-item > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  font-weight: 600;
+}
+
+.settings-accordion-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-accordion-body {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-create-row,
+.settings-actions-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-editor-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-editor-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.settings-theme-toggle {
+  display: inline-flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-theme-toggle .btn.active {
+  border-color: var(--accent);
+  background: #eef3ff;
+}
+
+/* Dark theme palette tuned for readability in dense admin UI. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body,
+html[data-theme="dark"] .app-shell,
+html[data-theme="dark"] .panel {
+  background: #0b1220;
+  color: #e6edf7;
+}
+
+html[data-theme="dark"] .panel-title,
+html[data-theme="dark"] .project-name,
+html[data-theme="dark"] .status-title,
+html[data-theme="dark"] .active-project-name,
+html[data-theme="dark"] .file-name {
+  color: #f4f8ff;
+}
+
+html[data-theme="dark"] .active-project-path,
+html[data-theme="dark"] .active-project-hint,
+html[data-theme="dark"] .project-path,
+html[data-theme="dark"] .files-path,
+html[data-theme="dark"] .files-preview-title,
+html[data-theme="dark"] .toggle {
+  color: #a2b0c8;
+}
+
+html[data-theme="dark"] .project-health-healthy {
+  color: #9ff0ce;
+  border-color: #1d5f4c;
+  background: #113128;
+}
+
+html[data-theme="dark"] .project-health-partial {
+  color: #f7df9c;
+  border-color: #7b5d1a;
+  background: #3b2f10;
+}
+
+html[data-theme="dark"] .project-health-down {
+  color: #ffc4ce;
+  border-color: #6f2d39;
+  background: #32191f;
+}
+
+html[data-theme="dark"] .project-git-plus {
+  color: #9ff0ce;
+}
+
+html[data-theme="dark"] .project-git-minus {
+  color: #ffc4ce;
+}
+
+html[data-theme="dark"] .tab,
+html[data-theme="dark"] .btn,
+html[data-theme="dark"] .icon-tool-btn,
+html[data-theme="dark"] .input,
+html[data-theme="dark"] .files-list,
+html[data-theme="dark"] .status-card,
+html[data-theme="dark"] .placeholder,
+html[data-theme="dark"] .codebox,
+html[data-theme="dark"] .project-card,
+html[data-theme="dark"] .files-toolbar,
+html[data-theme="dark"] .settings-accordion-item,
+html[data-theme="dark"] .settings-editor-card,
+html[data-theme="dark"] .project-create-panel,
+html[data-theme="dark"] .project-create-menu {
+  background: #131d31;
+  border-color: #233352;
+  color: #d9e3f5;
+}
+
+html[data-theme="dark"] .tab.active,
+html[data-theme="dark"] .settings-theme-toggle .btn.active {
+  background: #1b2c49;
+  border-color: #2e4b7b;
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .file-item,
+html[data-theme="dark"] .file-item.dir {
+  background: #131d31;
+  border-bottom-color: #233352;
+}
+
+html[data-theme="dark"] .stream-toggle {
+  background: #131d31;
+  border-color: #2e4b7b;
+  color: #b9ceef;
+}
+
+html[data-theme="dark"] .stream-toggle-on {
+  background: #113128;
+  border-color: #1d5f4c;
+  color: #9ff0ce;
+}
+
+html[data-theme="dark"] .file-item:hover {
+  background: #1b2a45;
+}
+
+html[data-theme="dark"] .alert {
+  background: #32191f;
+  border-color: #6f2d39;
+  color: #ffc4ce;
+}
+
+html[data-theme="dark"] .log-box {
+  background: #030712;
+  border-color: #1f2a44;
+  color: #e2e8f0;
+}
+
+@media (max-width: 640px) {
+  /* On small screens, preserve comfortable terminal height and controls spacing. */
+  .terminal-shell {
+    min-height: max(300px, calc(100vh - 210px));
+    height: max(300px, calc(100vh - 210px));
+  }
+
+  .files-toolbar {
+    padding: 5px;
+  }
+
+  .icon-tool-btn {
+    width: 28px;
+    height: 28px;
+  }
+}

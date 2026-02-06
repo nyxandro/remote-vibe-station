@@ -1,0 +1,8 @@
+{
+  "name": "<project_name>",
+  "slug": "<project_slug>",
+  "composePath": "/srv/projects/<project_slug>/docker-compose.yml",
+  "serviceName": "app",
+  "servicePort": "__SERVICE_PORT__",
+  "domain": "<project_slug>.<domain.tld>"
+}

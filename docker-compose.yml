@@ -1,0 +1,126 @@
+version: "3.9"
+
+services:
+  proxy:
+    image: traefik:v3.1
+    # Reverse proxy, TLS и маршрутизация
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+      - "--certificatesresolvers.le.acme.email=${TLS_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/acme/acme.json"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./infra/traefik/acme.json:/acme/acme.json
+    networks:
+      - public
+      - internal
+
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    # Middleware: OpenCode API, Telegram webhook, управление Docker
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      - PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
+      - PROJECTS_ROOT=${PROJECTS_ROOT}
+      - OPENCODE_DATA_DIR=${OPENCODE_DATA_DIR}
+      - OPENCODE_CONFIG_DIR=/opencode-config
+      - OPENCODE_SERVER_URL=${OPENCODE_SERVER_URL}
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      - ${OPENCODE_DATA_DIR:-./opencode-data}:/opencode-data
+      - opencode_config:/opencode-config
+      - ./data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${PUBLIC_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/events`))"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=le"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+    networks:
+      - internal
+      - public
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/projects"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  bot:
+    build:
+      context: ./services/bot
+      dockerfile: Dockerfile
+    # Telegram webhook обработчик
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - BACKEND_URL=http://backend:3000
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bot.rule=Host(`${PUBLIC_DOMAIN}`) && Path(`/bot/webhook`)"
+      - "traefik.http.routers.bot.entrypoints=websecure"
+      - "traefik.http.routers.bot.tls.certresolver=le"
+      - "traefik.http.services.bot.loadbalancer.server.port=3001"
+    networks:
+      - internal
+      - public
+
+  miniapp:
+    build:
+      context: ./services/miniapp
+      dockerfile: Dockerfile
+    # Mini App для управления
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.miniapp.rule=Host(`${PUBLIC_DOMAIN}`) && PathPrefix(`/miniapp`)"
+      - "traefik.http.routers.miniapp.entrypoints=websecure"
+      - "traefik.http.routers.miniapp.tls.certresolver=le"
+      - "traefik.http.services.miniapp.loadbalancer.server.port=4173"
+    networks:
+      - internal
+      - public
+
+  opencode:
+    build:
+      context: ./services/opencode
+      dockerfile: Dockerfile
+    # OpenCode server mode
+    command: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
+    environment:
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+    volumes:
+      - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      # Allow backend to sync OpenCode storage via the same host dir.
+      - ${OPENCODE_DATA_DIR:-./opencode-data}:/opencode-data
+      # Persist OpenCode state (projects/sessions/messages) on the host.
+      # For VPS: set OPENCODE_DATA_DIR=/opt/opencode-data (or similar).
+      - ${OPENCODE_DATA_DIR:-./opencode-data}:/root/.local/share/opencode
+      # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).
+      - opencode_config:/root/.config/opencode
+    networks:
+      - internal
+
+networks:
+  public:
+    name: public
+    driver: bridge
+  internal:
+    driver: bridge
+
+volumes:
+  opencode_config:

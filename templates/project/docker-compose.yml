@@ -1,0 +1,8 @@
+version: "3.9"
+
+services:
+  app:
+    image: <image_name>
+    # Внутренний порт сервиса должен соответствовать servicePort в opencode.project.json
+    ports:
+      - "<service_port>:<service_port>"

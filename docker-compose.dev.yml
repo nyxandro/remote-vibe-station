@@ -1,0 +1,93 @@
+services:
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      - PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
+      - PROJECTS_ROOT=${PROJECTS_ROOT}
+      - OPENCODE_DATA_DIR=${OPENCODE_DATA_DIR}
+      - OPENCODE_CONFIG_DIR=/opencode-config
+      - OPENCODE_SERVER_URL=http://opencode:4096
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      - ${OPENCODE_DATA_DIR:-./opencode-data}:/opencode-data
+      - opencode_config:/opencode-config
+      - ./data:/app/data
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/projects"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    depends_on:
+      opencode:
+        condition: service_healthy
+
+  miniapp:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 4173 --strictPort"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - WDS_SOCKET_PORT=4173
+      - VITE_BACKEND_URL=http://backend:3000
+    volumes:
+      - ./services/miniapp:/app
+      - miniapp_node_modules:/app/node_modules
+    ports:
+      - "4173:4173"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  opencode:
+    build:
+      context: ./services/opencode
+      dockerfile: Dockerfile
+    environment:
+      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
+      - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+    volumes:
+      - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      # Allow backend to sync OpenCode storage via the same host dir.
+      - ${OPENCODE_DATA_DIR:-./opencode-data}:/opencode-data
+      # Persist OpenCode state (projects/sessions/messages) on the host.
+      # For VPS: set OPENCODE_DATA_DIR=/opt/opencode-data (or similar).
+      - ${OPENCODE_DATA_DIR:-./opencode-data}:/root/.local/share/opencode
+      # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).
+      - opencode_config:/root/.config/opencode
+    ports:
+      - "4096:4096"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4096/doc"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+
+  bot:
+    build:
+      context: ./services/bot
+      dockerfile: Dockerfile
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - BACKEND_URL=http://backend:3000
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  miniapp_node_modules:
+  opencode_config:

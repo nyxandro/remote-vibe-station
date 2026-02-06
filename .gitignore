@@ -1,0 +1,7 @@
+.env
+data/
+opencode-data/
+infra/traefik/acme.json
+node_modules/
+dist/
+services/**/dist/

@@ -1,0 +1,91 @@
+/**
+ * Full-screen diff preview styles.
+ * Kept in a dedicated file to avoid extending legacy oversized styles.css.
+ */
+
+.diff-preview-screen {
+  min-height: 100vh;
+  background: #0d1220;
+  color: #e5e9f3;
+  padding: 0;
+  display: grid;
+  gap: 0;
+  grid-template-rows: auto auto auto 1fr;
+}
+
+.diff-preview-close {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  border: 1px solid #2a3550;
+  background: rgba(19, 27, 47, 0.85);
+  color: #dbe4ff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.diff-preview-error {
+  border: 1px solid #5b2330;
+  background: #2a1017;
+  color: #ffd1db;
+  border-radius: 0;
+  padding: 10px;
+  margin-top: 0;
+}
+
+.diff-preview-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+}
+
+.diff-preview-op {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.diff-preview-counts {
+  font-size: 14px;
+  color: #a8c3ff;
+}
+
+.diff-preview-path {
+  color: #93a0bd;
+  word-break: break-all;
+  padding: 0 10px 10px;
+}
+
+.diff-preview-body {
+  margin: 0;
+  background: #0a0f1b;
+  border: 0;
+  border-radius: 0;
+  padding: 10px;
+  overflow: auto;
+  line-height: 1.45;
+  height: calc(100vh - 96px);
+}
+
+.diff-line {
+  display: block;
+  white-space: pre;
+}
+
+.diff-line-add {
+  background: rgba(45, 164, 78, 0.18);
+  color: #b3f7c2;
+}
+
+.diff-line-del {
+  background: rgba(248, 81, 73, 0.2);
+  color: #ffc1bc;
+}
+
+.diff-line-meta {
+  color: #8ea0c8;
+}

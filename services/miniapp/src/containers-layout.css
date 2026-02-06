@@ -1,0 +1,168 @@
+/**
+ * Container control surfaces and list layout.
+ * Kept in a dedicated file to avoid growing legacy styles.css further.
+ */
+
+.compose-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  background: #f9fbff;
+  margin-bottom: 12px;
+}
+
+.compose-controls-label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.compose-controls-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icon-action-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #2d4f8c;
+  background: linear-gradient(180deg, #16305f 0%, #12284e 100%);
+  color: #d9e8ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.icon-action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #4a74c0;
+  background: linear-gradient(180deg, #1a3a71 0%, #14315f 100%);
+}
+
+.icon-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.icon-action-btn-compose {
+  width: 38px;
+  height: 38px;
+}
+
+.icon-action-btn-stop {
+  border-color: #68415a;
+  background: linear-gradient(180deg, #47263a 0%, #3d2132 100%);
+}
+
+.icon-action-btn-stop:hover:not(:disabled) {
+  border-color: #875878;
+  background: linear-gradient(180deg, #5b304a 0%, #49273c 100%);
+}
+
+.container-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.container-row {
+  width: 100%;
+  border: 1px solid #dbe6ff;
+  background: #f7faff;
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.container-row-line {
+  word-break: break-word;
+}
+
+.container-row-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #132b57;
+}
+
+.container-row-state {
+  font-size: 13px;
+  color: #214276;
+}
+
+.container-row-ports {
+  font-size: 12px;
+  color: #415d87;
+}
+
+.container-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.container-logs-toolbar {
+  margin-bottom: 10px;
+}
+
+html[data-theme="dark"] .compose-controls {
+  background: #101a2e;
+  border-color: #22334f;
+}
+
+html[data-theme="dark"] .icon-action-btn {
+  border-color: #355893;
+  background: linear-gradient(180deg, #16305f 0%, #12284e 100%);
+  color: #d9e8ff;
+}
+
+html[data-theme="dark"] .icon-action-btn:hover:not(:disabled) {
+  border-color: #4c78c4;
+  background: linear-gradient(180deg, #1a3a71 0%, #14315f 100%);
+}
+
+html[data-theme="dark"] .icon-action-btn-stop {
+  border-color: #7a4f6c;
+  background: linear-gradient(180deg, #4e2a40 0%, #412335 100%);
+}
+
+html[data-theme="dark"] .container-row {
+  background: #101a2e;
+  border-color: #22334f;
+}
+
+html[data-theme="dark"] .container-row-title {
+  color: #ecf2ff;
+}
+
+html[data-theme="dark"] .container-row-state {
+  color: #bdd0f3;
+}
+
+html[data-theme="dark"] .container-row-ports,
+html[data-theme="dark"] .compose-controls-label {
+  color: #9bb0d7;
+}
+
+@media (max-width: 640px) {
+  .container-row {
+    border-radius: 12px;
+    padding: 10px;
+  }
+
+  .compose-controls {
+    border-radius: 12px;
+    padding: 10px;
+  }
+}

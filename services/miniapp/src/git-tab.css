@@ -1,0 +1,148 @@
+/**
+ * @fileoverview Mobile-first styles for GitHub tab controls and file list.
+ */
+
+.git-tab-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.git-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-branch-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.git-branch-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.git-upstream-stats {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.git-field-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.git-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.git-select {
+  flex: 1 1 220px;
+  min-width: 160px;
+}
+
+.git-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #dce7ff;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.git-file-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.git-file-path {
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.git-file-status {
+  font-size: 12px;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+}
+
+.git-file-status-modified,
+.git-file-status-renamed {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.git-file-status-added,
+.git-file-status-untracked {
+  color: #166534;
+  border-color: #86efac;
+  background: #ecfdf5;
+}
+
+.git-file-status-deleted,
+.git-file-status-conflict {
+  color: #991b1b;
+  border-color: #fca5a5;
+  background: #fee2e2;
+}
+
+.git-file-delta {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+html[data-theme="dark"] .git-card {
+  background: #101a2e;
+  border-color: #22334f;
+}
+
+html[data-theme="dark"] .git-file-row {
+  background: #131d31;
+  border-color: #233352;
+}
+
+html[data-theme="dark"] .git-file-status-modified,
+html[data-theme="dark"] .git-file-status-renamed {
+  color: #bcd4ff;
+  border-color: #355893;
+  background: #162643;
+}
+
+html[data-theme="dark"] .git-file-status-added,
+html[data-theme="dark"] .git-file-status-untracked {
+  color: #9ff0ce;
+  border-color: #1d5f4c;
+  background: #113128;
+}
+
+html[data-theme="dark"] .git-file-status-deleted,
+html[data-theme="dark"] .git-file-status-conflict {
+  color: #ffc4ce;
+  border-color: #6f2d39;
+  background: #32191f;
+}

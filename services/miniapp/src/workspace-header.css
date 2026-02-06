@@ -1,0 +1,100 @@
+/**
+ * @fileoverview Dedicated styles for top icon tabs and active project card.
+ */
+
+.workspace-header-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.workspace-top-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin: -20px -20px 0;
+  padding: 12px;
+  border-bottom: 1px solid #1d355f;
+  background: linear-gradient(180deg, #0d2242 0%, #0c1d39 100%);
+}
+
+.workspace-icon-tab {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #2b4f89;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #173463 0%, #122b52 100%);
+  color: #d8e8ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.workspace-icon-tab:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #4a74bd;
+  background: linear-gradient(180deg, #1b3d74 0%, #143360 100%);
+}
+
+.workspace-icon-tab.active {
+  border-color: #87b2ff;
+  background: linear-gradient(180deg, #245295 0%, #1a3f75 100%);
+  box-shadow: 0 8px 18px rgba(26, 63, 117, 0.35);
+}
+
+.workspace-icon-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.active-project-card {
+  border: 1px solid #dbe7ff;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.active-project-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.active-project-card-empty {
+  display: flex;
+  background: #f7f9ff;
+}
+
+.active-project-card .stream-toggle {
+  width: 52px;
+  height: auto;
+  min-height: 100%;
+  border-radius: 12px;
+  padding: 0;
+}
+
+html[data-theme="dark"] .active-project-card {
+  border-color: #23395f;
+  background: linear-gradient(180deg, #121f35 0%, #0e192b 100%);
+}
+
+@media (max-width: 640px) {
+  .workspace-top-tabs {
+    margin: -12px -12px 0;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .workspace-icon-tab {
+    min-height: 36px;
+    border-radius: 9px;
+  }
+}
