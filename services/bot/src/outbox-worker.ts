@@ -47,6 +47,12 @@ const WORKER_HEADER = "x-bot-worker-id";
 const POLL_INTERVAL_MS = 1000;
 const PULL_LIMIT = 10;
 
+const isMessageCantBeEditedError = (error: unknown): boolean => {
+  /* Telegram returns this text when edit target is not editable anymore. */
+  const message = error instanceof Error ? error.message : "";
+  return typeof message === "string" && message.includes("message can't be edited");
+};
+
 export class OutboxWorker {
   private readonly workerId: string;
   private timer: NodeJS.Timeout | null = null;
@@ -235,6 +241,18 @@ export class OutboxWorker {
     };
   }
 
+  private buildReplaceReplyMarkup(inline?: { inlineKeyboard: Array<Array<{ text: string; callback_data: string }>> }) {
+    /*
+     * Keep replace-target messages editable.
+     * For progress updates we only attach inline keyboard when explicitly requested.
+     */
+    if (!inline) {
+      return undefined;
+    }
+
+    return { inline_keyboard: inline.inlineKeyboard };
+  }
+
   private async deliver(item: {
     id: string;
     chatId: number;
@@ -275,10 +293,26 @@ export class OutboxWorker {
           const sameText = existing.text === item.text;
           const sameMarkup = this.isSameReplyMarkup(existing.replyMarkup, item.replyMarkup);
           if (!sameText || !sameMarkup) {
-            await this.bot.telegram.editMessageText(item.chatId, existing.messageId, undefined, item.text, {
-              parse_mode: item.parseMode,
-              reply_markup: item.replyMarkup ? { inline_keyboard: item.replyMarkup.inlineKeyboard } : undefined
-            });
+            try {
+              /* Primary path: keep updating the same Telegram message in-place. */
+              await this.bot.telegram.editMessageText(item.chatId, existing.messageId, undefined, item.text, {
+                parse_mode: item.parseMode,
+                reply_markup: item.replyMarkup ? { inline_keyboard: item.replyMarkup.inlineKeyboard } : undefined
+              });
+            } catch (error) {
+              /* Recover from stale/non-editable targets by sending a fresh progress message. */
+              if (!isMessageCantBeEditedError(error)) {
+                throw error;
+              }
+
+              const sent = await this.bot.telegram.sendMessage(item.chatId, item.text, {
+                parse_mode: item.parseMode,
+                disable_notification: item.disableNotification,
+                reply_markup: this.buildReplaceReplyMarkup(item.replyMarkup)
+              });
+              existing.messageId = sent.message_id;
+            }
+
             existing.text = item.text;
             existing.replyMarkup = item.replyMarkup;
             existing.updatedAtMs = Date.now();
@@ -288,7 +322,7 @@ export class OutboxWorker {
           const sent = await this.bot.telegram.sendMessage(item.chatId, item.text, {
             parse_mode: item.parseMode,
             disable_notification: item.disableNotification,
-            reply_markup: this.buildReplyMarkup(item.chatId, item.replyMarkup)
+            reply_markup: this.buildReplaceReplyMarkup(item.replyMarkup)
           });
           sentMessageId = sent.message_id;
           this.progressMessageByKey.set(item.progressKey, {

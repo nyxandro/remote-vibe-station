@@ -12,9 +12,12 @@ import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { PromptService } from "../prompt/prompt.service";
+import { ProjectGitService } from "../projects/project-git.service";
+import { ProjectsService } from "../projects/projects.service";
 import { AdminHeaderGuard } from "../security/admin-header.guard";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { TelegramDiffPreviewStore } from "./diff-preview/telegram-diff-preview.store";
+import { TelegramCommandCatalogService } from "./telegram-command-catalog.service";
 import { TelegramPreferencesService } from "./preferences/telegram-preferences.service";
 import { TelegramStreamStore } from "./telegram-stream.store";
 
@@ -24,11 +27,50 @@ export class TelegramController {
     private readonly store: TelegramStreamStore,
     private readonly events: EventsService,
     private readonly prompts: PromptService,
+    private readonly commandCatalog: TelegramCommandCatalogService,
     private readonly preferences: TelegramPreferencesService,
+    private readonly projects: ProjectsService,
+    private readonly gitSummary: ProjectGitService,
     private readonly opencode: OpenCodeClient,
     private readonly sessionRouting: OpenCodeSessionRoutingStore,
     private readonly diffPreviews: TelegramDiffPreviewStore
   ) {}
+
+  @UseGuards(AdminHeaderGuard)
+  @Get("startup-summary")
+  public async getStartupSummary(@Req() req: Request) {
+    /* Return all blocks required for informative /start message in bot. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    const [project, settings, catalog] = await Promise.all([
+      this.projects.getActiveProject(adminId),
+      this.preferences.getSettings(adminId),
+      this.commandCatalog.listForAdmin(adminId)
+    ]);
+
+    /* Git summary is project-scoped; without project we return explicit null. */
+    const git = project ? await this.gitSummary.summaryForProjectRoot(project.rootPath) : null;
+
+    return {
+      project: project
+        ? {
+            slug: project.slug,
+            rootPath: project.rootPath
+          }
+        : null,
+      git,
+      mode: {
+        providerID: settings.selected.model.providerID,
+        modelID: settings.selected.model.modelID,
+        thinking: settings.selected.thinking,
+        agent: settings.selected.agent
+      },
+      commands: catalog.commands
+    };
+  }
 
   @UseGuards(AdminHeaderGuard)
   @Get("settings")
@@ -40,6 +82,50 @@ export class TelegramController {
     }
 
     return this.preferences.getSettings(adminId);
+  }
+
+  @UseGuards(AdminHeaderGuard)
+  @Get("voice-control/admin")
+  public getVoiceControlSettingsForAdmin(@Req() req: Request) {
+    /* Bot reads voice config using x-admin-id because it does not send initData token. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    return this.preferences.getVoiceControlSettings(adminId);
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Get("voice-control")
+  public getVoiceControlSettings(@Req() req: Request) {
+    /* Mini App reads the same settings via Telegram initData/web token auth. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    return this.preferences.getVoiceControlSettings(adminId);
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Post("voice-control")
+  public updateVoiceControlSettings(
+    @Body() body: { apiKey?: string | null; model?: string | null },
+    @Req() req: Request
+  ) {
+    /* Mini App persists Groq key/model as-is for Telegram voice-to-text flow. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    try {
+      return this.preferences.updateVoiceControlSettings(adminId, body ?? {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
   }
 
   @UseGuards(AdminHeaderGuard)
@@ -96,15 +182,13 @@ export class TelegramController {
   @UseGuards(AdminHeaderGuard)
   @Get("commands")
   public async listCommands(@Req() req: Request) {
-    /* Return OpenCode slash commands for Telegram menu synchronization. */
+    /* Return merged Telegram command catalog (menu + alias lookup) for bot sync. */
     const adminId = (req as any).authAdminId as number | undefined;
     if (!adminId) {
       throw new BadRequestException("Admin identity missing");
     }
 
-    return {
-      commands: await this.prompts.listAvailableCommands(adminId)
-    };
+    return this.commandCatalog.listForAdmin(adminId);
   }
 
   @UseGuards(AdminHeaderGuard)

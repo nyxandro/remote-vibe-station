@@ -18,6 +18,7 @@ import { OpenCodeProjectSyncService } from "./opencode/opencode-project-sync.ser
 import { OpenCodeSettingsService } from "./opencode/opencode-settings.service";
 import { OpenCodeRuntimeService } from "./opencode/opencode-runtime.service";
 import { TelegramController } from "./telegram/telegram.controller";
+import { TelegramCommandCatalogService } from "./telegram/telegram-command-catalog.service";
 import { TelegramStreamStore } from "./telegram/telegram-stream.store";
 import { TelegramPreferencesService } from "./telegram/preferences/telegram-preferences.service";
 import { TelegramPreferencesStore } from "./telegram/preferences/telegram-preferences.store";
@@ -45,6 +46,7 @@ import { AdminHeaderGuard } from "./security/admin-header.guard";
 import { TelegramInitDataGuard } from "./security/telegram.guard";
 import { TerminalController } from "./terminal/terminal.controller";
 import { TerminalService } from "./terminal/terminal.service";
+import { DataMaintenanceService } from "./maintenance/data-maintenance.service";
 
 @Module({
   imports: [ConfigModule],
@@ -77,6 +79,7 @@ import { TerminalService } from "./terminal/terminal.service";
     OpenCodeSettingsService,
     OpenCodeRuntimeService,
     TelegramStreamStore,
+    TelegramCommandCatalogService,
     TelegramPreferencesStore,
     TelegramPreferencesService,
     TelegramOutboxStore,
@@ -87,7 +90,8 @@ import { TerminalService } from "./terminal/terminal.service";
     DockerComposeService,
     TerminalService,
     AdminHeaderGuard,
-    TelegramInitDataGuard
+    TelegramInitDataGuard,
+    DataMaintenanceService
   ]
 })
 export class AppModule {}

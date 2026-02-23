@@ -80,4 +80,69 @@ describe("TelegramOutboxStore", () => {
     expect(stored.attempts).toBe(1);
     expect(Date.parse(stored.nextAttemptAt)).toBeGreaterThan(t0);
   });
+
+  it("prunes delivered history and old dead letters", () => {
+    /* Prepare a large-ish file directly to test retention without expensive enqueue loops. */
+    if (!fs.existsSync(TEST_DATA_DIR)) {
+      fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
+    }
+
+    const base = Date.parse("2026-02-05T00:00:00.000Z");
+    const delivered = Array.from({ length: 5 }).map((_, idx) => ({
+      id: `del-${idx}`,
+      adminId: 1,
+      chatId: 1,
+      text: "x",
+      createdAt: new Date(base - 10_000 - idx).toISOString(),
+      status: "delivered" as const,
+      attempts: 0,
+      nextAttemptAt: new Date(base).toISOString(),
+      deliveredAt: new Date(base + idx).toISOString()
+    }));
+
+    const deadOld = {
+      id: "dead-old",
+      adminId: 1,
+      chatId: 1,
+      text: "x",
+      createdAt: new Date(base - 100_000).toISOString(),
+      status: "dead" as const,
+      attempts: 99,
+      nextAttemptAt: new Date(base).toISOString(),
+      deadAt: new Date(base - 86_400_000 * 40).toISOString()
+    };
+
+    const deadNew = {
+      id: "dead-new",
+      adminId: 1,
+      chatId: 1,
+      text: "x",
+      createdAt: new Date(base - 100_000).toISOString(),
+      status: "dead" as const,
+      attempts: 99,
+      nextAttemptAt: new Date(base).toISOString(),
+      deadAt: new Date(base - 1000).toISOString()
+    };
+
+    fs.writeFileSync(OUTBOX_PATH, JSON.stringify({ items: [...delivered, deadOld, deadNew] }, null, 2), "utf-8");
+
+    const store = new TelegramOutboxStore();
+    store.prune({
+      maxDeliveredToKeep: 2,
+      maxDeadToKeep: 10,
+      maxDeadAgeMs: 86_400_000,
+      nowMs: base
+    });
+
+    const json = readFileJson();
+    const deliveredLeft = json.items.filter((i: any) => i.status === "delivered");
+    const deadLeft = json.items.filter((i: any) => i.status === "dead");
+
+    /* Delivered items are capped to 2 newest. */
+    expect(deliveredLeft).toHaveLength(2);
+    expect(deliveredLeft.map((i: any) => i.id)).toEqual(["del-3", "del-4"]);
+
+    /* Old dead letters are dropped by age, recent ones remain. */
+    expect(deadLeft.map((i: any) => i.id)).toEqual(["dead-new"]);
+  });
 });

@@ -16,6 +16,7 @@ import {
   ContainerAction,
   FileListResponse,
   FileReadResponse,
+  GroqTranscriptionModel,
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
   ProjectGitSummary,
@@ -73,6 +74,17 @@ type Props = {
     isRestarting: boolean;
     lastResult: "idle" | "success" | "error";
   };
+  voiceControl?: {
+    apiKey: string;
+    model: GroqTranscriptionModel | null;
+    supportedModels: GroqTranscriptionModel[];
+    isLoading: boolean;
+    isSaving: boolean;
+  };
+  onVoiceControlApiKeyChange?: (value: string) => void;
+  onVoiceControlModelChange?: (value: GroqTranscriptionModel | null) => void;
+  onReloadVoiceControl?: () => void;
+  onSaveVoiceControl?: () => void;
   iconForEntry: (kind: "file" | "dir", name: string) => JSX.Element;
   onGitRefresh: () => void;
   onGitCheckout: (branch: string) => void;
@@ -175,6 +187,11 @@ export const WorkspaceTabsContent = (props: Props) => {
       onSaveActiveFile={props.onSaveSettingsFile}
       onDeleteActiveProject={props.onDeleteActiveProject}
       restartOpenCodeState={props.restartOpenCodeState}
+      voiceControl={props.voiceControl}
+      onVoiceControlApiKeyChange={props.onVoiceControlApiKeyChange}
+      onVoiceControlModelChange={props.onVoiceControlModelChange}
+      onReloadVoiceControl={props.onReloadVoiceControl}
+      onSaveVoiceControl={props.onSaveVoiceControl}
     />
   );
 };

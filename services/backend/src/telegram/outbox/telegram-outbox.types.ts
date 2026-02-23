@@ -59,6 +59,12 @@ export type TelegramOutboxItem = {
   /* Telegram delivery result. */
   telegramMessageId?: number;
   deliveredAt?: string;
+
+  /*
+   * Timestamp for dead-letter retention.
+   * Older deployments may have dead items without this field; pruning falls back to createdAt.
+   */
+  deadAt?: string;
 };
 
 export type OutboxPullItem = {

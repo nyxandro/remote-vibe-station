@@ -14,6 +14,7 @@ import { Injectable } from "@nestjs/common";
 import { v4 as uuid } from "uuid";
 
 import { ProjectCreateRequest, ProjectRecord } from "./project.types";
+import { assertWithinRoot } from "./project-paths";
 
 const DATA_DIR = "data";
 const PROJECTS_FILE = "projects.json";
@@ -80,6 +81,40 @@ export class ProjectRegistry {
 
     await this.writeAll(items);
     return items[index];
+  }
+
+  public async pruneMissingRoots(input: { projectsRoot: string }): Promise<{ before: number; after: number; removed: number }> {
+    /*
+     * Remove registry records that point to missing or invalid paths.
+     * This prevents `projects.json` from accumulating stale entries.
+     */
+    const items = await this.readAll();
+    const before = items.length;
+
+    const kept: ProjectRecord[] = [];
+    for (const item of items) {
+      /* Drop records with paths outside configured root. */
+      try {
+        assertWithinRoot(input.projectsRoot, item.rootPath);
+        assertWithinRoot(input.projectsRoot, item.composePath);
+      } catch {
+        continue;
+      }
+
+      /* Drop records for deleted projects. */
+      if (!fs.existsSync(item.rootPath)) {
+        continue;
+      }
+
+      kept.push(item);
+    }
+
+    const after = kept.length;
+    const removed = before - after;
+    if (removed > 0) {
+      await this.writeAll(kept);
+    }
+    return { before, after, removed };
   }
 
   private async readAll(): Promise<ProjectRecord[]> {

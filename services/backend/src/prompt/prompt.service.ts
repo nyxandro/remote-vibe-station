@@ -32,6 +32,9 @@ type PromptResult = {
   tokens: { input: number; output: number; reasoning: number };
 };
 
+const ACTIVE_PROJECT_REQUIRED_MESSAGE =
+  "Проект не выбран. Выберите его командой /project <slug> (например: /project my-project) или в Mini App.";
+
 @Injectable()
 export class PromptService {
   public constructor(
@@ -47,7 +50,7 @@ export class PromptService {
     /* Require active project to avoid using OpenCode global workspace. */
     const active = await this.projects.getActiveProject(adminId);
     if (!active) {
-      throw new Error("No active project selected. Use /project <slug> or select in Mini App.");
+      throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
     }
 
     /* Emit prompt start event. */
@@ -110,7 +113,7 @@ export class PromptService {
     /* Slash commands are executed in the active project context. */
     const active = await this.projects.getActiveProject(adminId);
     if (!active) {
-      throw new Error("No active project selected. Use /project <slug> or select in Mini App.");
+      throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
     }
 
     /* Emit command start event to preserve observability parity with prompt flow. */
