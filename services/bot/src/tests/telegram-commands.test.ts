@@ -28,6 +28,7 @@ describe("buildTelegramMenuCommands", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "start",
+        "mode",
         "chat",
         "end",
         "help",

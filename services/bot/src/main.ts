@@ -9,19 +9,28 @@
 import express from "express";
 import { Markup, Telegraf } from "telegraf";
 
+import { buildBackendErrorMessage } from "./backend-error";
 import { startPeriodicTask } from "./command-sync";
 import { loadConfig } from "./config";
 import { modeReplyKeyboard, registerModeControl } from "./mode-control";
 import { createWebToken } from "./web-token";
 import { OutboxWorker } from "./outbox-worker";
+import { buildStartSummaryMessage, fetchStartupSummary } from "./start-summary";
 import { ThinkingIndicator } from "./thinking-indicator";
 import {
   BOT_LOCAL_COMMAND_NAMES,
-  OpenCodeCommand,
-  buildOpenCodeCommandLookup,
-  buildTelegramMenuCommands,
+  TelegramMenuCommand,
   parseSlashCommand
 } from "./telegram-commands";
+import {
+  VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE,
+  VOICE_TRANSCRIPTION_PROGRESS_MESSAGE,
+  buildTranscriptionSuccessHtml,
+  extractTelegramVoiceInput,
+  fetchVoiceControlSettings,
+  transcribeTelegramAudioWithGroq,
+  validateVoiceInput
+} from "./voice-control";
 
 const DEFAULT_PORT = 3001;
 const COMMAND_SYNC_INTERVAL_MS = 60_000;
@@ -106,7 +115,7 @@ const bootstrap = async (): Promise<void> => {
   const syncSlashCommands = async (adminId: number): Promise<void> => {
     /*
      * Telegram suggests commands from setMyCommands.
-     * We merge local bot commands with the OpenCode command list from backend.
+     * Backend returns a normalized catalog with merged local+OpenCode commands.
      */
     const response = await fetch(`${config.backendUrl}/api/telegram/commands`, {
       headers: { "x-admin-id": String(adminId) }
@@ -116,11 +125,18 @@ const bootstrap = async (): Promise<void> => {
       throw new Error(`Failed to sync commands: ${response.status}`);
     }
 
-    const body = (await response.json()) as { commands?: OpenCodeCommand[] };
-    const commands = Array.isArray(body.commands) ? body.commands : [];
-    opencodeCommandLookup = buildOpenCodeCommandLookup(commands);
+    const body = (await response.json()) as {
+      commands?: TelegramMenuCommand[];
+      lookup?: Record<string, string>;
+    };
 
-    const menuCommands = buildTelegramMenuCommands(commands);
+    const menuCommands = Array.isArray(body.commands) ? body.commands : [];
+    opencodeCommandLookup = new Map(
+      Object.entries(body.lookup ?? {}).filter(
+        (entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string"
+      )
+    );
+
     await bot.telegram.setMyCommands(menuCommands);
   };
 
@@ -186,21 +202,22 @@ const bootstrap = async (): Promise<void> => {
       return;
     }
 
-    await ctx.reply(
-      "Ky-ky!\n\n" +
-        "1) /open - open the Mini App\n" +
-        "2) Select a project in the Mini App\n" +
-        "3) /chat - start streaming agent output here\n" +
-        "4) Send me a message to talk to the agent\n" +
-        "Use /end to stop streaming.",
-      modeReplyKeyboard()
-    );
-
-    /* Refresh Telegram slash menu for this admin context. */
+    /* Refresh menu first, then show state snapshot built from backend source of truth. */
     try {
       await syncSlashCommands(ctx.from!.id);
     } catch {
       await ctx.reply("Не удалось обновить список slash-команд OpenCode.");
+    }
+
+    try {
+      const summary = await fetchStartupSummary(config.backendUrl, ctx.from!.id);
+      await ctx.reply(buildStartSummaryMessage(summary), modeReplyKeyboard());
+    } catch {
+      await ctx.reply(
+        "Привет! Не удалось получить стартовую сводку. " +
+          "Проверь /project, затем используй /mode и /chat для работы.",
+        modeReplyKeyboard()
+      );
     }
   });
 
@@ -261,7 +278,7 @@ const bootstrap = async (): Promise<void> => {
     });
 
     if (!response.ok) {
-      await ctx.reply(`Backend error: ${response.status}`);
+      await ctx.reply(buildBackendErrorMessage(response.status, null));
       return;
     }
 
@@ -303,7 +320,7 @@ const bootstrap = async (): Promise<void> => {
 
     if (!response.ok) {
       const body = await response.text();
-      await ctx.reply(`Не удалось выбрать проект (${response.status}): ${body}`);
+      await ctx.reply(buildBackendErrorMessage(response.status, body));
       return;
     }
 
@@ -315,6 +332,116 @@ const bootstrap = async (): Promise<void> => {
       await syncSlashCommands(ctx.from!.id);
     } catch {
       await ctx.reply("Проект выбран, но список команд OpenCode не обновлен.");
+    }
+  });
+
+  const submitPromptText = async (input: {
+    adminId: number;
+    chatId: number;
+    text: string;
+    errorLabel: string;
+  }): Promise<void> => {
+    /* Reuse common prompt submission flow for text and transcribed voice messages. */
+    await bindChat(input.adminId, input.chatId);
+    await indicator.start(input.chatId);
+
+    void (async () => {
+      try {
+        const response = await fetch(`${config.backendUrl}/api/prompt`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-admin-id": String(input.adminId)
+          },
+          body: JSON.stringify({ text: input.text })
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          await indicator.stop(input.chatId);
+          await bot.telegram.sendMessage(input.chatId, buildBackendErrorMessage(response.status, body));
+          return;
+        }
+
+        await response.json();
+        await indicator.stop(input.chatId);
+      } catch (error) {
+        await indicator.stop(input.chatId);
+        const message = error instanceof Error ? error.message : String(error);
+        await bot.telegram.sendMessage(input.chatId, `${input.errorLabel}: ${message}`);
+      }
+    })();
+  };
+
+  bot.on("voice", async (ctx) => {
+    /* Convert Telegram voice note to text and forward it to OpenCode prompt API. */
+    if (!isAdmin(ctx.from?.id)) {
+      await ctx.reply("Access denied");
+      return;
+    }
+
+    const voiceInput = extractTelegramVoiceInput(ctx.message);
+    if (!voiceInput) {
+      return;
+    }
+
+    const adminId = ctx.from!.id;
+    const chatId = ctx.chat.id;
+
+    const validationError = validateVoiceInput(voiceInput);
+    if (validationError) {
+      await ctx.reply(validationError);
+      return;
+    }
+
+    let statusMessageId: number | null = null;
+    try {
+      const settings = await fetchVoiceControlSettings(config.backendUrl, adminId);
+      if (!settings.enabled || !settings.apiKey || !settings.model) {
+        await ctx.reply(VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE);
+        return;
+      }
+
+      const statusMessage = await ctx.reply(VOICE_TRANSCRIPTION_PROGRESS_MESSAGE);
+      statusMessageId = statusMessage.message_id;
+
+      const telegramFileUrl = String(await ctx.telegram.getFileLink(voiceInput.fileId));
+      const transcribedText = await transcribeTelegramAudioWithGroq({
+        telegramFileUrl,
+        apiKey: settings.apiKey,
+        model: settings.model,
+        mimeType: voiceInput.mimeType
+      });
+
+      if (statusMessageId !== null) {
+        await ctx.telegram.editMessageText(
+          chatId,
+          statusMessageId,
+          undefined,
+          buildTranscriptionSuccessHtml(transcribedText),
+          {
+            parse_mode: "HTML"
+          }
+        );
+      }
+
+      await submitPromptText({
+        adminId,
+        chatId,
+        text: transcribedText,
+        errorLabel: "Ошибка запроса"
+      });
+    } catch {
+      if (statusMessageId !== null) {
+        await ctx.telegram.editMessageText(
+          chatId,
+          statusMessageId,
+          undefined,
+          VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE
+        );
+        return;
+      }
+      await ctx.reply(VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE);
     }
   });
 
@@ -379,7 +506,10 @@ const bootstrap = async (): Promise<void> => {
           if (!commandResponse.ok) {
             const body = await commandResponse.text();
             await indicator.stop(chatId);
-            await bot.telegram.sendMessage(chatId, `Backend error: ${commandResponse.status}\n${body}`);
+            await bot.telegram.sendMessage(
+              chatId,
+              buildBackendErrorMessage(commandResponse.status, body)
+            );
             return;
           }
 
@@ -399,41 +529,12 @@ const bootstrap = async (): Promise<void> => {
       return;
     }
 
-    await bindChat(adminId, chatId);
-
-    /* Show a single animated message while backend/OpenCode works. */
-    await indicator.start(chatId);
-
-    /*
-     * Prompt call can be long-running; execute it out of handler flow.
-     * This avoids Telegraf TimeoutError while backend/OpenCode work proceeds.
-     */
-    void (async () => {
-      try {
-        const response = await fetch(`${config.backendUrl}/api/prompt`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-id": String(adminId)
-          },
-          body: JSON.stringify({ text })
-        });
-
-        if (!response.ok) {
-          const body = await response.text();
-          await indicator.stop(chatId);
-          await bot.telegram.sendMessage(chatId, `Backend error: ${response.status}\n${body}`);
-          return;
-        }
-
-        await response.json();
-        await indicator.stop(chatId);
-      } catch (error) {
-        await indicator.stop(chatId);
-        const message = error instanceof Error ? error.message : String(error);
-        await bot.telegram.sendMessage(chatId, `Ошибка запроса: ${message}`);
-      }
-    })();
+    await submitPromptText({
+      adminId,
+      chatId,
+      text,
+      errorLabel: "Ошибка запроса"
+    });
   });
 
   /* Start webhook server and bot. */
