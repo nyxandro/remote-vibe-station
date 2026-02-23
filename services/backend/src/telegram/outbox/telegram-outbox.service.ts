@@ -191,6 +191,28 @@ export class TelegramOutboxService {
     });
   }
 
+  public enqueueAdminNotification(input: { adminId: number; text: string; parseMode?: "HTML" }): void {
+    /*
+     * Deliver operational notifications to the admin chat even when stream is disabled.
+     * Use disableNotification=true to avoid noisy pings.
+     */
+    const binding = this.streamStore.get(input.adminId);
+    if (!binding) {
+      return;
+    }
+
+    const chunks = splitTelegramTextWithFooter(input.text, "");
+    chunks.forEach((chunk) => {
+      this.outbox.enqueue({
+        adminId: input.adminId,
+        chatId: binding.chatId,
+        text: chunk,
+        parseMode: input.parseMode,
+        disableNotification: true
+      });
+    });
+  }
+
   public enqueueProgressReplace(input: {
     adminId: number;
     progressKey: string;

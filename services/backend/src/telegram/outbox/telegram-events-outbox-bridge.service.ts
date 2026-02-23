@@ -67,6 +67,48 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       this.outbox.enqueueStreamNotification({ adminId, text: message });
       return;
     }
+
+    if (event.type === "project.lifecycle") {
+      /*
+       * Operational feedback for Mini App actions (start/stop/restart).
+       * Must be visible even when stream is disabled.
+       */
+      const adminId = this.extractAdminId(event);
+      if (!adminId) {
+        return;
+      }
+
+      const payload = event.data as any;
+      const slug = String(payload?.slug ?? "");
+      const action = String(payload?.action ?? "");
+      const containers = Array.isArray(payload?.containers) ? payload.containers : [];
+
+      const header = action === "start"
+        ? `🚀 Запуск проекта: ${slug}`
+        : action === "restart"
+          ? `🔁 Перезапуск проекта: ${slug}`
+          : action === "stop"
+            ? `🛑 Остановка проекта: ${slug}`
+            : `⚙️ Действие проекта: ${slug}`;
+
+      const lines: string[] = [header];
+
+      if (containers.length === 0) {
+        lines.push("Контейнеры: нет данных (docker compose ps пустой ответ)");
+      } else {
+        lines.push(`Контейнеры: ${containers.length}`);
+        for (const item of containers) {
+          const service = String(item?.service ?? item?.name ?? "unknown");
+          const state = String(item?.state ?? "unknown");
+          const ports = Array.isArray(item?.ports) ? item.ports.filter((p: any) => typeof p === "string") : [];
+          const portsSuffix = ports.length ? ` (${ports.join(", ")})` : "";
+          lines.push(`- ${service}: ${state}${portsSuffix}`);
+        }
+      }
+
+      this.outbox.enqueueAdminNotification({ adminId, text: lines.join("\n") });
+      return;
+    }
   }
 
   private extractAdminId(event: EventEnvelope): number | null {

@@ -23,6 +23,7 @@ import { ProjectGitService } from "./project-git.service";
 import { ProjectWorkspaceService } from "./project-workspace.service";
 import { ProjectCreateRequest } from "./project.types";
 import { ProjectsService } from "./projects.service";
+import { EventsService } from "../events/events.service";
 
 @Controller("api/projects")
 @UseGuards(AppAuthGuard)
@@ -31,7 +32,8 @@ export class ProjectsController {
     private readonly projects: ProjectsService,
     private readonly gitSummaryService: ProjectGitService,
     private readonly gitOps: ProjectGitOpsService,
-    private readonly workspace: ProjectWorkspaceService
+    private readonly workspace: ProjectWorkspaceService,
+    private readonly events: EventsService
   ) {}
 
   private validatePayload(body: ProjectCreateRequest): void {
@@ -104,9 +106,12 @@ export class ProjectsController {
   }
 
   @Post(":id/start")
-  public async start(@Param("id") id: string) {
+  public async start(@Param("id") id: string, @Req() req: Request) {
     /* Start project containers. */
-    return this.projects.startProject(id);
+    const adminId = (req as any).authAdminId as number | undefined;
+    const result = await this.projects.startProject(id);
+    void this.emitLifecycleEvent({ adminId, slug: id, action: "start" });
+    return result;
   }
 
   @Post(":id/select")
@@ -132,30 +137,90 @@ export class ProjectsController {
   }
 
   @Post(":id/stop")
-  public async stop(@Param("id") id: string) {
+  public async stop(@Param("id") id: string, @Req() req: Request) {
     /* Stop project containers. */
-    return this.projects.stopProject(id);
+    const adminId = (req as any).authAdminId as number | undefined;
+    const result = await this.projects.stopProject(id);
+    void this.emitLifecycleEvent({ adminId, slug: id, action: "stop" });
+    return result;
   }
 
   @Post(":id/restart")
-  public async restart(@Param("id") id: string) {
+  public async restart(@Param("id") id: string, @Req() req: Request) {
     /* Restart project containers. */
-    return this.projects.restartProject(id);
+    const adminId = (req as any).authAdminId as number | undefined;
+    const result = await this.projects.restartProject(id);
+    void this.emitLifecycleEvent({ adminId, slug: id, action: "restart" });
+    return result;
   }
 
   @Post(":id/containers/:service/:action")
   public async containerAction(
     @Param("id") id: string,
     @Param("service") service: string,
-    @Param("action") action: string
+    @Param("action") action: string,
+    @Req() req: Request
   ) {
     /* Execute lifecycle action for one compose service. */
     if (action !== "start" && action !== "stop" && action !== "restart") {
       throw new BadRequestException(`Unsupported container action: ${action}`);
     }
 
+    const adminId = (req as any).authAdminId as number | undefined;
     await this.projects.runContainerAction(id, service, action);
-    return this.projects.statusProject(id);
+    let status: unknown;
+    try {
+      status = await this.projects.statusProject(id);
+    } catch {
+      /* Action may succeed even if ps parsing fails; still notify. */
+      status = [];
+    }
+    this.events.publish({
+      type: "project.lifecycle",
+      ts: new Date().toISOString(),
+      data: {
+        adminId: adminId ?? null,
+        slug: id,
+        action,
+        containers: status
+      }
+    });
+    return status;
+  }
+
+  private async emitLifecycleEvent(input: {
+    adminId: number | undefined;
+    slug: string;
+    action: "start" | "stop" | "restart";
+  }): Promise<void> {
+    /*
+     * Publish best-effort lifecycle status for Telegram notifications.
+     * If we cannot inspect containers (e.g. compose errors), we still keep action result.
+     */
+    try {
+      const status = await this.projects.statusProject(input.slug);
+      this.events.publish({
+        type: "project.lifecycle",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: input.adminId ?? null,
+          slug: input.slug,
+          action: input.action,
+          containers: status
+        }
+      });
+    } catch {
+      this.events.publish({
+        type: "project.lifecycle",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: input.adminId ?? null,
+          slug: input.slug,
+          action: input.action,
+          containers: []
+        }
+      });
+    }
   }
 
   @Get(":id/status")

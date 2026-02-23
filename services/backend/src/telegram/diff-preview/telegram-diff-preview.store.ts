@@ -14,8 +14,22 @@ import { Injectable } from "@nestjs/common";
 
 const DATA_DIR = "data";
 const FILE_NAME = "telegram.diff-previews.json";
-const MAX_RECORDS = 2000;
-const TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+/*
+ * This store is a UI-only cache. It contains potentially large diffs, so we keep it bounded.
+ * - TTL is short to prevent unbounded growth.
+ * - MAX_RECORDS is a hard safety cap.
+ */
+const MAX_RECORDS = 500;
+const TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
+/*
+ * Hard cap for payload size to avoid gigantic JSON files (e.g. when previewing minified bundles).
+ * The Mini App needs a usable excerpt, not the full file contents.
+ */
+const MAX_DIFF_CHARS = 200_000;
+const MAX_BEFORE_CHARS = 50_000;
+const MAX_AFTER_CHARS = 50_000;
 
 export type DiffPreviewRecord = {
   token: string;
@@ -59,11 +73,28 @@ export class TelegramDiffPreviewStore {
     const nowMs = Date.now();
     const nowIso = new Date(nowMs).toISOString();
 
+     /*
+      * Protect disk from huge payloads.
+      * We keep a truncated excerpt, because UI only needs a preview.
+      */
+     const truncated: Omit<DiffPreviewRecord, "token" | "createdAt"> = {
+       ...input,
+       diff: input.diff.length > MAX_DIFF_CHARS ? input.diff.slice(0, MAX_DIFF_CHARS) : input.diff,
+       before:
+         typeof input.before === "string" && input.before.length > MAX_BEFORE_CHARS
+           ? input.before.slice(0, MAX_BEFORE_CHARS)
+           : input.before,
+       after:
+         typeof input.after === "string" && input.after.length > MAX_AFTER_CHARS
+           ? input.after.slice(0, MAX_AFTER_CHARS)
+           : input.after
+     };
+
     const token = crypto.randomBytes(12).toString("base64url");
     const record: DiffPreviewRecord = {
       token,
       createdAt: nowIso,
-      ...input
+      ...truncated
     };
 
     file.items.push(record);
@@ -80,6 +111,14 @@ export class TelegramDiffPreviewStore {
     this.writeAll(file);
 
     return file.items.find((item) => item.token === token) ?? null;
+  }
+
+  public pruneNow(input?: { nowMs?: number }): void {
+    /* Explicit retention entrypoint for periodic maintenance. */
+    const nowMs = input?.nowMs ?? Date.now();
+    const file = this.readAll();
+    this.prune(file, nowMs);
+    this.writeAll(file);
   }
 
   private prune(file: StoreFile, nowMs: number): void {

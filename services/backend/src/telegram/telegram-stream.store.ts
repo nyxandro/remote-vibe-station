@@ -75,6 +75,29 @@ export class TelegramStreamStore {
     return file.byAdminId[String(adminId)] ?? null;
   }
 
+  public pruneToAdmins(input: { allowedAdminIds: number[] }): { before: number; after: number; removed: number } {
+    /*
+     * Keep only configured admins to avoid slow growth if admin ids change over time.
+     * The stream store is small, but this makes retention policy explicit.
+     */
+    const file = this.readAll();
+    const before = Object.keys(file.byAdminId).length;
+
+    const allowed = new Set(input.allowedAdminIds.map((id) => String(id)));
+    for (const key of Object.keys(file.byAdminId)) {
+      if (!allowed.has(key)) {
+        delete file.byAdminId[key];
+      }
+    }
+
+    const after = Object.keys(file.byAdminId).length;
+    const removed = before - after;
+    if (removed > 0) {
+      this.writeAll(file);
+    }
+    return { before, after, removed };
+  }
+
   private readAll(): StreamFile {
     /* Ensure data directory exists. */
     const dir = path.dirname(this.filePath);

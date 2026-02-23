@@ -46,6 +46,29 @@ export class ProjectStateStore {
     return next;
   }
 
+  public pruneKnownSlugs(input: { allowedSlugs: Set<string> }): { before: number; after: number; removed: number } {
+    /*
+     * Remove stale entries for projects that no longer exist on disk.
+     * This store is derived data and safe to rebuild.
+     */
+    const file = this.readAll();
+    const keys = Object.keys(file);
+    const before = keys.length;
+
+    for (const slug of keys) {
+      if (!input.allowedSlugs.has(slug)) {
+        delete file[slug];
+      }
+    }
+
+    const after = Object.keys(file).length;
+    const removed = before - after;
+    if (removed > 0) {
+      this.writeAll(file);
+    }
+    return { before, after, removed };
+  }
+
   private readAll(): StateFile {
     /* Ensure directory exists. */
     const dir = path.dirname(this.filePath);

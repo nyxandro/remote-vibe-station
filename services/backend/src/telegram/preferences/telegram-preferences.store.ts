@@ -42,6 +42,30 @@ export class TelegramPreferencesStore {
     return next;
   }
 
+  public pruneToAdmins(input: { allowedAdminIds: number[] }): { before: number; after: number; removed: number } {
+    /*
+     * Keep the file bounded to configured admins.
+     * This is mostly a safety net; the store is naturally small.
+     */
+    const file = this.readAll();
+    const before = Object.keys(file.byAdminId).length;
+
+    const ids = Array.isArray(input?.allowedAdminIds) ? input.allowedAdminIds : [];
+    const allowed = new Set(ids.map((id) => String(id)));
+    for (const key of Object.keys(file.byAdminId)) {
+      if (!allowed.has(key)) {
+        delete file.byAdminId[key];
+      }
+    }
+
+    const after = Object.keys(file.byAdminId).length;
+    const removed = before - after;
+    if (removed > 0) {
+      this.writeAll(file);
+    }
+    return { before, after, removed };
+  }
+
   private readAll(): StoreShape {
     /* Ensure data directory exists before reading. */
     const dir = path.dirname(this.filePath);

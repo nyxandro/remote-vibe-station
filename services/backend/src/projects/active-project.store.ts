@@ -54,6 +54,47 @@ export class ActiveProjectStore {
     this.writeFile(file);
   }
 
+  public prune(input: {
+    allowedAdminIds: number[];
+    allowedSlugs: Set<string>;
+  }): { removedAdmins: number; clearedSlugs: number } {
+    /*
+     * Keep the store consistent with reality:
+     * - drop per-admin entries for admins that are no longer configured
+     * - clear selections that point to deleted projects
+     */
+    const file = this.readFile();
+    const allowedAdmins = new Set(input.allowedAdminIds.map((id) => String(id)));
+
+    let removedAdmins = 0;
+    for (const key of Object.keys(file.byAdminId)) {
+      if (!allowedAdmins.has(key)) {
+        delete file.byAdminId[key];
+        removedAdmins += 1;
+      }
+    }
+
+    let clearedSlugs = 0;
+    for (const key of Object.keys(file.byAdminId)) {
+      const current = file.byAdminId[key];
+      if (current?.slug && !input.allowedSlugs.has(current.slug)) {
+        file.byAdminId[key] = { slug: null, updatedAt: new Date().toISOString() };
+        clearedSlugs += 1;
+      }
+    }
+
+    if (file.global?.slug && !input.allowedSlugs.has(file.global.slug)) {
+      file.global = { slug: null, updatedAt: new Date().toISOString() };
+      clearedSlugs += 1;
+    }
+
+    if (removedAdmins > 0 || clearedSlugs > 0) {
+      this.writeFile(file);
+    }
+
+    return { removedAdmins, clearedSlugs };
+  }
+
   private readFile(): ActiveFile {
     /* Ensure directory exists. */
     const dir = path.dirname(this.filePath);

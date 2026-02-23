@@ -12,16 +12,17 @@ import * as path from "node:path";
 import { Inject, Injectable } from "@nestjs/common";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import { discoverProjectEnvFiles } from "../projects/project-env-discovery";
 import { ProjectsService } from "../projects/projects.service";
 
 export type OpenCodeSettingsKind =
   | "globalRule"
   | "projectRule"
+  | "projectEnv"
+  | "projectEnvFile"
   | "config"
   | "agent"
-  | "command"
-  | "skill"
-  | "plugin";
+  | "command";
 
 type SettingsFileSummary = {
   name: string;
@@ -36,21 +37,21 @@ type FileTarget = {
 type SettingsOverview = {
   globalRule: { exists: boolean; absolutePath: string };
   projectRule: { exists: boolean; absolutePath: string } | null;
+  projectEnv: { exists: boolean; absolutePath: string } | null;
+  projectEnvFiles: SettingsFileSummary[];
   config: { exists: boolean; absolutePath: string };
   agents: SettingsFileSummary[];
   commands: SettingsFileSummary[];
-  skills: SettingsFileSummary[];
-  plugins: SettingsFileSummary[];
 };
 
 const ROOT_AGENTS_FILE = "AGENTS.md";
+const PROJECT_ENV_FILE = ".env";
 const OPENCODE_CONFIG_FILE = "opencode.json";
 const AGENTS_DIR = "agents";
-const SKILLS_DIR = "skills";
-const PLUGINS_DIR = "plugins";
 const PROJECT_OPENCODE_DIR = ".opencode";
 const PROJECT_COMMANDS_DIR = "commands";
 const DEFAULT_CONTAINER_CONFIG_DIR = "/root/.config/opencode";
+const MAX_PROJECT_ENV_BYTES = 256 * 1024;
 
 @Injectable()
 export class OpenCodeSettingsService {
@@ -73,13 +74,23 @@ export class OpenCodeSettingsService {
             absolutePath: path.join(projectRoot, ROOT_AGENTS_FILE)
           }
         : null,
+      projectEnv: projectRoot
+        ? {
+            exists: fs.existsSync(path.join(projectRoot, PROJECT_ENV_FILE)),
+            absolutePath: path.join(projectRoot, PROJECT_ENV_FILE)
+          }
+        : null,
+      projectEnvFiles: projectRoot
+        ? discoverProjectEnvFiles({ projectRoot }).map((item) => ({
+            name: item.name,
+            relativePath: item.relativePath
+          }))
+        : [],
       config: { exists: fs.existsSync(configPath), absolutePath: configPath },
       agents: this.listFiles(path.join(this.getOpenCodeConfigRoot(), AGENTS_DIR)),
       commands: projectRoot
         ? this.listFiles(path.join(projectRoot, PROJECT_OPENCODE_DIR, PROJECT_COMMANDS_DIR))
-        : [],
-      skills: this.listFiles(path.join(this.getOpenCodeConfigRoot(), SKILLS_DIR)),
-      plugins: this.listFiles(path.join(this.getOpenCodeConfigRoot(), PLUGINS_DIR))
+        : []
     };
   }
 
@@ -99,6 +110,16 @@ export class OpenCodeSettingsService {
     if (!fs.existsSync(target.absolutePath)) {
       return { exists: false, absolutePath: target.absolutePath, content: "" };
     }
+
+    /* Keep editor endpoint bounded for stability on large files. */
+    const stat = fs.statSync(target.absolutePath);
+    if (!stat.isFile()) {
+      throw new Error(`Not a file: ${relativePath ?? target.absolutePath}`);
+    }
+    if (stat.size > MAX_PROJECT_ENV_BYTES) {
+      throw new Error(`File too large to read (${stat.size} bytes)`);
+    }
+
     return {
       exists: true,
       absolutePath: target.absolutePath,
@@ -114,6 +135,12 @@ export class OpenCodeSettingsService {
   ): { absolutePath: string } {
     /* Save text content; parent directories are created when needed. */
     const target = this.resolveTarget({ kind, projectId, relativePath });
+
+    /* Keep editor endpoint bounded to text-like env/config files only. */
+    if (Buffer.byteLength(content, "utf-8") > MAX_PROJECT_ENV_BYTES) {
+      throw new Error(`File too large to save (${Buffer.byteLength(content, "utf-8")} bytes)`);
+    }
+
     fs.mkdirSync(path.dirname(target.absolutePath), { recursive: true });
     fs.writeFileSync(target.absolutePath, content, "utf-8");
     return { absolutePath: target.absolutePath };
@@ -139,6 +166,15 @@ export class OpenCodeSettingsService {
     if (kind === "globalRule" || kind === "projectRule") {
       return ROOT_AGENTS_FILE;
     }
+    if (kind === "projectEnv") {
+      return PROJECT_ENV_FILE;
+    }
+    if (kind === "projectEnvFile") {
+      if (!name || !name.trim()) {
+        throw new Error("File name is required");
+      }
+      return name.trim();
+    }
     if (kind === "config") {
       return OPENCODE_CONFIG_FILE;
     }
@@ -161,6 +197,16 @@ export class OpenCodeSettingsService {
       const projectRoot = this.requireProjectRoot(input.projectId);
       return this.buildTarget(projectRoot, ROOT_AGENTS_FILE);
     }
+    if (input.kind === "projectEnv") {
+      const projectRoot = this.requireProjectRoot(input.projectId);
+      return this.buildTarget(projectRoot, PROJECT_ENV_FILE);
+    }
+    if (input.kind === "projectEnvFile") {
+      const projectRoot = this.requireProjectRoot(input.projectId);
+      const relativePath = this.requireRelativePath(input.relativePath);
+      const safeRelativePath = this.requireDiscoveredProjectEnvPath(projectRoot, relativePath);
+      return this.buildTarget(projectRoot, safeRelativePath);
+    }
     if (input.kind === "config") {
       return this.buildTarget(this.getOpenCodeConfigRoot(), OPENCODE_CONFIG_FILE);
     }
@@ -173,10 +219,7 @@ export class OpenCodeSettingsService {
         this.requireRelativePath(input.relativePath)
       );
     }
-    if (input.kind === "skill") {
-      return this.buildTarget(this.getSkillsDir(), this.requireRelativePath(input.relativePath));
-    }
-    return this.buildTarget(this.getPluginsDir(), this.requireRelativePath(input.relativePath));
+    throw new Error(`Unsupported settings kind: ${input.kind}`);
   }
 
   private buildTarget(baseDir: string, relativePath: string): FileTarget {
@@ -203,6 +246,18 @@ export class OpenCodeSettingsService {
       throw new Error("Project id is required for this section");
     }
     return this.projects.getProjectRootPath(projectId);
+  }
+
+  private requireDiscoveredProjectEnvPath(projectRoot: string, relativePath: string): string {
+    /*
+     * projectEnvFile API is intentionally limited to discovered env files.
+     * This prevents using the endpoint as a generic arbitrary file editor.
+     */
+    const discovered = new Set(discoverProjectEnvFiles({ projectRoot }).map((item) => item.relativePath));
+    if (!discovered.has(relativePath)) {
+      throw new Error(`Path is not a discovered env file: ${relativePath}`);
+    }
+    return relativePath;
   }
 
   private listFiles(dir: string): SettingsFileSummary[] {
@@ -256,14 +311,6 @@ export class OpenCodeSettingsService {
 
   private getAgentsDir(): string {
     return path.join(this.getOpenCodeConfigRoot(), AGENTS_DIR);
-  }
-
-  private getSkillsDir(): string {
-    return path.join(this.getOpenCodeConfigRoot(), SKILLS_DIR);
-  }
-
-  private getPluginsDir(): string {
-    return path.join(this.getOpenCodeConfigRoot(), PLUGINS_DIR);
   }
 
   private getProjectCommandsDir(projectRoot: string): string {

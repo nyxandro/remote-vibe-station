@@ -15,7 +15,13 @@ import {
 } from "../../open-code/opencode.types";
 import { OpenCodeClient } from "../../open-code/opencode-client";
 import { OpenCodeSettingsService } from "../../opencode/opencode-settings.service";
-import { AdminPreferences, SettingsSnapshot } from "./telegram-preferences.types";
+import {
+  AdminPreferences,
+  GROQ_TRANSCRIPTION_MODELS,
+  GroqTranscriptionModel,
+  SettingsSnapshot,
+  VoiceControlSettingsSnapshot
+} from "./telegram-preferences.types";
 import { TelegramPreferencesStore } from "./telegram-preferences.store";
 
 const DEFAULT_TELEGRAM_AGENTS = new Set(["build", "plan"]);
@@ -51,6 +57,54 @@ export class TelegramPreferencesService {
       models,
       agents,
       thinkingOptions: selectedModelInfo.variants
+    };
+  }
+
+  public getVoiceControlSettings(adminId: number): VoiceControlSettingsSnapshot {
+    /* Read Groq key/model and expose explicit enabled state for UI/bot. */
+    const persisted = this.store.get(adminId);
+    const apiKey = this.normalizeApiKey(persisted.voiceControl?.groqApiKey ?? null);
+    const model = this.normalizeGroqModel(persisted.voiceControl?.model ?? null);
+
+    return {
+      enabled: Boolean(apiKey && model),
+      apiKey,
+      model,
+      supportedModels: [...GROQ_TRANSCRIPTION_MODELS]
+    };
+  }
+
+  public updateVoiceControlSettings(
+    adminId: number,
+    input: { apiKey?: string | null; model?: string | null }
+  ): VoiceControlSettingsSnapshot {
+    /* Update only provided fields and keep validation strict for required inputs. */
+    const prev = this.store.get(adminId);
+    const prevVoice = prev.voiceControl;
+
+    const nextApiKey =
+      typeof input.apiKey !== "undefined"
+        ? this.normalizeApiKey(input.apiKey)
+        : this.normalizeApiKey(prevVoice?.groqApiKey ?? null);
+
+    const nextModel =
+      typeof input.model !== "undefined"
+        ? this.validateGroqModel(input.model)
+        : this.normalizeGroqModel(prevVoice?.model ?? null);
+
+    this.store.set(adminId, {
+      ...prev,
+      voiceControl: {
+        groqApiKey: nextApiKey,
+        model: nextModel
+      }
+    });
+
+    return {
+      enabled: Boolean(nextApiKey && nextModel),
+      apiKey: nextApiKey,
+      model: nextModel,
+      supportedModels: [...GROQ_TRANSCRIPTION_MODELS]
     };
   }
 
@@ -215,5 +269,38 @@ export class TelegramPreferencesService {
     return allAgents.filter(
       (item) => DEFAULT_TELEGRAM_AGENTS.has(item.name) || customNames.has(item.name)
     );
+  }
+
+  private normalizeApiKey(value: string | null | undefined): string | null {
+    /* Keep empty strings out of persistence to avoid ambiguous partially-configured state. */
+    if (typeof value !== "string") {
+      return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private validateGroqModel(value: string | null): GroqTranscriptionModel | null {
+    /* Accept explicit null to disable voice control and reject unknown model IDs. */
+    const normalized = this.normalizeGroqModel(value);
+    if (normalized === null) {
+      return null;
+    }
+    if (!GROQ_TRANSCRIPTION_MODELS.includes(normalized)) {
+      throw new Error(`Unsupported Groq model: ${normalized}`);
+    }
+    return normalized;
+  }
+
+  private normalizeGroqModel(value: string | null | undefined): GroqTranscriptionModel | null {
+    /* Convert empty values to null so checks use a single disabled sentinel. */
+    if (typeof value !== "string") {
+      return null;
+    }
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+      return null;
+    }
+    return normalized as GroqTranscriptionModel;
   }
 }

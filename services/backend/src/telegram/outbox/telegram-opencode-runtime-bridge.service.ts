@@ -22,6 +22,7 @@ type OpenCodeBusEvent = {
 
 const BASH_PROGRESS_MAX_CHARS = 2600;
 const BASH_PROGRESS_MIN_INTERVAL_MS = 1000;
+const BASH_NOISE_PROBE_COMMAND = /^(node|npm|pnpm|yarn|bun|python|python3)\s+(-v|--version)$/i;
 const QUESTION_CALLBACK_PREFIX = "q";
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
 const TELEGRAM_DEEP_LINK_BASE = "https://t.me";
@@ -43,9 +44,16 @@ const escapeHtml = (value: string): string =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 
+const isNoisyRuntimeProbeCommand = (command: string): boolean => {
+  /* Suppress low-signal version probes to keep Telegram terminal stream useful. */
+  const normalized = command.trim().replaceAll(/\s+/g, " ");
+  return BASH_NOISE_PROBE_COMMAND.test(normalized);
+};
+
 @Injectable()
 export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressEmittedAtMs = new Map<string, number>();
+  private readonly bashProgressKeyByPart = new Map<string, string>();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private botUsernamePromise: Promise<string | null> | null = null;
 
@@ -135,13 +143,24 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
         return;
       }
 
+      /* Do not emit standalone progress cards for routine runtime version checks. */
+      if (isNoisyRuntimeProbeCommand(command)) {
+        return;
+      }
+
       const outputRaw = String(state?.metadata?.output ?? state?.output ?? "");
       const output =
         outputRaw.length > BASH_PROGRESS_MAX_CHARS
           ? `${outputRaw.slice(0, BASH_PROGRESS_MAX_CHARS)}\n...`
           : outputRaw;
       const header = status === "completed" ? "✅ Команда завершена" : status === "error" ? "❌ Команда с ошибкой" : "⏳ Выполняю команду";
-      const progressKey = `bash:${route.adminId}:${sessionID}:${String(part.callID ?? "")}`;
+      const progressKey = this.resolveBashProgressKey({
+        adminId: route.adminId,
+        sessionID,
+        part,
+        command,
+        status
+      });
       const nowMs = Date.now();
       const last = this.bashProgressEmittedAtMs.get(progressKey) ?? 0;
       const isFinal = status === "completed" || status === "error";
@@ -173,6 +192,42 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     void this.emitFileOperations(part, route);
+  }
+
+  private resolveBashProgressKey(input: {
+    adminId: number;
+    sessionID: string;
+    part: any;
+    command: string;
+    status: string;
+  }): string {
+    /*
+     * Keep one replace key per logical bash tool part.
+     * OpenCode may rotate callID between partial updates, so id/session binding is the stable anchor.
+     */
+    const callId = String(input.part.callID ?? "").trim();
+    const partId = String(input.part.id ?? "").trim();
+
+    /*
+     * Runtime can rotate both callID and part.id between partial updates.
+     * For live terminal output we bind one replace slot to session+command.
+     */
+    const stablePartToken = `cmd:${input.command}`;
+    const mapKey = `bash-part:${input.adminId}:${input.sessionID}:${stablePartToken}`;
+    const existing = this.bashProgressKeyByPart.get(mapKey);
+    if (existing) {
+      if (input.status === "completed" || input.status === "error") {
+        this.bashProgressKeyByPart.delete(mapKey);
+      }
+      return existing;
+    }
+
+    const progressIdentity = partId || callId || input.command;
+    const progressKey = `bash:${input.adminId}:${input.sessionID}:${progressIdentity}`;
+    if (input.status !== "completed" && input.status !== "error") {
+      this.bashProgressKeyByPart.set(mapKey, progressKey);
+    }
+    return progressKey;
   }
 
   private handleSessionStatus(properties: Record<string, unknown>): void {

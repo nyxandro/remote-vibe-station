@@ -27,6 +27,15 @@ import {
 const DATA_DIR = "data";
 const FILE_NAME = "telegram.outbox.json";
 
+/*
+ * Retention defaults are intentionally conservative.
+ * - Delivered messages are useful for debugging, but should not grow unbounded.
+ * - Dead messages are kept longer for post-mortem, but are pruned by age and count.
+ */
+const DEFAULT_MAX_DELIVERED_TO_KEEP = 500;
+const DEFAULT_MAX_DEAD_TO_KEEP = 500;
+const DEFAULT_MAX_DEAD_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
 type OutboxFile = {
   items: TelegramOutboxItem[];
 };
@@ -166,6 +175,7 @@ export class TelegramOutboxStore {
   public report(input: { adminId: number; workerId: string; results: OutboxReportResult[]; nowMs?: number }): void {
     /* Update delivery state based on bot reports. */
     const nowMs = input.nowMs ?? Date.now();
+    const nowIsoFromNowMs = new Date(nowMs).toISOString();
     const file = this.readAll();
     const byId = new Map(file.items.map((item) => [item.id, item] as const));
 
@@ -188,7 +198,8 @@ export class TelegramOutboxStore {
 
       if (result.ok) {
         item.status = "delivered";
-        item.deliveredAt = nowIso();
+        /* Use injected nowMs for deterministic testing. */
+        item.deliveredAt = nowIsoFromNowMs;
         if (typeof result.telegramMessageId === "number") {
           item.telegramMessageId = result.telegramMessageId;
         }
@@ -204,10 +215,12 @@ export class TelegramOutboxStore {
       item.inFlightBy = undefined;
       item.inFlightUntil = undefined;
 
-      if (item.attempts >= OUTBOX_MAX_ATTEMPTS) {
-        item.status = "dead";
-        continue;
-      }
+       if (item.attempts >= OUTBOX_MAX_ATTEMPTS) {
+         item.status = "dead";
+         /* Use injected nowMs for deterministic testing. */
+         item.deadAt = nowIsoFromNowMs;
+         continue;
+       }
 
       const retryAfterMs =
         typeof result.retryAfterSec === "number" && result.retryAfterSec > 0
@@ -223,8 +236,63 @@ export class TelegramOutboxStore {
   public pruneDelivered(input?: { maxDeliveredToKeep?: number }): void {
     /* Keep file size under control. */
     const file = this.readAll();
-    const keep = input?.maxDeliveredToKeep ?? 1_000;
+    const keep = input?.maxDeliveredToKeep ?? DEFAULT_MAX_DELIVERED_TO_KEEP;
 
+    this.pruneDeliveredInPlace(file, keep);
+    this.writeAll(file);
+  }
+
+  public prune(input?: {
+    maxDeliveredToKeep?: number;
+    maxDeadToKeep?: number;
+    maxDeadAgeMs?: number;
+    nowMs?: number;
+  }): void {
+    /*
+     * Run all retention policies in one go.
+     * This is used by the periodic maintenance job.
+     */
+    const maxDeliveredToKeep = input?.maxDeliveredToKeep ?? DEFAULT_MAX_DELIVERED_TO_KEEP;
+    const maxDeadToKeep = input?.maxDeadToKeep ?? DEFAULT_MAX_DEAD_TO_KEEP;
+    const maxDeadAgeMs = input?.maxDeadAgeMs ?? DEFAULT_MAX_DEAD_AGE_MS;
+    const nowMs = input?.nowMs ?? Date.now();
+
+    const file = this.readAll();
+
+    /* First, cap delivered history (fast path for the most common growth). */
+    this.pruneDeliveredInPlace(file, maxDeliveredToKeep);
+
+    /*
+     * Then prune dead-letter messages.
+     * We use deadAt when available; fallback to createdAt for backward compatibility.
+     */
+    const dead = file.items.filter((i) => i.status === "dead");
+    if (dead.length === 0) {
+      this.writeAll(file);
+      return;
+    }
+
+    const deadWithTs = dead.map((i) => ({ item: i, ts: parseIso(i.deadAt ?? i.createdAt) }));
+
+    /* Drop items older than age limit. */
+    const minTs = nowMs - maxDeadAgeMs;
+    let keepDead = deadWithTs.filter((pair) => pair.ts === 0 || pair.ts >= minTs);
+
+    /* Also cap by count; keep newest items. */
+    if (keepDead.length > maxDeadToKeep) {
+      keepDead = keepDead
+        .slice()
+        .sort((a, b) => a.ts - b.ts)
+        .slice(keepDead.length - maxDeadToKeep);
+    }
+
+    const keepDeadIds = new Set(keepDead.map((pair) => pair.item.id));
+    file.items = file.items.filter((i) => i.status !== "dead" || keepDeadIds.has(i.id));
+    this.writeAll(file);
+  }
+
+  private pruneDeliveredInPlace(file: OutboxFile, keep: number): void {
+    /* Drop oldest delivered items beyond the keep limit. */
     const delivered = file.items.filter((i) => i.status === "delivered");
     if (delivered.length <= keep) {
       return;
@@ -236,7 +304,6 @@ export class TelegramOutboxStore {
       .sort((a, b) => parseIso(a.deliveredAt) - parseIso(b.deliveredAt));
     const toDrop = new Set(deliveredSorted.slice(0, deliveredSorted.length - keep).map((i) => i.id));
     file.items = file.items.filter((i) => !toDrop.has(i.id));
-    this.writeAll(file);
   }
 
   private readAll(): OutboxFile {
