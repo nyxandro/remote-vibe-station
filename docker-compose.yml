@@ -32,7 +32,6 @@ services:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
       - PROJECTS_ROOT=${PROJECTS_ROOT}
-      - OPENCODE_DATA_DIR=${OPENCODE_DATA_DIR}
       - OPENCODE_CONFIG_DIR=/opencode-config
       - OPENCODE_SERVER_URL=${OPENCODE_SERVER_URL}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
@@ -40,9 +39,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
-      - ${OPENCODE_DATA_DIR:-./opencode-data}:/opencode-data
+      # Shared OpenCode state volume (projects/sessions/messages).
+      - opencode_data:/opencode-data
       - opencode_config:/opencode-config
-      - ./data:/app/data
+      - backend_data:/app/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`${PUBLIC_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/events`))"
@@ -105,11 +105,8 @@ services:
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
     volumes:
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
-      # Allow backend to sync OpenCode storage via the same host dir.
-      - ${OPENCODE_DATA_DIR:-./opencode-data}:/opencode-data
-      # Persist OpenCode state (projects/sessions/messages) on the host.
-      # For VPS: set OPENCODE_DATA_DIR=/opt/opencode-data (or similar).
-      - ${OPENCODE_DATA_DIR:-./opencode-data}:/root/.local/share/opencode
+      # Persist OpenCode state (projects/sessions/messages) in a named volume.
+      - opencode_data:/root/.local/share/opencode
       # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).
       - opencode_config:/root/.config/opencode
     networks:
@@ -124,3 +121,5 @@ networks:
 
 volumes:
   opencode_config:
+  backend_data:
+  opencode_data:
