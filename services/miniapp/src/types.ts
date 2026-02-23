@@ -8,6 +8,8 @@
  * - GitOverview (L41) - Branch and changed files overview for GitHub tab.
  * - OpenCodeSettingsOverview (L57) - Accordion metadata for settings files.
  * - DiffPreviewResponse (L44) - Token-based diff preview payload.
+ * - GroqTranscriptionModel (L89) - Supported Groq speech-to-text models.
+ * - VoiceControlSettings (L91) - Persisted Telegram voice-control settings.
  */
 
 export type ProjectRecord = {
@@ -69,21 +71,30 @@ export type SettingsFileSummary = {
 export type OpenCodeSettingsOverview = {
   globalRule: { exists: boolean; absolutePath: string };
   projectRule: { exists: boolean; absolutePath: string } | null;
+  projectEnv: { exists: boolean; absolutePath: string } | null;
+  projectEnvFiles: SettingsFileSummary[];
   config: { exists: boolean; absolutePath: string };
   agents: SettingsFileSummary[];
   commands: SettingsFileSummary[];
-  skills: SettingsFileSummary[];
-  plugins: SettingsFileSummary[];
 };
 
 export type OpenCodeSettingsKind =
   | "globalRule"
   | "projectRule"
+  | "projectEnv"
+  | "projectEnvFile"
   | "config"
   | "agent"
-  | "command"
-  | "skill"
-  | "plugin";
+  | "command";
+
+export type GroqTranscriptionModel = "whisper-large-v3-turbo" | "whisper-large-v3";
+
+export type VoiceControlSettings = {
+  enabled: boolean;
+  apiKey: string | null;
+  model: GroqTranscriptionModel | null;
+  supportedModels: GroqTranscriptionModel[];
+};
 
 export type FileEntry = {
   name: string;

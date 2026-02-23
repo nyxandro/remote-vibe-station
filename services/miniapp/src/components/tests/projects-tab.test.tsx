@@ -168,13 +168,13 @@ describe("ProjectsTab", () => {
     );
 
     fireEvent.click(screen.getByLabelText("Create project"));
-    fireEvent.click(screen.getByRole("button", { name: "Создать папку проекта" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create project folder" }));
     fireEvent.change(screen.getByPlaceholderText("project-name"), { target: { value: "new-project" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     expect(onCreateProjectFolder).toHaveBeenCalledWith("new-project");
 
     fireEvent.click(screen.getByLabelText("Create project"));
-    fireEvent.click(screen.getByRole("button", { name: "Клонировать git репозиторий" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clone git repository" }));
     fireEvent.change(screen.getByPlaceholderText("https://github.com/org/repo.git"), {
       target: { value: "https://github.com/acme/repo.git" }
     });

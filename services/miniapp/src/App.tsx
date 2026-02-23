@@ -25,6 +25,7 @@ import { useOpenCodeSettings } from "./hooks/use-opencode-settings";
 import { useProjectGit } from "./hooks/use-project-git";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
+import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
 import { loadProjectMetadata } from "./utils/project-metadata";
 import { highlightToHtml } from "./utils/syntax";
@@ -94,6 +95,13 @@ export const App = () => {
     isRestarting: boolean;
     lastResult: "idle" | "success" | "error";
   }>({ isRestarting: false, lastResult: "idle" });
+  const {
+    state: voiceControlState,
+    setApiKey: setVoiceControlApiKey,
+    setModel: setVoiceControlModel,
+    loadSettings: loadVoiceControlSettings,
+    saveSettings: saveVoiceControlSettings
+  } = useVoiceControlSettings(setError);
 
   const loadProjects = async (): Promise<void> => {
     try {
@@ -392,8 +400,11 @@ export const App = () => {
   useEffect(() => {
     if (activeTab === "settings") {
       void loadSettingsOverview(activeId);
+      if (canControlTelegramStream) {
+        void loadVoiceControlSettings();
+      }
     }
-  }, [activeId, activeTab, loadSettingsOverview]);
+  }, [activeId, activeTab, canControlTelegramStream, loadSettingsOverview, loadVoiceControlSettings]);
 
   const withActiveProject = (run: (projectId: string) => void): void => {
     if (activeId) {
@@ -487,6 +498,11 @@ export const App = () => {
             }
           }}
           restartOpenCodeState={restartOpenCodeState}
+          voiceControl={canControlTelegramStream ? voiceControlState : undefined}
+          onVoiceControlApiKeyChange={setVoiceControlApiKey}
+          onVoiceControlModelChange={setVoiceControlModel}
+          onReloadVoiceControl={() => void loadVoiceControlSettings()}
+          onSaveVoiceControl={() => void saveVoiceControlSettings()}
           iconForEntry={iconForFileEntry}
           onGitRefresh={() => withActiveProject((id) => void loadGitOverview(id))}
           onGitCheckout={(branch) => withActiveProject((id) => void checkoutBranch(id, branch))}

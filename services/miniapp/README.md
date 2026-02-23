@@ -1,10 +1,10 @@
 # Mini App
 
-Визуальная панель управления проектами и OpenCode.
+Visual control panel for projects and OpenCode.
 
-Минимальные обязанности:
+Minimal responsibilities:
 
-- Дерево файлов, терминал, настройки.
-- Статусы Docker контейнеров.
-- Запуск/остановка/перезапуск проектов.
-- Переход на поддомены проектов.
+- File tree, terminal, and settings.
+- Docker container statuses.
+- Start/stop/restart project workflows.
+- Navigation to project subdomains.

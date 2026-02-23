@@ -22,6 +22,10 @@ type Props = {
 };
 
 export const FilesTab = (props: Props) => {
+  /* Disable parent navigation when explorer is already at project root. */
+  const normalizedPath = props.filePath.trim().replace(/^\/+|\/+$/g, "");
+  const canGoUp = Boolean(props.activeId) && normalizedPath.length > 0;
+
   /* File explorer and preview. */
   return (
     <div className="files-shell">
@@ -29,7 +33,7 @@ export const FilesTab = (props: Props) => {
         <button
           className="icon-tool-btn"
           onClick={props.onUp}
-          disabled={!props.activeId}
+          disabled={!canGoUp}
           type="button"
           title="Go to parent folder"
           aria-label="Go up"

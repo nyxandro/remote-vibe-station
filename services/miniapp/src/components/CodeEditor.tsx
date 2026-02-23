@@ -12,6 +12,7 @@ import { markdown } from "@codemirror/lang-markdown";
 type Props = {
   value: string;
   language: "markdown" | "json" | "text";
+  height?: string;
   onChange: (value: string) => void;
 };
 
@@ -23,7 +24,7 @@ export const CodeEditor = (props: Props) => {
   return (
     <CodeMirror
       value={props.value}
-      height="220px"
+      height={props.height ?? "220px"}
       basicSetup={{ lineNumbers: true, foldGutter: false }}
       extensions={extensions}
       onChange={props.onChange}

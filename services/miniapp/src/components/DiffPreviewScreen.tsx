@@ -19,12 +19,12 @@ type DiffPreviewScreenProps = {
 const operationLabel = (value: DiffPreviewResponse["operation"]): string => {
   /* Keep operation labels consistent with Telegram runtime stream. */
   if (value === "create") {
-    return "Создание файла";
+    return "File creation";
   }
   if (value === "delete") {
-    return "Удаление файла";
+    return "File deletion";
   }
-  return "Редактирование файла";
+  return "File update";
 };
 
 const diffLineClass = (line: string): string => {
@@ -56,7 +56,7 @@ export const DiffPreviewScreen = ({ token, onClose }: DiffPreviewScreenProps) =>
         const data = await apiGet<DiffPreviewResponse>(`/api/telegram/diff-preview/${encodeURIComponent(token)}`);
         setPreview(data);
       } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : "Не удалось загрузить diff";
+        const message = loadError instanceof Error ? loadError.message : "Failed to load diff";
         setError(message);
       }
     })();
@@ -72,8 +72,8 @@ export const DiffPreviewScreen = ({ token, onClose }: DiffPreviewScreenProps) =>
 
   return (
     <section className="diff-preview-screen">
-      <button className="diff-preview-close" onClick={onClose} aria-label="Закрыть diff preview">
-        Закрыть
+      <button className="diff-preview-close" onClick={onClose} aria-label="Close diff preview">
+        Close
       </button>
 
       {error ? <div className="diff-preview-error">{error}</div> : null}

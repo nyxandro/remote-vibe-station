@@ -64,7 +64,7 @@ export const ProjectsTab = (props: Props) => {
                 }}
                 type="button"
               >
-                Создать папку проекта
+                Create project folder
               </button>
               <button
                 className="btn outline"
@@ -75,7 +75,7 @@ export const ProjectsTab = (props: Props) => {
                 }}
                 type="button"
               >
-                Клонировать git репозиторий
+                Clone git repository
               </button>
             </div>
           ) : null}
@@ -84,7 +84,7 @@ export const ProjectsTab = (props: Props) => {
 
       {createOpen ? (
         <div className="project-create-panel">
-          <div className="project-create-title">Создать папку проекта</div>
+          <div className="project-create-title">Create project folder</div>
           <input
             className="input"
             placeholder="project-name"
@@ -113,7 +113,7 @@ export const ProjectsTab = (props: Props) => {
 
       {cloneOpen ? (
         <div className="project-create-panel">
-          <div className="project-create-title">Клонировать git репозиторий</div>
+          <div className="project-create-title">Clone git repository</div>
           <input
             className="input"
             placeholder="https://github.com/org/repo.git"
@@ -127,7 +127,7 @@ export const ProjectsTab = (props: Props) => {
             onChange={(event) => setCloneFolderName(event.target.value)}
           />
           <div className="project-create-note">
-            Используются git credentials, настроенные в backend runtime/container.
+            Uses git credentials configured in backend runtime/container.
           </div>
           <div className="project-create-actions">
             <button
