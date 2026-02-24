@@ -11,11 +11,12 @@ import { MoonStar, Sun } from "lucide-react";
 import {
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
+  OpenCodeVersionStatus,
   SettingsFileSummary,
   VoiceControlSettings
 } from "../types";
 import { ThemeMode } from "../utils/theme";
-import { CodeEditor } from "./CodeEditor";
+import { SettingsEditorModal } from "./SettingsEditorModal";
 
 type ActiveFile = {
   kind: OpenCodeSettingsKind;
@@ -37,7 +38,7 @@ type Props = {
   onLoadOverview: () => void;
   onOpenFile: (kind: OpenCodeSettingsKind, relativePath?: string) => void;
   onCreateFile: (kind: OpenCodeSettingsKind, name?: string) => void;
-  onSaveActiveFile: (content: string) => void;
+  onSaveActiveFile: (content: string) => Promise<void> | void;
   onDeleteActiveProject: () => void;
   restartOpenCodeState: {
     isRestarting: boolean;
@@ -49,17 +50,27 @@ type Props = {
     supportedModels: VoiceControlSettings["supportedModels"];
     isLoading: boolean;
     isSaving: boolean;
+    saveResult: "idle" | "success" | "error";
   };
   onVoiceControlApiKeyChange?: (value: string) => void;
   onVoiceControlModelChange?: (value: VoiceControlSettings["model"]) => void;
   onReloadVoiceControl?: () => void;
   onSaveVoiceControl?: () => void;
+  openCodeVersion?: {
+    status: OpenCodeVersionStatus | null;
+    isLoading: boolean;
+    isUpdating: boolean;
+  };
+  onUpdateOpenCodeVersion?: () => void;
 };
 
 export const SettingsTab = (props: Props) => {
   const [draft, setDraft] = useState<string>("");
   const [createNameByKind, setCreateNameByKind] = useState<Record<string, string>>({});
   const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
+  const [voiceToast, setVoiceToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [isEditorSaving, setIsEditorSaving] = useState<boolean>(false);
+  const [editorSaveResult, setEditorSaveResult] = useState<"idle" | "success" | "error">("idle");
   const hasMountedRef = useRef<boolean>(false);
 
   const language = useMemo(() => {
@@ -78,6 +89,12 @@ export const SettingsTab = (props: Props) => {
     /* Reset editor draft when another file is opened. */
     setDraft(props.activeFile?.content ?? "");
   }, [props.activeFile?.absolutePath, props.activeFile?.content]);
+
+  useEffect(() => {
+    /* Reset editor save status whenever another file becomes active. */
+    setIsEditorSaving(false);
+    setEditorSaveResult("idle");
+  }, [props.activeFile?.absolutePath]);
 
   useEffect(() => {
     /*
@@ -128,6 +145,22 @@ export const SettingsTab = (props: Props) => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isEditorOpen]);
 
+  useEffect(() => {
+    /* Show short toast after save attempt to make persistence feedback explicit. */
+    if (!props.voiceControl || props.voiceControl.saveResult === "idle") {
+      return;
+    }
+
+    if (props.voiceControl.saveResult === "success") {
+      setVoiceToast({ kind: "success", message: "Voice settings saved." });
+    } else {
+      setVoiceToast({ kind: "error", message: "Failed to save voice settings." });
+    }
+
+    const timer = window.setTimeout(() => setVoiceToast(null), 2600);
+    return () => window.clearTimeout(timer);
+  }, [props.voiceControl?.saveResult]);
+
   const renderListSection = (input: {
     title: string;
     kind: OpenCodeSettingsKind;
@@ -171,6 +204,26 @@ export const SettingsTab = (props: Props) => {
         </div>
       </details>
     );
+  };
+
+  const isEditorDirty = Boolean(props.activeFile && draft !== props.activeFile.content);
+
+  const saveEditorDraft = async (): Promise<void> => {
+    /* Save action is guarded to prevent duplicate requests on rapid clicks/hotkeys. */
+    if (isEditorSaving) {
+      return;
+    }
+
+    try {
+      setIsEditorSaving(true);
+      setEditorSaveResult("idle");
+      await Promise.resolve(props.onSaveActiveFile(draft));
+      setEditorSaveResult("success");
+    } catch {
+      setEditorSaveResult("error");
+    } finally {
+      setIsEditorSaving(false);
+    }
   };
 
   return (
@@ -234,6 +287,48 @@ export const SettingsTab = (props: Props) => {
             <button className="btn" onClick={() => props.onCreateFile("config")} type="button">
               Create opencode.json
             </button>
+          ) : null}
+
+          <div className="settings-actions-grid">
+            <button className="btn outline" onClick={props.onRefreshProjects} type="button">
+              Refresh project list
+            </button>
+            <button className="btn outline" onClick={props.onSyncProjects} type="button">
+              Sync OpenCode
+            </button>
+            <button
+              className="btn outline"
+              onClick={props.onRestartOpenCode}
+              disabled={props.restartOpenCodeState.isRestarting}
+              type="button"
+            >
+              {props.restartOpenCodeState.isRestarting ? "Restarting..." : "Restart OpenCode"}
+            </button>
+            <button
+              className="btn outline"
+              onClick={props.onUpdateOpenCodeVersion}
+              disabled={!props.openCodeVersion?.status?.updateAvailable || props.openCodeVersion?.isUpdating}
+              type="button"
+            >
+              {props.openCodeVersion?.isUpdating ? "Updating..." : "Update OpenCode"}
+            </button>
+          </div>
+
+          <div className="project-create-note">
+            OpenCode: {props.openCodeVersion?.status?.currentVersion ?? "unknown"}
+          </div>
+          <div className="project-create-note">
+            Latest: {props.openCodeVersion?.status?.latestVersion ?? "not checked yet"}
+            {props.openCodeVersion?.isLoading ? " (checking...)" : ""}
+          </div>
+          {props.openCodeVersion?.status?.updateAvailable ? (
+            <div className="project-create-note">Update is available. Click Update OpenCode.</div>
+          ) : null}
+          {props.restartOpenCodeState.lastResult === "success" ? (
+            <div className="project-create-note">OpenCode restarted successfully.</div>
+          ) : null}
+          {props.restartOpenCodeState.lastResult === "error" ? (
+            <div className="project-create-note">Failed to restart OpenCode. Check backend logs.</div>
           ) : null}
         </div>
       </details>
@@ -327,7 +422,7 @@ export const SettingsTab = (props: Props) => {
                   {props.voiceControl.isLoading ? "Loading..." : "Reload voice settings"}
                 </button>
                 <button
-                  className="btn primary"
+                  className={props.voiceControl.isSaving ? "btn primary settings-save-btn is-busy" : "btn primary settings-save-btn"}
                   onClick={props.onSaveVoiceControl}
                   disabled={props.voiceControl.isSaving}
                   type="button"
@@ -335,12 +430,28 @@ export const SettingsTab = (props: Props) => {
                   {props.voiceControl.isSaving ? "Saving..." : "Save voice settings"}
                 </button>
               </div>
+
+              {props.voiceControl.isSaving ? (
+                <div className="settings-save-status" aria-live="polite">
+                  <span className="settings-save-dot" /> Сохраняем настройки...
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="placeholder">Voice settings are available only in Telegram Mini App context.</div>
           )}
         </div>
       </details>
+
+      {voiceToast ? (
+        <div
+          className={voiceToast.kind === "success" ? "settings-toast success" : "settings-toast error"}
+          role="status"
+          aria-live="polite"
+        >
+          {voiceToast.message}
+        </div>
+      ) : null}
 
       <details className="settings-accordion-item">
         <summary>7. General settings</summary>
@@ -361,73 +472,24 @@ export const SettingsTab = (props: Props) => {
               <MoonStar size={16} className="btn-icon" /> Night
             </button>
           </div>
-
-          <div className="settings-actions-grid">
-            <button className="btn outline" onClick={props.onRefreshProjects} type="button">
-              Refresh project list
-            </button>
-            <button className="btn outline" onClick={props.onSyncProjects} type="button">
-              Sync OpenCode
-            </button>
-            <button
-              className="btn outline"
-              onClick={props.onRestartOpenCode}
-              disabled={props.restartOpenCodeState.isRestarting}
-              type="button"
-            >
-              {props.restartOpenCodeState.isRestarting ? "Restarting..." : "Restart OpenCode"}
-            </button>
-            {props.restartOpenCodeState.lastResult === "success" ? (
-              <div className="project-create-note">OpenCode restarted successfully.</div>
-            ) : null}
-            {props.restartOpenCodeState.lastResult === "error" ? (
-              <div className="project-create-note">Failed to restart OpenCode. Check backend logs.</div>
-            ) : null}
-          </div>
         </div>
       </details>
 
-      {props.activeFile && isEditorOpen ? (
-        <div
-          className="settings-editor-modal-backdrop"
-          onClick={() => setIsEditorOpen(false)}
-          role="presentation"
-        >
-          <div className="settings-editor-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="settings-editor-modal-header">
-              <div className="settings-editor-meta">{props.activeFile.absolutePath}</div>
-              <button
-                className="btn outline"
-                onClick={() => setIsEditorOpen(false)}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="settings-editor-modal-body">
-              <CodeEditor
-                value={draft}
-                language={language}
-                height="100%"
-                onChange={(value) => setDraft(value)}
-              />
-            </div>
-
-            <div className="settings-editor-modal-footer">
-              <button
-                className="btn primary"
-                onClick={() => {
-                  props.onSaveActiveFile(draft);
-                }}
-                type="button"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <SettingsEditorModal
+        isOpen={Boolean(props.activeFile && isEditorOpen)}
+        filePath={props.activeFile?.absolutePath ?? ""}
+        language={language}
+        themeMode={props.themeMode}
+        draft={draft}
+        isDirty={isEditorDirty}
+        isSaving={isEditorSaving}
+        saveResult={editorSaveResult}
+        onChange={setDraft}
+        onClose={() => setIsEditorOpen(false)}
+        onSave={() => {
+          void saveEditorDraft();
+        }}
+      />
     </section>
   );
 };

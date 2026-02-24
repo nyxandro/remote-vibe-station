@@ -2,12 +2,12 @@
  * @fileoverview Telegram slash-command utilities for OpenCode integration.
  *
  * Exports:
- * - TelegramMenuCommand (L19) - Minimal command shape accepted by Telegram API.
- * - OpenCodeCommand (L24) - OpenCode command metadata from backend API.
- * - BOT_LOCAL_COMMANDS (L29) - Bot-owned commands shown in Telegram menu.
- * - BOT_LOCAL_COMMAND_NAMES (L74) - Set of commands handled by local bot handlers.
- * - buildTelegramMenuCommands (L79) - Merge local and OpenCode commands for menu.
- * - parseSlashCommand (L110) - Parse incoming slash command and arguments.
+ * - TelegramMenuCommand (L16) - Minimal command shape accepted by Telegram API.
+ * - OpenCodeCommand (L21) - OpenCode command metadata from backend API.
+ * - BOT_LOCAL_COMMANDS (L26) - Bot-owned commands shown in Telegram menu.
+ * - BOT_LOCAL_COMMAND_NAMES (L42) - Set of commands handled by local bot handlers.
+ * - buildTelegramMenuCommands (L80) - Merge local and OpenCode commands for menu.
+ * - parseSlashCommand (L128) - Parse incoming slash command and arguments.
  */
 
 const TELEGRAM_COMMAND_REGEX = /^[a-z0-9_]{1,32}$/;
@@ -31,6 +31,9 @@ export const BOT_LOCAL_COMMANDS: TelegramMenuCommand[] = [
   /* Stream management commands required by product flow. */
   { command: "chat", description: "Включить стрим ответов" },
   { command: "end", description: "Выключить стрим ответов" },
+  { command: "new", description: "Начать новую сессию" },
+  { command: "sessions", description: "Выбрать сессию" },
+  { command: "repair", description: "Починить зависшие сессии" },
   /* Project selection helpers for active workspace. */
   { command: "projects", description: "Список проектов" },
   { command: "project", description: "Выбрать активный проект" }

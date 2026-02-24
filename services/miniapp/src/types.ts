@@ -2,14 +2,18 @@
  * @fileoverview Shared types for Mini App.
  *
  * Exports:
- * - ProjectRecord (L9) - Project data from backend.
- * - ProjectStatus (L18) - Container status response.
- * - ProjectGitSummary (L32) - Uncommitted git change counters.
- * - GitOverview (L41) - Branch and changed files overview for GitHub tab.
- * - OpenCodeSettingsOverview (L57) - Accordion metadata for settings files.
- * - DiffPreviewResponse (L44) - Token-based diff preview payload.
- * - GroqTranscriptionModel (L89) - Supported Groq speech-to-text models.
- * - VoiceControlSettings (L91) - Persisted Telegram voice-control settings.
+ * - ProjectRecord (L17) - Project data from backend.
+ * - ProjectStatus (L30) - Container status response.
+ * - ProjectGitSummary (L39) - Uncommitted git change counters.
+ * - GitOverview (L59) - Branch and changed files overview for GitHub tab.
+ * - OpenCodeSettingsOverview (L72) - Accordion metadata for settings files.
+ * - GroqTranscriptionModel (L91) - Supported Groq speech-to-text models.
+ * - VoiceControlSettings (L93) - Persisted Telegram voice-control settings.
+ * - ProviderAuthMethod (L99) - Available connect methods per provider.
+ * - ProviderOverview (L104) - Providers tab payload from backend.
+ * - OpenCodeVersionStatus (L124) - Current/latest OpenCode version metadata.
+ * - OpenCodeVersionUpdateResult (L131) - Result payload for OpenCode update operation.
+ * - DiffPreviewResponse (L159) - Token-based diff preview payload.
  */
 
 export type ProjectRecord = {
@@ -94,6 +98,43 @@ export type VoiceControlSettings = {
   apiKey: string | null;
   model: GroqTranscriptionModel | null;
   supportedModels: GroqTranscriptionModel[];
+};
+
+export type ProviderAuthMethod = {
+  type: "oauth" | "api";
+  label: string;
+};
+
+export type ProviderOverview = {
+  selected: {
+    model: {
+      providerID: string;
+      modelID: string;
+    };
+    thinking: string | null;
+    agent: string | null;
+  };
+  providers: Array<{
+    id: string;
+    name: string;
+    connected: boolean;
+    defaultModelID?: string;
+  }>;
+  authMethods: Record<string, ProviderAuthMethod[]>;
+};
+
+export type OpenCodeVersionStatus = {
+  currentVersion: string;
+  latestVersion: string | null;
+  latestCheckedAt: string | null;
+  updateAvailable: boolean;
+};
+
+export type OpenCodeVersionUpdateResult = {
+  updated: boolean;
+  restarted: string[];
+  before: OpenCodeVersionStatus;
+  after: OpenCodeVersionStatus;
 };
 
 export type FileEntry = {

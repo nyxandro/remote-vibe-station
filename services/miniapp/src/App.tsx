@@ -2,7 +2,7 @@
  * @fileoverview Main Mini App view.
  *
  * Exports:
- * - App (L31) - Root React component.
+ * - App (L42) - Root React component.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -22,7 +22,10 @@ import {
 import { useAuthControl } from "./hooks/use-auth-control";
 import { useContainerStatusPolling } from "./hooks/use-container-status-polling";
 import { useOpenCodeSettings } from "./hooks/use-opencode-settings";
+import { useOpenCodeVersion } from "./hooks/use-opencode-version";
+import { useProviderAuth } from "./hooks/use-provider-auth";
 import { useProjectGit } from "./hooks/use-project-git";
+import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
 import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
@@ -35,10 +38,10 @@ type ProjectStatusMap = Record<string, ProjectStatus[]>;
 type ProjectLogsMap = Record<string, string>;
 type ProjectGitSummaryMap = Record<string, ProjectGitSummary | null>;
 
-const STORAGE_KEY_ACTIVE_TAB = "tvoc.miniapp.activeTab";
 const STORAGE_KEY_ACTIVE_PROJECT = "tvoc.miniapp.activeProject";
 
 export const App = () => {
+  const restoredTabState = readTabPersistenceState();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [statusMap, setStatusMap] = useState<ProjectStatusMap>({});
   const [logsMap, setLogsMap] = useState<ProjectLogsMap>({});
@@ -46,20 +49,7 @@ export const App = () => {
   const [activeId, setActiveId] = useState<string | null>(() => {
     return localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT);
   });
-  const [activeTab, setActiveTab] = useState<TabKey>(() => {
-    const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_TAB);
-    if (
-      raw === "projects" ||
-      raw === "files" ||
-      raw === "github" ||
-      raw === "terminal" ||
-      raw === "containers" ||
-      raw === "settings"
-    ) {
-      return raw;
-    }
-    return "projects";
-  });
+  const [activeTab, setActiveTab] = useState<TabKey>(() => restoredTabState.activeTab);
   const [query, setQuery] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [filePath, setFilePath] = useState<string>("");
@@ -80,6 +70,19 @@ export const App = () => {
     saveActiveFile: saveSettingsFile,
     createFile: createSettingsFile
   } = useOpenCodeSettings(setError);
+  const {
+    overview: providerOverview,
+    isLoading: isProviderLoading,
+    isSubmitting: isProviderSubmitting,
+    oauthState: providerOAuthState,
+    setOAuthState: setProviderOAuthState,
+    loadOverview: loadProviderOverview,
+    startConnect: startProviderConnect,
+    submitApiKey: submitProviderApiKey,
+    completeOAuthAuto: completeProviderOAuthAuto,
+    submitOAuthCode: submitProviderOAuthCode,
+    disconnect: disconnectProvider
+  } = useProviderAuth(setError);
   const clearActiveSelection = (): void => {
     setActiveId(null);
     setActiveTab("projects");
@@ -102,6 +105,14 @@ export const App = () => {
     loadSettings: loadVoiceControlSettings,
     saveSettings: saveVoiceControlSettings
   } = useVoiceControlSettings(setError);
+  const {
+    status: openCodeVersionStatus,
+    isLoading: isOpenCodeVersionLoading,
+    isUpdating: isOpenCodeVersionUpdating,
+    loadStatus: loadOpenCodeVersionStatus,
+    checkStatus: checkOpenCodeVersionStatus,
+    updateNow: updateOpenCodeVersionNow
+  } = useOpenCodeVersion(setError);
 
   const loadProjects = async (): Promise<void> => {
     try {
@@ -126,14 +137,19 @@ export const App = () => {
   );
 
   const restoreActiveProject = async (): Promise<void> => {
+    /* Reopen project context on the last workspace tab instead of forcing Files. */
+    const preferredWorkspaceTab = readTabPersistenceState().lastWorkspaceTab;
+
     try {
       const serverActive = await apiGet<ProjectRecord | null>("/api/projects/active");
       const slug = serverActive?.id ?? null;
       if (slug) {
         setActiveId(slug);
         localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, slug);
-        setActiveTab("files");
-        void loadFiles(slug, "");
+        setActiveTab(preferredWorkspaceTab);
+        if (preferredWorkspaceTab === "files") {
+          void loadFiles(slug, "");
+        }
         return;
       }
     } catch {
@@ -141,8 +157,10 @@ export const App = () => {
     }
 
     if (activeId) {
-      setActiveTab("files");
-      void loadFiles(activeId, "");
+      setActiveTab(preferredWorkspaceTab);
+      if (preferredWorkspaceTab === "files") {
+        void loadFiles(activeId, "");
+      }
     }
   };
 
@@ -176,6 +194,11 @@ export const App = () => {
       setError(e instanceof Error ? e.message : "Failed to restart OpenCode");
       setRestartOpenCodeState({ isRestarting: false, lastResult: "error" });
     }
+  };
+
+  const reloadSettingsNow = async (): Promise<void> => {
+    /* Settings Reload also refreshes OpenCode latest-version availability. */
+    await Promise.all([loadSettingsOverview(activeId), checkOpenCodeVersionStatus()]);
   };
 
   const startTelegramChat = async (): Promise<void> => {
@@ -287,18 +310,24 @@ export const App = () => {
   };
 
   const selectProject = async (projectId: string): Promise<void> => {
+    /* After project selection, keep the current tab unless user is in Projects list. */
+    const preferredWorkspaceTab = readTabPersistenceState().lastWorkspaceTab;
+    const nextTab: TabKey = activeTab === "projects" ? preferredWorkspaceTab : activeTab;
+
     try {
       setError(null);
       await apiPost(`/api/projects/${projectId}/select`, {});
       setActiveId(projectId);
-      setActiveTab("files");
+      setActiveTab(nextTab);
       const selected = projects.find((p) => p.id === projectId) ?? null;
       if (selected?.runnable) {
         void loadStatus(projectId);
       }
       void loadGitOverview(projectId);
 
-      void loadFiles(projectId, "");
+      if (nextTab === "files") {
+        void loadFiles(projectId, "");
+      }
 
       setFilePreview(null);
       setFilePreviewHtml("");
@@ -376,7 +405,7 @@ export const App = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, activeTab);
+    persistTabSelection(activeTab);
   }, [activeTab]);
 
   useEffect(() => {
@@ -400,11 +429,27 @@ export const App = () => {
   useEffect(() => {
     if (activeTab === "settings") {
       void loadSettingsOverview(activeId);
+      void loadOpenCodeVersionStatus();
       if (canControlTelegramStream) {
         void loadVoiceControlSettings();
       }
     }
-  }, [activeId, activeTab, canControlTelegramStream, loadSettingsOverview, loadVoiceControlSettings]);
+  }, [
+    activeId,
+    activeTab,
+    canControlTelegramStream,
+    loadOpenCodeVersionStatus,
+    loadSettingsOverview,
+    loadVoiceControlSettings
+  ]);
+
+  useEffect(() => {
+    /* Load providers overview only when user opens dedicated Providers tab. */
+    if (activeTab !== "providers") {
+      return;
+    }
+    void loadProviderOverview();
+  }, [activeTab, loadProviderOverview]);
 
   const withActiveProject = (run: (projectId: string) => void): void => {
     if (activeId) {
@@ -445,6 +490,7 @@ export const App = () => {
           terminalInput={terminalInput}
           themeMode={themeMode}
           gitOverview={activeId ? gitOverviewMap[activeId] : undefined}
+          providerOverview={providerOverview}
           settingsOverview={settingsOverview}
           settingsActiveFile={settingsActiveFile}
           onQueryChange={setQuery}
@@ -483,12 +529,12 @@ export const App = () => {
           onRefreshProjects={() => void loadProjects()}
           onSyncProjects={() => void syncOpenCodeNow()}
           onRestartOpenCode={() => void restartOpenCodeNow()}
-          onLoadSettingsOverview={() => void loadSettingsOverview(activeId)}
+          onLoadSettingsOverview={() => void reloadSettingsNow()}
           onOpenSettingsFile={(kind, relativePath) =>
             void openSettingsFile(kind, activeId, relativePath)
           }
           onCreateSettingsFile={(kind, name) => void createSettingsFile(kind, activeId, name)}
-          onSaveSettingsFile={(content) => void saveSettingsFile(activeId, content)}
+          onSaveSettingsFile={(content) => saveSettingsFile(activeId, content)}
           onDeleteActiveProject={() => {
             if (!activeId) {
               return;
@@ -503,6 +549,12 @@ export const App = () => {
           onVoiceControlModelChange={setVoiceControlModel}
           onReloadVoiceControl={() => void loadVoiceControlSettings()}
           onSaveVoiceControl={() => void saveVoiceControlSettings()}
+          openCodeVersion={{
+            status: openCodeVersionStatus,
+            isLoading: isOpenCodeVersionLoading,
+            isUpdating: isOpenCodeVersionUpdating
+          }}
+          onUpdateOpenCodeVersion={() => void updateOpenCodeVersionNow()}
           iconForEntry={iconForFileEntry}
           onGitRefresh={() => withActiveProject((id) => void loadGitOverview(id))}
           onGitCheckout={(branch) => withActiveProject((id) => void checkoutBranch(id, branch))}
@@ -511,6 +563,19 @@ export const App = () => {
           onGitPull={() => withActiveProject((id) => void runGitOperation(id, "pull"))}
           onGitPush={() => withActiveProject((id) => void runGitOperation(id, "push"))}
           onGitMerge={(sourceBranch) => withActiveProject((id) => void mergeBranch(id, sourceBranch))}
+          providersState={{
+            isLoading: isProviderLoading,
+            isSubmitting: isProviderSubmitting,
+            oauthState: providerOAuthState,
+            onRefresh: () => void loadProviderOverview(),
+            onStartConnect: (input) => void startProviderConnect(input),
+            onSubmitApiKey: (input) => void submitProviderApiKey(input),
+            onSubmitOAuthCode: () => void submitProviderOAuthCode(),
+            onCompleteOAuthAuto: () => void completeProviderOAuthAuto(),
+            onDisconnect: (providerID) => void disconnectProvider(providerID),
+            onChangeOAuthCodeDraft: (value) =>
+              setProviderOAuthState((prev) => (prev ? { ...prev, codeDraft: value } : prev))
+          }}
         />
       </section>
     </div>

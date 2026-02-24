@@ -1,0 +1,146 @@
+/**
+ * @fileoverview Styles dedicated to Providers tab onboarding UI.
+ */
+
+/* Keep providers tab layout vertical and predictable across screen sizes. */
+.providers-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Surface current selected mode in a compact summary card. */
+.providers-selected-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #1c2230;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.8125rem;
+}
+
+/* Render provider catalog as responsive cards. */
+.providers-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+/* Keep each provider card readable in both light and dark themes. */
+.providers-item-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1c2230;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+/* Place provider name and connection badge in one line. */
+.providers-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Prioritize provider name readability over secondary elements. */
+.providers-item-name {
+  font-weight: 600;
+}
+
+/* Default badge palette for disconnected state. */
+.providers-badge {
+  font-size: 0.6875rem;
+  border-radius: 999px;
+  border: 1px solid #f3b4b4;
+  background: #fff5f5;
+  color: #b42323;
+  padding: 3px 8px;
+}
+
+/* Positive badge palette for connected state. */
+.providers-badge.connected {
+  border-color: #9ae6b4;
+  background: #f0fff4;
+  color: #0f5132;
+}
+
+/* Show available auth methods using the same card rhythm. */
+.providers-method-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+/* Keep provider auth method actions grouped and scannable. */
+.providers-method-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #ffffff;
+  color: #1c2230;
+  display: grid;
+  gap: 6px;
+}
+
+/* Ensure provider name button does not collapse label alignment. */
+.providers-provider-btn {
+  display: inline-flex;
+  justify-content: center;
+}
+
+/* Reuse card style for OAuth/API key input steps. */
+.providers-auth-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #1c2230;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+/* Empty state keeps intent explicit when no providers are connected/found. */
+.providers-empty {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  background: #f8fbff;
+}
+
+/* Dark theme overrides for Providers tab surfaces and badges. */
+html[data-theme="dark"] .providers-selected-card,
+html[data-theme="dark"] .providers-auth-card,
+html[data-theme="dark"] .providers-item-card,
+html[data-theme="dark"] .providers-method-card,
+html[data-theme="dark"] .providers-empty {
+  background: #131d31;
+  border-color: #233352;
+  color: #d9e3f5;
+}
+
+/* Keep muted helper text legible against dark cards. */
+html[data-theme="dark"] .providers-auth-card .project-create-note,
+html[data-theme="dark"] .providers-selected-card > div {
+  color: #b8c7e3;
+}
+
+/* Adapt disconnected badge palette for dark backgrounds. */
+html[data-theme="dark"] .providers-badge {
+  border-color: #7f3a45;
+  background: #351d24;
+  color: #ffc4ce;
+}
+
+/* Adapt connected badge palette for dark backgrounds. */
+html[data-theme="dark"] .providers-badge.connected {
+  border-color: #1d5f4c;
+  background: #113128;
+  color: #9ff0ce;
+}

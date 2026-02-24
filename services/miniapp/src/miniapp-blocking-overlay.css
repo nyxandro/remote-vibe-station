@@ -1,0 +1,62 @@
+.miniapp-blocking-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(circle at top, rgba(27, 108, 255, 0.18), rgba(3, 7, 18, 0.9));
+  backdrop-filter: blur(4px);
+}
+
+.miniapp-blocking-card {
+  width: min(560px, calc(100vw - 32px));
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.98));
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.35);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.miniapp-blocking-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
+.miniapp-blocking-text {
+  margin: 0;
+  white-space: pre-line;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.miniapp-blocking-retry {
+  width: fit-content;
+  min-width: 190px;
+}
+
+@media (max-width: 640px) {
+  .miniapp-blocking-card {
+    border-radius: 14px;
+    padding: 14px;
+  }
+
+  .miniapp-blocking-title {
+    font-size: 18px;
+  }
+
+  .miniapp-blocking-text {
+    font-size: 13px;
+  }
+
+  .miniapp-blocking-retry {
+    width: 100%;
+  }
+}

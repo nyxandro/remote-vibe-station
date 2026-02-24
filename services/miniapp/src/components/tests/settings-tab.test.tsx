@@ -16,7 +16,7 @@ describe("SettingsTab", () => {
   });
 
   it("calls refresh callback from settings action", () => {
-    /* Project list refresh is intentionally moved from Projects tab to Settings tab. */
+    /* Project list refresh is intentionally grouped under OpenCode config actions. */
     const onRefreshProjects = vi.fn();
     render(
       <SettingsTab
@@ -37,7 +37,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("7. General settings"));
+    fireEvent.click(screen.getByText("3. OpenCode config"));
     fireEvent.click(screen.getByRole("button", { name: "Refresh project list" }));
     expect(onRefreshProjects).toHaveBeenCalledTimes(1);
   });
@@ -272,7 +272,8 @@ describe("SettingsTab", () => {
           model: null,
           supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"],
           isLoading: false,
-          isSaving: false
+          isSaving: false,
+          saveResult: "idle"
         }}
         onVoiceControlApiKeyChange={onApiKeyChange}
         onVoiceControlModelChange={onModelChange}
@@ -293,5 +294,80 @@ describe("SettingsTab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save voice settings" }));
     expect(onSaveVoiceControl).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders saving indicator for voice settings operation", () => {
+    /* Save progress should be explicit so user does not guess request state. */
+    render(
+      <SettingsTab
+        activeId={null}
+        themeMode="light"
+        overview={null}
+        activeFile={null}
+        onChangeTheme={vi.fn()}
+        onRefreshProjects={vi.fn()}
+        onSyncProjects={vi.fn()}
+        onRestartOpenCode={vi.fn()}
+        onLoadOverview={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreateFile={vi.fn()}
+        onSaveActiveFile={vi.fn()}
+        onDeleteActiveProject={vi.fn()}
+        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
+        voiceControl={{
+          apiKey: "gsk_test_123",
+          model: "whisper-large-v3",
+          supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"],
+          isLoading: false,
+          isSaving: true,
+          saveResult: "idle"
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByText("6. Голосовое управление"));
+    expect(screen.getByText("Сохраняем настройки...")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows OpenCode current/latest versions and runs update action", () => {
+    /* General settings should expose actionable version state and update control. */
+    const onUpdateOpenCodeVersion = vi.fn();
+
+    render(
+      <SettingsTab
+        activeId={null}
+        themeMode="dark"
+        overview={null}
+        activeFile={null}
+        onChangeTheme={vi.fn()}
+        onRefreshProjects={vi.fn()}
+        onSyncProjects={vi.fn()}
+        onRestartOpenCode={vi.fn()}
+        onLoadOverview={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreateFile={vi.fn()}
+        onSaveActiveFile={vi.fn()}
+        onDeleteActiveProject={vi.fn()}
+        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
+        openCodeVersion={{
+          status: {
+            currentVersion: "1.2.3",
+            latestVersion: "1.2.4",
+            latestCheckedAt: "2026-02-24T12:00:00.000Z",
+            updateAvailable: true
+          },
+          isLoading: false,
+          isUpdating: false
+        }}
+        onUpdateOpenCodeVersion={onUpdateOpenCodeVersion}
+      />
+    );
+
+    fireEvent.click(screen.getByText("7. General settings"));
+    expect(screen.getByText("OpenCode: 1.2.3")).toBeTruthy();
+    expect(screen.getByText("Latest: 1.2.4")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Update OpenCode" }));
+    expect(onUpdateOpenCodeVersion).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,7 +2,7 @@
  * @fileoverview Telegram-related control endpoints.
  *
  * Exports:
- * - TelegramController (L20) - Endpoints used by the bot and miniapp.
+ * - TelegramController (L28) - Endpoints used by the bot and miniapp.
  */
 
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
@@ -11,6 +11,7 @@ import { Request } from "express";
 import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
+import { OpenCodeRuntimeService } from "../opencode/opencode-runtime.service";
 import { PromptService } from "../prompt/prompt.service";
 import { ProjectGitService } from "../projects/project-git.service";
 import { ProjectsService } from "../projects/projects.service";
@@ -20,6 +21,9 @@ import { TelegramDiffPreviewStore } from "./diff-preview/telegram-diff-preview.s
 import { TelegramCommandCatalogService } from "./telegram-command-catalog.service";
 import { TelegramPreferencesService } from "./preferences/telegram-preferences.service";
 import { TelegramStreamStore } from "./telegram-stream.store";
+
+const PERMISSION_RESPONSES = ["once", "always", "reject"] as const;
+type PermissionResponse = (typeof PERMISSION_RESPONSES)[number];
 
 @Controller("api/telegram")
 export class TelegramController {
@@ -33,8 +37,26 @@ export class TelegramController {
     private readonly gitSummary: ProjectGitService,
     private readonly opencode: OpenCodeClient,
     private readonly sessionRouting: OpenCodeSessionRoutingStore,
-    private readonly diffPreviews: TelegramDiffPreviewStore
+    private readonly diffPreviews: TelegramDiffPreviewStore,
+    private readonly runtime: OpenCodeRuntimeService
   ) {}
+
+  @UseGuards(AdminHeaderGuard)
+  @Post("opencode/version/check")
+  public async checkOpenCodeVersion(@Req() req: Request) {
+    /* Bot startup calls this route to refresh latest-version cache proactively. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    try {
+      return await this.runtime.checkVersionStatus();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
+  }
 
   @UseGuards(AdminHeaderGuard)
   @Get("startup-summary")
@@ -269,6 +291,63 @@ export class TelegramController {
 
     this.sessionRouting.consumeQuestion(requestID);
     return { ok: true, selected };
+  }
+
+  @UseGuards(AdminHeaderGuard)
+  @Post("permission/reply")
+  public async replyPermission(
+    @Body() body: { permissionToken?: string; response?: string },
+    @Req() req: Request
+  ) {
+    /* Reply to pending OpenCode permission request from Telegram inline keyboard callback. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    const permissionToken = String(body?.permissionToken ?? "").trim();
+    const response = String(body?.response ?? "").trim() as PermissionResponse;
+    if (!permissionToken || !PERMISSION_RESPONSES.includes(response)) {
+      throw new BadRequestException("permissionToken and valid response are required");
+    }
+
+    const routeID = this.sessionRouting.resolvePermissionToken(permissionToken);
+    if (!routeID) {
+      throw new BadRequestException("Permission token not found");
+    }
+
+    const route = this.sessionRouting.resolvePermission(routeID);
+    if (!route || route.adminId !== adminId) {
+      throw new BadRequestException("Permission request not found");
+    }
+
+    await this.opencode.replyPermission({
+      directory: route.directory,
+      sessionID: route.sessionID,
+      permissionID: route.permissionID,
+      response
+    });
+
+    this.sessionRouting.consumePermission(routeID);
+    return { ok: true, selected: response };
+  }
+
+  @UseGuards(AdminHeaderGuard)
+  @Post("repair")
+  public async repair(@Req() req: Request) {
+    /* Trigger manual stale-session recovery for currently selected admin project. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    try {
+      const result = await this.prompts.repair(adminId);
+      return { ok: true, ...result };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
   }
 
   @UseGuards(AdminHeaderGuard)

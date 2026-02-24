@@ -172,11 +172,15 @@ export const registerModeControl = ({ bot, config, isAdmin }: RegisterModeContro
     await showMain(ctx);
   });
 
-  bot.on("callback_query", async (ctx) => {
+  bot.on("callback_query", async (ctx, next) => {
     /* Handle only mode-prefixed callbacks and leave other callbacks untouched. */
     const data = "data" in ctx.callbackQuery ? String(ctx.callbackQuery.data) : "";
     const parsed = parseModeCallback(data);
     if (!parsed) {
+      /* Delegate non-mode callbacks (eg OpenCode question replies) to downstream handlers. */
+      if (typeof next === "function") {
+        await next();
+      }
       return;
     }
 

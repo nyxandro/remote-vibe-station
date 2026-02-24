@@ -9,6 +9,7 @@ import { ContainersTab } from "./ContainersTab";
 import { FilesTab } from "./FilesTab";
 import { GitHubTab, GitOverview } from "./GitHubTab";
 import { ProjectsTab } from "./ProjectsTab";
+import { ProvidersTab } from "./ProvidersTab";
 import { SettingsTab } from "./SettingsTab";
 import { TerminalTab } from "./TerminalTab";
 import { TabKey } from "./WorkspaceHeader";
@@ -19,6 +20,8 @@ import {
   GroqTranscriptionModel,
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
+  OpenCodeVersionStatus,
+  ProviderOverview,
   ProjectGitSummary,
   ProjectRecord,
   ProjectStatus
@@ -41,6 +44,7 @@ type Props = {
   terminalInput: string;
   themeMode: "light" | "dark";
   gitOverview: GitOverview | null | undefined;
+  providerOverview: ProviderOverview | null;
   settingsOverview: OpenCodeSettingsOverview | null;
   settingsActiveFile: {
     kind: OpenCodeSettingsKind;
@@ -68,7 +72,7 @@ type Props = {
   onLoadSettingsOverview: () => void;
   onOpenSettingsFile: (kind: OpenCodeSettingsKind, relativePath?: string) => void;
   onCreateSettingsFile: (kind: OpenCodeSettingsKind, name?: string) => void;
-  onSaveSettingsFile: (content: string) => void;
+  onSaveSettingsFile: (content: string) => Promise<void> | void;
   onDeleteActiveProject: () => void;
   restartOpenCodeState: {
     isRestarting: boolean;
@@ -85,6 +89,12 @@ type Props = {
   onVoiceControlModelChange?: (value: GroqTranscriptionModel | null) => void;
   onReloadVoiceControl?: () => void;
   onSaveVoiceControl?: () => void;
+  openCodeVersion: {
+    status: OpenCodeVersionStatus | null;
+    isLoading: boolean;
+    isUpdating: boolean;
+  };
+  onUpdateOpenCodeVersion: () => void;
   iconForEntry: (kind: "file" | "dir", name: string) => JSX.Element;
   onGitRefresh: () => void;
   onGitCheckout: (branch: string) => void;
@@ -93,6 +103,25 @@ type Props = {
   onGitPull: () => void;
   onGitPush: () => void;
   onGitMerge: (sourceBranch: string) => void;
+  providersState: {
+    isLoading: boolean;
+    isSubmitting: boolean;
+    oauthState: {
+      providerID: string;
+      methodIndex: number;
+      method: "auto" | "code";
+      url: string;
+      instructions: string;
+      codeDraft: string;
+    } | null;
+    onRefresh: () => void;
+    onStartConnect: (input: { providerID: string; methodIndex: number }) => void;
+    onSubmitApiKey: (input: { providerID: string; key: string }) => void;
+    onSubmitOAuthCode: () => void;
+    onCompleteOAuthAuto: () => void;
+    onDisconnect: (providerID: string) => void;
+    onChangeOAuthCodeDraft: (value: string) => void;
+  };
 };
 
 export const WorkspaceTabsContent = (props: Props) => {
@@ -171,6 +200,26 @@ export const WorkspaceTabsContent = (props: Props) => {
     );
   }
 
+  if (props.activeTab === "providers") {
+    return (
+      <ProvidersTab
+        selected={props.providerOverview?.selected ?? null}
+        providers={props.providerOverview?.providers ?? []}
+        authMethods={props.providerOverview?.authMethods ?? {}}
+        isLoading={props.providersState.isLoading}
+        isSubmitting={props.providersState.isSubmitting}
+        oauthState={props.providersState.oauthState}
+        onRefresh={props.providersState.onRefresh}
+        onStartConnect={props.providersState.onStartConnect}
+        onSubmitApiKey={props.providersState.onSubmitApiKey}
+        onSubmitOAuthCode={props.providersState.onSubmitOAuthCode}
+        onCompleteOAuthAuto={props.providersState.onCompleteOAuthAuto}
+        onDisconnect={props.providersState.onDisconnect}
+        onChangeOAuthCodeDraft={props.providersState.onChangeOAuthCodeDraft}
+      />
+    );
+  }
+
   return (
     <SettingsTab
       activeId={props.activeId}
@@ -192,6 +241,8 @@ export const WorkspaceTabsContent = (props: Props) => {
       onVoiceControlModelChange={props.onVoiceControlModelChange}
       onReloadVoiceControl={props.onReloadVoiceControl}
       onSaveVoiceControl={props.onSaveVoiceControl}
+      openCodeVersion={props.openCodeVersion}
+      onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
     />
   );
 };

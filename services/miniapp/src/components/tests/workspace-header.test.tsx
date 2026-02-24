@@ -15,8 +15,8 @@ describe("WorkspaceHeader", () => {
     cleanup();
   });
 
-  it("renders six icon-only tab buttons", () => {
-    /* Top menu should expose full icon navigation including GitHub tab. */
+  it("renders seven icon-only tab buttons", () => {
+    /* Top menu should expose full icon navigation including Providers tab. */
     render(
       <WorkspaceHeader
         activeProject={null}
@@ -32,6 +32,7 @@ describe("WorkspaceHeader", () => {
 
     expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Files" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Providers" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "GitHub" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Terminal" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Containers" })).toBeTruthy();

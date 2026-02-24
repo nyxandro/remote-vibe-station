@@ -2,13 +2,20 @@
  * @fileoverview OpenCode HTTP client for sessions and prompts.
  *
  * Exports:
- * - PromptResult (L14) - Prompt response shape.
- * - OpenCodeClient (L19) - Sends prompts and manages sessions.
+ * - PromptResult (L30) - Prompt response shape.
+ * - OpenCodeClient (L57) - Sends prompts and manages sessions.
  */
 
 import { Inject, Injectable } from "@nestjs/common";
-
 import { AppConfig, ConfigToken } from "../config/config.types";
+import {
+  createSessionViaApi,
+  isSessionBusyViaApi,
+  listSessionsViaApi,
+  OpenCodeSessionSummary,
+  selectSessionViaApi
+} from "./opencode-session-state";
+import { formatOpenCodeHttpError } from "./opencode-http-error";
 import {
   OpenCodeAgent,
   OpenCodeAssistantTokens,
@@ -19,6 +26,7 @@ import {
   OpenCodeProviderModel,
   OpenCodeProviderSummary
 } from "./opencode.types";
+import { isBusySessionStale } from "./opencode-session-repair";
 
 type PromptResult = {
   sessionId: string;
@@ -46,7 +54,6 @@ type OpenCodeProvidersResponse = {
   connected?: string[];
   default?: Record<string, string>;
 };
-
 @Injectable()
 export class OpenCodeClient {
   private readonly sessionIdsByDirectory = new Map<string, string>();
@@ -67,12 +74,7 @@ export class OpenCodeClient {
     /* Ensure a session exists for the target directory. */
     const sessionId = await this.ensureSession(input.directory);
     input.onSessionResolved?.(sessionId);
-
-    /*
-     * Use the synchronous message endpoint.
-     * This returns assistant parts in the HTTP response and works reliably
-     * without additional polling.
-     */
+    /* Use synchronous message endpoint to get parts in one HTTP response. */
     const model = input.model ?? (await this.getDefaultModel());
     const agent = input.agent ?? "build";
 
@@ -105,10 +107,7 @@ export class OpenCodeClient {
   }
 
   public async listCommands(input?: { directory?: string }): Promise<OpenCodeCommand[]> {
-    /*
-     * Return available slash commands.
-     * If directory is provided, we pass it to OpenCode to include project-local commands.
-     */
+    /* Include directory when set to expose project-local slash commands. */
     const query = input?.directory
       ? `?directory=${encodeURIComponent(input.directory)}`
       : "";
@@ -127,10 +126,7 @@ export class OpenCodeClient {
     input: { command: string; arguments: string[] },
     context: { directory: string; onSessionResolved?: (sessionID: string) => void }
   ): Promise<PromptResult> {
-    /*
-     * Execute slash command in the same per-directory session map used by prompts.
-     * This keeps command history and prompts in a single OpenCode conversation.
-     */
+    /* Use same directory session map as prompts to keep one conversation history. */
     const sessionId = await this.ensureSession(context.directory);
     context.onSessionResolved?.(sessionId);
     const response = await this.request<OpenCodeMessageResponse>(
@@ -300,11 +296,102 @@ export class OpenCodeClient {
     );
   }
 
+  public async replyPermission(input: {
+    directory: string;
+    sessionID: string;
+    permissionID: string;
+    response: "once" | "always" | "reject";
+  }): Promise<void> {
+    /* Submit answer for a pending permission prompt in a session. */
+    await this.request<unknown>(
+      `/session/${encodeURIComponent(input.sessionID)}/permissions/${encodeURIComponent(input.permissionID)}?directory=${encodeURIComponent(input.directory)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ response: input.response })
+      }
+    );
+  }
+
+  public async repairStuckSessions(input: {
+    directory: string;
+    busyTimeoutMs: number;
+  }): Promise<{ scanned: number; busy: number; aborted: string[] }> {
+    /* Read current session statuses from OpenCode for the selected project root. */
+    const statuses = await this.request<Record<string, { type?: string; updatedAt?: string | number }>>(
+      `/session/status?directory=${encodeURIComponent(input.directory)}`,
+      { method: "GET" }
+    );
+
+    /* Keep counters explicit for Telegram /repair summary output. */
+    const ids = Object.keys(statuses ?? {});
+    const busyIds = ids.filter((sessionID) => {
+      const status = statuses?.[sessionID];
+      if (status?.type !== "busy") {
+        return false;
+      }
+
+      return isBusySessionStale(status.updatedAt, input.busyTimeoutMs);
+    });
+
+    /* Abort only stale busy sessions so active runs are not interrupted. */
+    const aborted: string[] = [];
+    for (const sessionID of busyIds) {
+      await this.request<boolean>(
+        `/session/${encodeURIComponent(sessionID)}/abort?directory=${encodeURIComponent(input.directory)}`,
+        { method: "POST" }
+      );
+      aborted.push(sessionID);
+    }
+
+    /* Remove stale cached mapping when the repaired session matches current directory. */
+    const cached = this.sessionIdsByDirectory.get(input.directory);
+    if (cached && aborted.includes(cached)) {
+      this.sessionIdsByDirectory.delete(input.directory);
+    }
+
+    return {
+      scanned: ids.length,
+      busy: busyIds.length,
+      aborted
+    };
+  }
+
+  public async listSessions(input: { directory: string; limit: number }): Promise<OpenCodeSessionSummary[]> {
+    /* Delegate normalization logic to dedicated session-state helper module. */
+    return listSessionsViaApi({
+      request: (path, init) => this.request(path, init),
+      directory: input.directory,
+      limit: input.limit
+    });
+  }
+
+  public async createSession(input: { directory: string }): Promise<{ id: string }> {
+    /* Use helper to ensure creation and active-session cache update stay consistent. */
+    return createSessionViaApi({
+      request: (path, init) => this.request(path, init),
+      directory: input.directory,
+      sessionIdsByDirectory: this.sessionIdsByDirectory
+    });
+  }
+
+  public async selectSession(input: { directory: string; sessionID: string }): Promise<void> {
+    /* Use helper to validate session ownership and switch active context. */
+    await selectSessionViaApi({
+      request: (path, init) => this.request(path, init),
+      directory: input.directory,
+      sessionID: input.sessionID,
+      sessionIdsByDirectory: this.sessionIdsByDirectory
+    });
+  }
+
+  public getSelectedSessionID(directory: string): string | null {
+    /* Expose cached active session id for UI active marker in /sessions list. */
+    return this.sessionIdsByDirectory.get(directory) ?? null;
+  }
+
   public async getDefaultModel(): Promise<{ providerID: string; modelID: string }> {
-    /*
-     * Resolve OpenCode default model.
-     * We prefer an explicit env override, otherwise we ask OpenCode.
-     */
+    /* Prefer explicit env override, otherwise resolve default model from OpenCode. */
     if (this.config.opencodeDefaultProviderId && this.config.opencodeDefaultModelId) {
       return {
         providerID: this.config.opencodeDefaultProviderId,
@@ -344,31 +431,34 @@ export class OpenCodeClient {
   }
 
   private async ensureSession(directory: string): Promise<string> {
-    /*
-     * Reuse a per-directory session.
-     * This is critical: OpenCode uses session directory as the workspace root.
-     */
+    /* Reuse per-directory session because OpenCode binds workspace to directory. */
     const existing = this.sessionIdsByDirectory.get(directory);
     if (existing) {
-      return existing;
-    }
-
-    /* Create a new session scoped to the directory. */
-    const response = await this.request<{ id?: string }>(
-      `/session?directory=${encodeURIComponent(directory)}`,
-      {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({})
+      /* Rotate away from stuck busy session to avoid blocking all future prompts. */
+      const busy = await this.isSessionBusy(existing, directory);
+      if (!busy) {
+        return existing;
       }
-    );
 
-    if (!response.id) {
-      throw new Error("OpenCode session id missing in response");
+      await this.request<boolean>(
+        `/session/${encodeURIComponent(existing)}/abort?directory=${encodeURIComponent(directory)}`,
+        { method: "POST" }
+      );
+      this.sessionIdsByDirectory.delete(directory);
     }
 
-    this.sessionIdsByDirectory.set(directory, response.id);
-    return response.id;
+    /* Create and cache fresh session when no reusable id exists. */
+    const created = await this.createSession({ directory });
+    return created.id;
+  }
+
+  private async isSessionBusy(sessionID: string, directory: string): Promise<boolean> {
+    /* Delegate busy-state lookup to session helper to keep client lean. */
+    return isSessionBusyViaApi({
+      request: (path, init) => this.request(path, init),
+      sessionID,
+      directory
+    });
   }
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {
@@ -385,7 +475,15 @@ export class OpenCodeClient {
     const response = await fetch(url, { ...init, headers });
 
     if (!response.ok) {
-      throw new Error(`OpenCode request failed: ${response.status}`);
+      /* Preserve provider-level failure details (including retry hints) for user feedback. */
+      const bodyText = await response.text();
+      throw new Error(
+        formatOpenCodeHttpError({
+          status: response.status,
+          bodyText,
+          retryAfterHeader: response.headers.get("retry-after")
+        })
+      );
     }
 
     /* Some OpenCode endpoints may respond with 204 or empty body. */

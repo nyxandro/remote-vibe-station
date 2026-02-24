@@ -67,6 +67,7 @@ describe("buildTranscriptionSuccessHtml", () => {
     /* HTML is escaped and quoted so Telegram renders safe citation markup. */
     const html = buildTranscriptionSuccessHtml("<done> & ok");
 
+    expect(html).toContain("🎤 Голосовое сообщение распознано как:");
     expect(html).toContain("<blockquote>");
     expect(html).toContain("&lt;done&gt; &amp; ok");
   });

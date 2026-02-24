@@ -84,6 +84,8 @@ services:
       context: ./services/miniapp
       dockerfile: Dockerfile
     # Mini App для управления
+    ports:
+      - "${MINIAPP_HOST_PORT:-4173}:4173"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.miniapp.rule=Host(`${PUBLIC_DOMAIN}`) && PathPrefix(`/miniapp`)"
@@ -100,6 +102,8 @@ services:
       dockerfile: Dockerfile
     # OpenCode server mode
     command: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
+    ports:
+      - "${OPENCODE_HOST_PORT:-4096}:4096"
     environment:
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
