@@ -169,7 +169,7 @@ export const buildTranscriptionSuccessHtml = (transcribedText: string): string =
   /* Telegram quote rendering is done with HTML blockquote for reliable formatting. */
   const escapedText = escapeHtml(transcribedText);
   return [
-    "Голосовое сообщение распознано как:",
+    "🎤 Голосовое сообщение распознано как:",
     `<blockquote>${escapedText}</blockquote>`,
     "и отправлено в чат агента"
   ].join("\n");

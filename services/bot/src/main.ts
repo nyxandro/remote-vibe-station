@@ -2,8 +2,8 @@
  * @fileoverview Telegram bot bootstrap and handlers.
  *
  * Exports:
- * - DEFAULT_PORT (L26) - Default HTTP port for webhook.
- * - bootstrap (L28) - Starts bot, outbox worker, slash sync, and transport mode.
+ * - DEFAULT_PORT (L38) - Default HTTP port for webhook.
+ * - bootstrap (L41) - Starts bot, outbox worker, slash sync, and transport mode.
  */
 
 import express from "express";
@@ -13,6 +13,9 @@ import { buildBackendErrorMessage } from "./backend-error";
 import { startPeriodicTask } from "./command-sync";
 import { loadConfig } from "./config";
 import { modeReplyKeyboard, registerModeControl } from "./mode-control";
+import { registerOpenCodeCallbacks } from "./opencode-callbacks";
+import { registerRepairCommand } from "./repair-command";
+import { registerSessionCommands } from "./session-command";
 import { createWebToken } from "./web-token";
 import { OutboxWorker } from "./outbox-worker";
 import { buildStartSummaryMessage, fetchStartupSummary } from "./start-summary";
@@ -52,49 +55,14 @@ const bootstrap = async (): Promise<void> => {
   /* Register model/thinking/agent menu handlers once on bootstrap. */
   registerModeControl({ bot, config, isAdmin });
 
-  bot.on("callback_query", async (ctx) => {
-    /* Handle OpenCode question replies from inline keyboard buttons. */
-    const raw = "data" in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? "") : "";
-    if (!raw.startsWith("q|")) {
-      return;
-    }
+  /* Register OpenCode inline callbacks (question + permission). */
+  registerOpenCodeCallbacks({ bot, config, isAdmin });
 
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.answerCbQuery("Access denied", { show_alert: true });
-      return;
-    }
+  /* Register manual stuck-session recovery command. */
+  registerRepairCommand({ bot, config, isAdmin });
 
-    const parts = raw.split("|");
-    const questionToken = parts[1] ?? "";
-    const optionIndex = Number(parts[2] ?? "-1");
-    if (!questionToken || !Number.isInteger(optionIndex) || optionIndex < 0) {
-      await ctx.answerCbQuery("Некорректный ответ", { show_alert: true });
-      return;
-    }
-
-    const response = await fetch(`${config.backendUrl}/api/telegram/question/reply`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-id": String(ctx.from?.id)
-      },
-      body: JSON.stringify({ questionToken, optionIndex })
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      await ctx.answerCbQuery("Не удалось отправить ответ", { show_alert: true });
-      await ctx.reply(`Ошибка ответа на вопрос OpenCode: ${text}`);
-      return;
-    }
-
-    const payload = (await response.json()) as { selected?: string };
-    await ctx.answerCbQuery("Ответ отправлен");
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-    if (payload.selected) {
-      await ctx.reply(`Выбран ответ: ${payload.selected}`);
-    }
-  });
+  /* Register session lifecycle commands and picker callbacks. */
+  registerSessionCommands({ bot, config, isAdmin });
 
   const bindChat = async (adminId: number, chatId: number): Promise<void> => {
     /* Tell backend which chat should receive stream output for this admin. */
@@ -549,6 +517,27 @@ const bootstrap = async (): Promise<void> => {
   const primaryAdminId =
     Array.isArray(config.adminIds) && typeof config.adminIds[0] === "number" ? config.adminIds[0] : null;
 
+  const checkOpenCodeVersionOnBoot = async (adminId: number): Promise<void> => {
+    /* Refresh backend OpenCode version cache once on bot startup. */
+    try {
+      const response = await fetch(`${config.backendUrl}/api/telegram/opencode/version/check`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-id": String(adminId)
+        },
+        body: "{}"
+      });
+
+      if (!response.ok) {
+        throw new Error(`status=${response.status}`);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("OpenCode version check on boot failed", error);
+    }
+  };
+
   if (isLocal) {
     /* Best-effort initial slash command sync for Telegram menu suggestions. */
     if (primaryAdminId !== null) {
@@ -557,6 +546,10 @@ const bootstrap = async (): Promise<void> => {
       } catch {
         // ignore
       }
+    }
+
+    if (primaryAdminId !== null) {
+      await checkOpenCodeVersionOnBoot(primaryAdminId);
     }
 
     if (primaryAdminId !== null) {
@@ -575,6 +568,10 @@ const bootstrap = async (): Promise<void> => {
     });
 
     return;
+  }
+
+  if (primaryAdminId !== null) {
+    await checkOpenCodeVersionOnBoot(primaryAdminId);
   }
 
   const app = express();
