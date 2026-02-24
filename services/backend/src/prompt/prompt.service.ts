@@ -2,8 +2,8 @@
  * @fileoverview Service for handling prompt requests.
  *
  * Exports:
- * - PromptResult (L14) - Result shape for prompt processing.
- * - PromptService (L19) - Sends prompts to OpenCode and emits events.
+ * - PromptResult (L20) - Result shape for prompt processing.
+ * - PromptService (L61) - Sends prompts, commands, recovery, and session actions.
  */
 
 import { Injectable } from "@nestjs/common";
@@ -32,8 +32,30 @@ type PromptResult = {
   tokens: { input: number; output: number; reasoning: number };
 };
 
+type RepairResult = {
+  projectSlug: string;
+  directory: string;
+  busyTimeoutMs: number;
+  scanned: number;
+  busy: number;
+  aborted: string[];
+};
+
+type SessionListResult = {
+  projectSlug: string;
+  directory: string;
+  sessions: Array<{
+    id: string;
+    title: string | null;
+    status: string;
+    updatedAt: string | null;
+    active: boolean;
+  }>;
+};
+
 const ACTIVE_PROJECT_REQUIRED_MESSAGE =
   "Проект не выбран. Выберите его командой /project <slug> (например: /project my-project) или в Mini App.";
+const REPAIR_BUSY_TIMEOUT_MS = 45_000;
 
 @Injectable()
 export class PromptService {
@@ -73,6 +95,7 @@ export class PromptService {
 
     /* Ensure runtime SSE subscription for the active project directory. */
     this.opencodeEvents.ensureDirectory(active.rootPath);
+    await this.opencodeEvents.waitUntilConnected(active.rootPath);
 
     /* Send prompt to OpenCode and gather response. */
     const result = await this.opencode.sendPrompt(text, {
@@ -82,6 +105,7 @@ export class PromptService {
       onSessionResolved: (sessionID) => {
         if (adminId) {
           this.sessionRouting.bind(sessionID, { adminId, directory: active.rootPath });
+          this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID });
         }
       }
     });
@@ -126,12 +150,14 @@ export class PromptService {
 
     /* Ensure runtime SSE subscription for command execution directory. */
     this.opencodeEvents.ensureDirectory(active.rootPath);
+    await this.opencodeEvents.waitUntilConnected(active.rootPath);
 
     const result = await this.opencode.executeCommand(input, {
       directory: active.rootPath,
       onSessionResolved: (sessionID) => {
         if (adminId) {
           this.sessionRouting.bind(sessionID, { adminId, directory: active.rootPath });
+          this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID });
         }
       }
     });
@@ -140,6 +166,108 @@ export class PromptService {
       adminId,
       thinking: null
     });
+  }
+
+  public async repair(adminId?: number): Promise<RepairResult> {
+    /* /repair is project-scoped to prevent accidental global session aborts. */
+    const active = await this.projects.getActiveProject(adminId);
+    if (!active) {
+      throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
+    }
+
+    /* Ensure runtime connection is alive before querying/aborting sessions. */
+    this.opencodeEvents.ensureDirectory(active.rootPath);
+    await this.opencodeEvents.waitUntilConnected(active.rootPath);
+
+    /* Abort stale busy sessions and return machine-readable summary to Telegram. */
+    const recovery = await this.opencode.repairStuckSessions({
+      directory: active.rootPath,
+      busyTimeoutMs: REPAIR_BUSY_TIMEOUT_MS
+    });
+
+    return {
+      projectSlug: active.slug,
+      directory: active.rootPath,
+      busyTimeoutMs: REPAIR_BUSY_TIMEOUT_MS,
+      scanned: recovery.scanned,
+      busy: recovery.busy,
+      aborted: recovery.aborted
+    };
+  }
+
+  public async startNewSession(adminId?: number): Promise<{ projectSlug: string; sessionID: string }> {
+    /* /new explicitly rotates chat context to a fresh OpenCode session. */
+    const active = await this.projects.getActiveProject(adminId);
+    if (!active) {
+      throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
+    }
+
+    /* Ensure project event stream is ready before binding route to new session. */
+    this.opencodeEvents.ensureDirectory(active.rootPath);
+    await this.opencodeEvents.waitUntilConnected(active.rootPath);
+
+    const created = await this.opencode.createSession({ directory: active.rootPath });
+    if (adminId) {
+      this.sessionRouting.bind(created.id, { adminId, directory: active.rootPath });
+      this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID: created.id });
+    }
+
+    return {
+      projectSlug: active.slug,
+      sessionID: created.id
+    };
+  }
+
+  public async listSessions(adminId?: number): Promise<SessionListResult> {
+    /* Session picker is always scoped to currently selected project. */
+    const active = await this.projects.getActiveProject(adminId);
+    if (!active) {
+      throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
+    }
+
+    this.opencodeEvents.ensureDirectory(active.rootPath);
+    await this.opencodeEvents.waitUntilConnected(active.rootPath);
+
+    const sessions = await this.opencode.listSessions({ directory: active.rootPath, limit: 12 });
+    const selectedSessionID = this.opencode.getSelectedSessionID(active.rootPath);
+
+    return {
+      projectSlug: active.slug,
+      directory: active.rootPath,
+      sessions: sessions.map((session) => ({
+        ...session,
+        active: selectedSessionID === session.id
+      }))
+    };
+  }
+
+  public async selectSession(input: {
+    adminId?: number;
+    sessionID: string;
+  }): Promise<{ projectSlug: string; sessionID: string }> {
+    /* Session switch preserves project context while changing conversation thread. */
+    const active = await this.projects.getActiveProject(input.adminId);
+    if (!active) {
+      throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
+    }
+
+    this.opencodeEvents.ensureDirectory(active.rootPath);
+    await this.opencodeEvents.waitUntilConnected(active.rootPath);
+
+    await this.opencode.selectSession({
+      directory: active.rootPath,
+      sessionID: input.sessionID
+    });
+
+    if (input.adminId) {
+      this.sessionRouting.bind(input.sessionID, { adminId: input.adminId, directory: active.rootPath });
+      this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID: input.sessionID });
+    }
+
+    return {
+      projectSlug: active.slug,
+      sessionID: input.sessionID
+    };
   }
 
   private async publishMessageResult(

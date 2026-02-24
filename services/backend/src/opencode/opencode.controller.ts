@@ -43,6 +43,36 @@ export class OpenCodeController {
     }
   }
 
+  @Get("version/status")
+  public async getVersionStatus() {
+    /* Return current and last-checked latest OpenCode versions for Settings UI. */
+    try {
+      return await this.runtime.getVersionStatus();
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+    }
+  }
+
+  @Post("version/check")
+  public async checkVersionStatus() {
+    /* Force latest-version lookup from npm and update backend cache. */
+    try {
+      return await this.runtime.checkVersionStatus();
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+    }
+  }
+
+  @Post("version/update")
+  public async updateVersion() {
+    /* Install latest OpenCode version into running container and restart runtime. */
+    try {
+      return await this.runtime.updateToLatestVersion();
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+    }
+  }
+
   @Get("settings/overview")
   public getSettingsOverview(@Query("projectId") projectId?: string) {
     /* Read all OpenCode settings sections for accordion rendering. */

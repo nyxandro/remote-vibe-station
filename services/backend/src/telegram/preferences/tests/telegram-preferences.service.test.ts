@@ -68,4 +68,53 @@ describe("TelegramPreferencesService voice control", () => {
 
     expect(store.set).not.toHaveBeenCalled();
   });
+
+  it("keeps voice control fields when model settings are updated", async () => {
+    /* Settings update must not wipe independent voice-control credentials. */
+    const store = {
+      get: jest.fn().mockReturnValue({
+        model: { providerID: "opencode", modelID: "big-pickle" },
+        thinking: null,
+        agent: "build",
+        voiceControl: {
+          groqApiKey: "gsk_live_123",
+          model: "whisper-large-v3"
+        }
+      }),
+      set: jest.fn()
+    };
+
+    const opencode = {
+      listProviders: jest.fn().mockResolvedValue([{ id: "opencode", name: "OpenCode" }]),
+      listModels: jest.fn().mockResolvedValue([
+        {
+          id: "big-pickle",
+          name: "Big Pickle",
+          variants: ["low", "medium", "high"]
+        }
+      ]),
+      listAgents: jest.fn().mockResolvedValue([{ name: "build", mode: "primary" }])
+    };
+    const opencodeSettings = {
+      listCustomAgentNames: jest.fn().mockReturnValue([])
+    };
+
+    const service = new TelegramPreferencesService(store as never, opencode as never, opencodeSettings as never);
+    await service.updateSettings(42, {
+      providerID: "opencode",
+      modelID: "big-pickle",
+      thinking: "low",
+      agent: "build"
+    });
+
+    expect(store.set).toHaveBeenCalledWith(42, {
+      model: { providerID: "opencode", modelID: "big-pickle" },
+      thinking: "low",
+      agent: "build",
+      voiceControl: {
+        groqApiKey: "gsk_live_123",
+        model: "whisper-large-v3"
+      }
+    });
+  });
 });

@@ -24,6 +24,7 @@ const BASH_PROGRESS_MAX_CHARS = 2600;
 const BASH_PROGRESS_MIN_INTERVAL_MS = 1000;
 const BASH_NOISE_PROBE_COMMAND = /^(node|npm|pnpm|yarn|bun|python|python3)\s+(-v|--version)$/i;
 const QUESTION_CALLBACK_PREFIX = "q";
+const PERMISSION_CALLBACK_PREFIX = "perm";
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
 const TELEGRAM_DEEP_LINK_BASE = "https://t.me";
 const DIFF_START_PARAM_PREFIX = "diff_";
@@ -77,6 +78,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     const payload = String((event.data as any)?.payload ?? "");
+    const eventName = String((event.data as any)?.eventName ?? "").trim();
     if (!payload) {
       return;
     }
@@ -88,24 +90,35 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    const eventType = String(parsed.type ?? "");
+    const eventType = String(parsed.type ?? eventName ?? "");
+    // eslint-disable-next-line no-console
+    console.log(`[telegram-bridge] eventType=${eventType || "<empty>"}`);
+    const properties =
+      parsed.properties && typeof parsed.properties === "object"
+        ? (parsed.properties as Record<string, unknown>)
+        : (parsed as unknown as Record<string, unknown>);
     if (eventType === "message.part.updated") {
-      this.handlePartUpdated(parsed.properties ?? {});
+      this.handlePartUpdated(properties);
       return;
     }
 
     if (eventType === "session.status") {
-      this.handleSessionStatus(parsed.properties ?? {});
+      this.handleSessionStatus(properties);
       return;
     }
 
     if (eventType === "session.idle") {
-      this.handleSessionIdle(parsed.properties ?? {});
+      this.handleSessionIdle(properties);
       return;
     }
 
     if (eventType === "question.asked") {
-      this.handleQuestionAsked(parsed.properties ?? {});
+      this.handleQuestionAsked(properties);
+      return;
+    }
+
+    if (eventType === "permission.updated" || eventType === "permission.asked") {
+      this.handlePermissionUpdated(properties);
     }
   }
 
@@ -483,5 +496,109 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       text,
       replyMarkup: { inlineKeyboard: keyboard }
     });
+  }
+
+  private handlePermissionUpdated(properties: Record<string, unknown>): void {
+    /* Convert pending permission prompt into Telegram inline approval buttons. */
+    const normalized = this.normalizePermissionPayload(properties);
+    if (!normalized || normalized.status !== "pending") {
+      return;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[telegram-permission] received permission event session=${normalized.sessionID} permission=${normalized.permissionID}`
+    );
+
+    const route = this.routes.resolve(normalized.sessionID);
+    if (!route) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[telegram-permission] route missing for session=${normalized.sessionID}; permission message not delivered`
+      );
+      return;
+    }
+
+    /* Permission pause means no active typing indicator until user choice. */
+    this.setThinking(route.adminId, normalized.sessionID, false);
+
+    const routeID = `${normalized.sessionID}:${normalized.permissionID}`;
+    const token = this.routes.bindPermission({
+      routeID,
+      sessionID: normalized.sessionID,
+      adminId: route.adminId,
+      directory: route.directory,
+      permissionID: normalized.permissionID
+    });
+
+    const keyboard = [
+      [
+        { text: "Разрешить один раз", callback_data: `${PERMISSION_CALLBACK_PREFIX}|${token}|once` },
+        { text: "Всегда разрешать", callback_data: `${PERMISSION_CALLBACK_PREFIX}|${token}|always` }
+      ],
+      [{ text: "Отклонить", callback_data: `${PERMISSION_CALLBACK_PREFIX}|${token}|reject` }]
+    ];
+
+    const title = normalized.title ?? "OpenCode запрашивает подтверждение на выполнение действия.";
+    const detailParts = [normalized.tool ? `tool=${normalized.tool}` : null, normalized.target ? `target=${normalized.target}` : null].filter(
+      (item): item is string => Boolean(item)
+    );
+    const details = detailParts.length > 0 ? `\n${detailParts.join(" | ")}` : "";
+    const text = `OpenCode запрашивает права:\n${title}${details}`;
+    this.outbox.enqueueProgressReplace({
+      adminId: route.adminId,
+      progressKey: `permission:${route.adminId}:${normalized.permissionID}`,
+      text,
+      replyMarkup: { inlineKeyboard: keyboard }
+    });
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[telegram-permission] enqueued admin=${route.adminId} session=${normalized.sessionID} permission=${normalized.permissionID}`
+    );
+  }
+
+  private normalizePermissionPayload(properties: Record<string, unknown>): {
+    permissionID: string;
+    sessionID: string;
+    status: "pending" | "resolved";
+    title: string | null;
+    tool: string | null;
+    target: string | null;
+  } | null {
+    /* Handle both flat and nested permission payload shapes from OpenCode SSE. */
+    const nestedPermission = properties.permission;
+    const permission =
+      nestedPermission && typeof nestedPermission === "object"
+        ? (nestedPermission as Record<string, unknown>)
+        : properties;
+    const permissionID = String(permission.id ?? properties.permissionID ?? "").trim();
+    const sessionID = String(permission.sessionID ?? properties.sessionID ?? "").trim();
+    if (!permissionID || !sessionID) {
+      return null;
+    }
+
+    const statusRaw = String(permission.status ?? properties.status ?? "pending").trim().toLowerCase();
+    const status: "pending" | "resolved" =
+      statusRaw === "pending" || statusRaw === "ask" || statusRaw === "requested" ? "pending" : "resolved";
+
+    const metadata = (permission.metadata as Record<string, unknown> | undefined) ?? {};
+    const titleRaw = permission.title ?? permission.message ?? metadata.title;
+    const title = typeof titleRaw === "string" && titleRaw.trim().length > 0 ? titleRaw.trim() : null;
+
+    const toolRaw = metadata.tool ?? permission.tool;
+    const tool = typeof toolRaw === "string" && toolRaw.trim().length > 0 ? toolRaw.trim() : null;
+
+    const targetRaw = metadata.path ?? metadata.filepath ?? metadata.target ?? permission.path;
+    const target = typeof targetRaw === "string" && targetRaw.trim().length > 0 ? targetRaw.trim() : null;
+
+    return {
+      permissionID,
+      sessionID,
+      status,
+      title,
+      tool,
+      target
+    };
   }
 }

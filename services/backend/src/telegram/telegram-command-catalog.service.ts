@@ -31,6 +31,9 @@ const BOT_LOCAL_COMMANDS: TelegramMenuCommand[] = [
   { command: "mode", description: "Настроить model/agent" },
   { command: "chat", description: "Включить стрим ответов" },
   { command: "end", description: "Выключить стрим ответов" },
+  { command: "new", description: "Начать новую сессию" },
+  { command: "sessions", description: "Выбрать сессию" },
+  { command: "repair", description: "Починить зависшие сессии" },
   { command: "projects", description: "Список проектов" },
   { command: "project", description: "Выбрать активный проект" }
 ];

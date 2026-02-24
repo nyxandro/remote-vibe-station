@@ -147,6 +147,7 @@ export class TelegramPreferencesService {
       typeof input.agent !== "undefined" ? this.validateAgent(input.agent, agents) : this.resolveAgent(prev.agent, agents);
 
     this.store.set(adminId, {
+      ...prev,
       model: nextModel,
       thinking: nextThinking,
       agent: nextAgent

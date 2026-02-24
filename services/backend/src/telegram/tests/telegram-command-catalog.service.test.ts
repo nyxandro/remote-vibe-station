@@ -23,7 +23,18 @@ describe("TelegramCommandCatalogService", () => {
 
     const names = catalog.commands.map((item) => item.command);
     expect(names).toEqual(
-      expect.arrayContaining(["start", "open", "mode", "chat", "end", "projects", "project"])
+      expect.arrayContaining([
+        "start",
+        "open",
+        "mode",
+        "chat",
+        "end",
+        "new",
+        "sessions",
+        "repair",
+        "projects",
+        "project"
+      ])
     );
     expect(names).toEqual(expect.arrayContaining(["help", "deploy_changes"]));
     expect(names).not.toContain("bad command");

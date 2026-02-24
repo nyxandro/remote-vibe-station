@@ -16,6 +16,7 @@ import { PromptService } from "../../prompt/prompt.service";
 import { ProjectGitService } from "../../projects/project-git.service";
 import { ProjectsService } from "../../projects/projects.service";
 import { AdminHeaderGuard } from "../../security/admin-header.guard";
+import { OpenCodeRuntimeService } from "../../opencode/opencode-runtime.service";
 import { TelegramDiffPreviewStore } from "../diff-preview/telegram-diff-preview.store";
 import { TelegramController } from "../telegram.controller";
 import { TelegramCommandCatalogService } from "../telegram-command-catalog.service";
@@ -76,6 +77,7 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
         { provide: ProjectsService, useValue: projects },
         { provide: ProjectGitService, useValue: gitSummary },
         { provide: OpenCodeClient, useValue: {} },
+        { provide: OpenCodeRuntimeService, useValue: { checkVersionStatus: jest.fn() } },
         { provide: OpenCodeSessionRoutingStore, useValue: {} },
         { provide: TelegramDiffPreviewStore, useValue: {} },
         { provide: TelegramOutboxStore, useValue: {} }
