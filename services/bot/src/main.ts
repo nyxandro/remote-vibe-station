@@ -7,13 +7,18 @@
  */
 
 import express from "express";
+import { isIP } from "node:net";
 import { Markup, Telegraf } from "telegraf";
 
 import { buildBackendErrorMessage } from "./backend-error";
+import { fetchActiveSessionTitle, formatActiveSessionLine } from "./active-session";
 import { startPeriodicTask } from "./command-sync";
 import { loadConfig } from "./config";
 import { modeReplyKeyboard, registerModeControl } from "./mode-control";
 import { registerOpenCodeCallbacks } from "./opencode-callbacks";
+import { registerOpenCodeAccessCommand } from "./opencode-access-command";
+import { registerOpenCodeWebAuthHttp } from "./opencode-web-auth-http";
+import { OpenCodeWebAuthService } from "./opencode-web-auth";
 import { registerRepairCommand } from "./repair-command";
 import { registerSessionCommands } from "./session-command";
 import { createWebToken } from "./web-token";
@@ -37,11 +42,48 @@ import {
 
 const DEFAULT_PORT = 3001;
 const COMMAND_SYNC_INTERVAL_MS = 60_000;
+const OPENCODE_WEB_AUTH_STORAGE_FILE = "/app/data/opencode-web-auth.json";
+const OPENCODE_WEB_AUTH_LINK_TTL_MS = 5 * 60 * 1000;
+const OPENCODE_WEB_AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const OPENCODE_WEB_AUTH_COOKIE_NAME = "opencode_sid";
+
+const resolvePort = (value: string | undefined): number => {
+  /* Parse user-provided PORT and fall back to default on invalid values. */
+  if (!value) {
+    return DEFAULT_PORT;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    // eslint-disable-next-line no-console
+    console.warn(`Invalid PORT value '${value}', fallback to ${DEFAULT_PORT}`);
+    return DEFAULT_PORT;
+  }
+
+  return parsed;
+};
+
+const shouldSetCookieDomain = (hostname: string): boolean => {
+  /* Localhost/IP deployments require host-only cookies without Domain attribute. */
+  const normalized = hostname.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  if (normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1") {
+    return false;
+  }
+  return isIP(normalized) === 0;
+};
 
 const bootstrap = async (): Promise<void> => {
   /* Load configuration and initialize bot. */
   const config = loadConfig();
   const bot = new Telegraf(config.telegramBotToken);
+  const webAuth = new OpenCodeWebAuthService({
+    storageFilePath: OPENCODE_WEB_AUTH_STORAGE_FILE,
+    linkTtlMs: OPENCODE_WEB_AUTH_LINK_TTL_MS,
+    sessionTtlMs: OPENCODE_WEB_AUTH_SESSION_TTL_MS
+  });
   const indicator = new ThinkingIndicator(bot);
   const outbox = new OutboxWorker(config, bot, indicator);
   outbox.start();
@@ -63,6 +105,29 @@ const bootstrap = async (): Promise<void> => {
 
   /* Register session lifecycle commands and picker callbacks. */
   registerSessionCommands({ bot, config, isAdmin });
+
+  /* Register Telegram-issued one-time links for OpenCode web UI. */
+  registerOpenCodeAccessCommand({ bot, config, webAuth, isAdmin });
+
+  /* Derive cookie domain from validated OpenCode public URL. */
+  let opencodeCookieDomain: string | undefined;
+  try {
+    const hostname = new URL(config.opencodePublicBaseUrl).hostname;
+    opencodeCookieDomain = shouldSetCookieDomain(hostname) ? hostname : undefined;
+  } catch {
+    throw new Error(`Invalid OPENCODE_PUBLIC_BASE_URL: ${config.opencodePublicBaseUrl}`);
+  }
+
+  /* Always expose auth endpoints for Traefik forward-auth and link exchange. */
+  const app = express();
+  app.set("trust proxy", 1);
+  registerOpenCodeWebAuthHttp({
+    app,
+    service: webAuth,
+    cookieName: OPENCODE_WEB_AUTH_COOKIE_NAME,
+    cookieMaxAgeMs: OPENCODE_WEB_AUTH_SESSION_TTL_MS,
+    cookieDomain: opencodeCookieDomain
+  });
 
   const bindChat = async (adminId: number, chatId: number): Promise<void> => {
     /* Tell backend which chat should receive stream output for this admin. */
@@ -179,6 +244,18 @@ const bootstrap = async (): Promise<void> => {
 
     try {
       const summary = await fetchStartupSummary(config.backendUrl, ctx.from!.id);
+      /* Session line for /start should reflect currently active OpenCode thread title. */
+      if (summary.project) {
+        try {
+          const activeSessionTitle = await fetchActiveSessionTitle(config.backendUrl, ctx.from!.id);
+          summary.session = activeSessionTitle ? { title: activeSessionTitle } : null;
+        } catch {
+          summary.session = null;
+        }
+      } else {
+        summary.session = null;
+      }
+
       await ctx.reply(buildStartSummaryMessage(summary), modeReplyKeyboard());
     } catch {
       await ctx.reply(
@@ -293,7 +370,17 @@ const bootstrap = async (): Promise<void> => {
     }
 
     const project = (await response.json()) as { slug: string; rootPath: string };
-    await ctx.reply(`📁 Выбран проект: ${project.slug}\n${project.rootPath}`);
+
+    /* Show active session context immediately after project switch. */
+    let sessionLine = formatActiveSessionLine(null);
+    try {
+      const activeSessionTitle = await fetchActiveSessionTitle(config.backendUrl, ctx.from!.id);
+      sessionLine = formatActiveSessionLine(activeSessionTitle);
+    } catch {
+      sessionLine = formatActiveSessionLine(null);
+    }
+
+    await ctx.reply(`📁 Выбран проект: ${project.slug}\n${project.rootPath}\n${sessionLine}`);
 
     /* Re-sync command menu to include project-level custom commands. */
     try {
@@ -538,6 +625,46 @@ const bootstrap = async (): Promise<void> => {
     }
   };
 
+  /* Keep auth endpoints reachable in both polling and webhook modes. */
+  const port = resolvePort(process.env.PORT);
+  const server = app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Bot HTTP server is listening on port ${port}`);
+  });
+
+  server.on("error", (error) => {
+    // eslint-disable-next-line no-console
+    console.error("Bot HTTP server failed to start", error);
+    process.exit(1);
+  });
+
+  const closeHttpServer = async (): Promise<void> => {
+    /* Ensure HTTP listener is closed during process shutdown. */
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+  };
+
+  const registerShutdownHandlers = (): void => {
+    /* Keep shutdown flow identical for polling and webhook modes. */
+    process.once("SIGINT", () => {
+      void (async () => {
+        stopPeriodicCommandSync();
+        bot.stop("SIGINT");
+        await closeHttpServer();
+      })();
+    });
+    process.once("SIGTERM", () => {
+      void (async () => {
+        stopPeriodicCommandSync();
+        bot.stop("SIGTERM");
+        await closeHttpServer();
+      })();
+    });
+  };
+
   if (isLocal) {
     /* Best-effort initial slash command sync for Telegram menu suggestions. */
     if (primaryAdminId !== null) {
@@ -557,15 +684,7 @@ const bootstrap = async (): Promise<void> => {
     }
 
     await bot.launch();
-
-    process.once("SIGINT", () => {
-      stopPeriodicCommandSync();
-      bot.stop("SIGINT");
-    });
-    process.once("SIGTERM", () => {
-      stopPeriodicCommandSync();
-      bot.stop("SIGTERM");
-    });
+    registerShutdownHandlers();
 
     return;
   }
@@ -574,7 +693,6 @@ const bootstrap = async (): Promise<void> => {
     await checkOpenCodeVersionOnBoot(primaryAdminId);
   }
 
-  const app = express();
   app.use(bot.webhookCallback("/bot/webhook"));
 
   await bot.telegram.setWebhook(`${config.publicBaseUrl}/bot/webhook`);
@@ -592,17 +710,7 @@ const bootstrap = async (): Promise<void> => {
     startPeriodicCommandSync(primaryAdminId);
   }
 
-  const port = process.env.PORT ? Number(process.env.PORT) : DEFAULT_PORT;
-  app.listen(port);
-
-  process.once("SIGINT", () => {
-    stopPeriodicCommandSync();
-    bot.stop("SIGINT");
-  });
-  process.once("SIGTERM", () => {
-    stopPeriodicCommandSync();
-    bot.stop("SIGTERM");
-  });
+  registerShutdownHandlers();
 };
 
 void bootstrap();

@@ -23,6 +23,9 @@ export type StartupSummary = {
     thinking: string | null;
     agent: string | null;
   };
+  session?: {
+    title: string;
+  } | null;
   commands: Array<{
     command: string;
     description: string;
@@ -52,11 +55,16 @@ export const buildStartSummaryMessage = (summary: StartupSummary): string => {
   const projectLine = summary.project
     ? `Текущий проект: ${summary.project.slug}`
     : "Текущий проект: не выбран";
-  const gitLine = summary.project
-    ? summary.git
-      ? `Незакоммиченные изменения: ${summary.git.filesChanged} файлов (+${summary.git.additions}/-${summary.git.deletions})`
-      : "Незакоммиченные изменения: нет"
-    : "Незакоммиченные изменения: нет данных (проект не выбран)";
+  const sessionLine = `Текущая сессия: ${summary.session?.title ?? "не выбрана"}`;
+  const git = summary.git;
+  let gitLine: string | null = null;
+  if (
+    summary.project &&
+    git &&
+    (git.filesChanged > 0 || git.additions > 0 || git.deletions > 0)
+  ) {
+    gitLine = `Незакоммиченные изменения: ${git.filesChanged} файлов (+${git.additions}/-${git.deletions})`;
+  }
 
   /* Mode section reflects exact model/agent/thinking that will be used on next prompt. */
   const agent = summary.mode.agent ?? "build (default)";
@@ -71,8 +79,14 @@ export const buildStartSummaryMessage = (summary: StartupSummary): string => {
     visibleCommands.length > 0
       ? visibleCommands.map((item) => `- /${item.command} - ${item.description}`)
       : ["Доступные команды: нет"];
+  const commandSection =
+    visibleCommands.length > 0 ? ["Доступные команды:", ...commandLines] : ["Доступные команды: нет"];
 
-  const lines = ["Привет!", projectLine, gitLine, modeLine, "", "Доступные команды:", ...commandLines];
+  const lines = ["Привет!", projectLine, sessionLine, modeLine, "", ...commandSection];
+  if (gitLine) {
+    /* Show git status only when there are real uncommitted changes. */
+    lines.splice(2, 0, gitLine);
+  }
   if (summary.commands.length > COMMANDS_PREVIEW_LIMIT) {
     lines.push(`... и еще ${summary.commands.length - COMMANDS_PREVIEW_LIMIT}`);
   }

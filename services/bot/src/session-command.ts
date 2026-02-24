@@ -7,6 +7,7 @@
 
 import { Markup, Telegraf } from "telegraf";
 
+import { fetchActiveSessionTitle, formatActiveSessionLine } from "./active-session";
 import { buildBackendErrorMessage } from "./backend-error";
 import { BotConfig } from "./config";
 
@@ -23,6 +24,7 @@ type SessionListPayload = {
 };
 
 const SESSION_CALLBACK_PREFIX = "sess|";
+const SESSION_SWITCH_TIMEOUT_MS = 12_000;
 
 const formatSessionButton = (item: SessionListPayload["sessions"][number]): string => {
   /* Render compact, readable row for Telegram inline keyboard button text. */
@@ -127,42 +129,58 @@ export const registerSessionCommands = (input: {
 
   /* Handle inline button callback to switch active OpenCode session. */
   input.bot.on("callback_query", async (ctx) => {
-    const raw = "data" in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? "") : "";
-    if (!raw.startsWith(SESSION_CALLBACK_PREFIX)) {
-      return;
+    try {
+      const raw = "data" in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? "") : "";
+      if (!raw.startsWith(SESSION_CALLBACK_PREFIX)) {
+        return;
+      }
+
+      if (!input.isAdmin(ctx.from?.id)) {
+        await ctx.answerCbQuery("Access denied", { show_alert: true });
+        return;
+      }
+
+      const sessionToken = raw.slice(SESSION_CALLBACK_PREFIX.length).trim();
+      if (!sessionToken) {
+        await ctx.answerCbQuery("Некорректный выбор", { show_alert: true });
+        return;
+      }
+
+      /* Acknowledge click immediately so Telegram UI does not keep spinning. */
+      await ctx.answerCbQuery("Переключаю сессию...");
+
+      const response = await fetch(`${input.config.backendUrl}/api/telegram/session/select`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-id": String(ctx.from?.id)
+        },
+        body: JSON.stringify({ sessionToken }),
+        signal: AbortSignal.timeout(SESSION_SWITCH_TIMEOUT_MS)
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        await ctx.reply(buildBackendErrorMessage(response.status, body));
+        return;
+      }
+
+      const payload = (await response.json()) as { ok?: boolean; projectSlug?: string };
+      const projectSlug = typeof payload.projectSlug === "string" ? payload.projectSlug : "unknown";
+      let sessionLine = formatActiveSessionLine(null);
+      try {
+        const activeSessionTitle = await fetchActiveSessionTitle(input.config.backendUrl, Number(ctx.from?.id));
+        sessionLine = formatActiveSessionLine(activeSessionTitle);
+      } catch {
+        sessionLine = formatActiveSessionLine(null);
+      }
+
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.reply(`✅ Активная сессия переключена (проект: ${projectSlug}).\n${sessionLine}`);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Session select callback failed", error);
+      await ctx.reply("Не удалось переключить сессию: таймаут или ошибка сети. Попробуйте еще раз.");
     }
-
-    if (!input.isAdmin(ctx.from?.id)) {
-      await ctx.answerCbQuery("Access denied", { show_alert: true });
-      return;
-    }
-
-    const sessionToken = raw.slice(SESSION_CALLBACK_PREFIX.length).trim();
-    if (!sessionToken) {
-      await ctx.answerCbQuery("Некорректный выбор", { show_alert: true });
-      return;
-    }
-
-    const response = await fetch(`${input.config.backendUrl}/api/telegram/session/select`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-id": String(ctx.from?.id)
-      },
-      body: JSON.stringify({ sessionToken })
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      await ctx.answerCbQuery("Не удалось выбрать сессию", { show_alert: true });
-      await ctx.reply(buildBackendErrorMessage(response.status, body));
-      return;
-    }
-
-    const payload = (await response.json()) as { ok?: boolean; projectSlug?: string };
-    const projectSlug = typeof payload.projectSlug === "string" ? payload.projectSlug : "unknown";
-    await ctx.answerCbQuery("Сессия выбрана");
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-    await ctx.reply(`✅ Активная сессия переключена (проект: ${projectSlug}).`);
   });
 };
