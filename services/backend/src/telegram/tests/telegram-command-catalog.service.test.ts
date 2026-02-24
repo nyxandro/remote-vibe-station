@@ -26,6 +26,7 @@ describe("TelegramCommandCatalogService", () => {
       expect.arrayContaining([
         "start",
         "open",
+        "access",
         "mode",
         "chat",
         "end",

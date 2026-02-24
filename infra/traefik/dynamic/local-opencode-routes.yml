@@ -1,0 +1,29 @@
+http:
+  routers:
+    local-opencode-auth:
+      rule: "Host(`localhost`) && PathPrefix(`/opencode-auth`)"
+      entryPoints:
+        - websecure
+      service: local-bot-auth-service
+      tls: {}
+
+    local-opencode-ui:
+      rule: "Host(`localhost`)"
+      entryPoints:
+        - websecure
+      middlewares:
+        - opencode-forward-auth
+        - noindex-headers
+      service: local-opencode-service
+      tls: {}
+
+  services:
+    local-bot-auth-service:
+      loadBalancer:
+        servers:
+          - url: "http://bot:3001"
+
+    local-opencode-service:
+      loadBalancer:
+        servers:
+          - url: "http://opencode:4096"

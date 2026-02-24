@@ -15,16 +15,17 @@ describe("registerOpenCodeCallbacks", () => {
     telegramBotToken: "token",
     adminIds: [1],
     backendUrl: "http://backend:3000",
-    publicBaseUrl: "http://localhost:4173"
+    publicBaseUrl: "http://localhost:4173",
+    opencodePublicBaseUrl: "http://localhost:4096"
   };
 
   const createBotMock = (): {
     bot: Telegraf;
-    getHandler: () => ((ctx: any) => Promise<void>) | undefined;
+    getHandler: () => ((ctx: any, next?: () => Promise<void>) => Promise<void>) | undefined;
   } => {
-    let handler: ((ctx: any) => Promise<void>) | undefined;
+    let handler: ((ctx: any, next?: () => Promise<void>) => Promise<void>) | undefined;
     const botLike = {
-      on: jest.fn((event: string, current: (ctx: any) => Promise<void>) => {
+      on: jest.fn((event: string, current: (ctx: any, next?: () => Promise<void>) => Promise<void>) => {
         if (event === "callback_query") {
           handler = current;
         }
@@ -61,10 +62,32 @@ describe("registerOpenCodeCallbacks", () => {
       answerCbQuery,
       editMessageReplyMarkup,
       reply: jest.fn(async () => undefined)
-    });
+    }, async () => undefined);
 
     expect(fetchMock).toHaveBeenCalledWith("http://backend:3000/api/telegram/permission/reply", expect.any(Object));
     expect(answerCbQuery).toHaveBeenCalledWith("Решение отправлено", undefined);
     expect(editMessageReplyMarkup).toHaveBeenCalledWith({ inline_keyboard: [] });
+  });
+
+  it("delegates non-opencode callbacks to next handler", async () => {
+    /* Session picker callbacks must pass through this middleware untouched. */
+    const mock = createBotMock();
+    registerOpenCodeCallbacks({ bot: mock.bot, config, isAdmin: (id: number | undefined) => id === 1 });
+    const handler = mock.getHandler();
+    expect(handler).toBeDefined();
+
+    const next = jest.fn(async () => undefined);
+    await handler!(
+      {
+        callbackQuery: { data: "sess|token-1" },
+        from: { id: 1 },
+        answerCbQuery: jest.fn(async () => undefined),
+        editMessageReplyMarkup: jest.fn(async () => undefined),
+        reply: jest.fn(async () => undefined)
+      },
+      next
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
   });
 });

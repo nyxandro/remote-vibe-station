@@ -375,12 +375,13 @@ export class OpenCodeClient {
     });
   }
 
-  public async selectSession(input: { directory: string; sessionID: string }): Promise<void> {
+  public async selectSession(input: { directory: string; sessionID: string; limit?: number }): Promise<void> {
     /* Use helper to validate session ownership and switch active context. */
     await selectSessionViaApi({
       request: (path, init) => this.request(path, init),
       directory: input.directory,
       sessionID: input.sessionID,
+      limit: input.limit,
       sessionIdsByDirectory: this.sessionIdsByDirectory
     });
   }

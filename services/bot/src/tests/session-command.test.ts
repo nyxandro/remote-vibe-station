@@ -15,7 +15,8 @@ describe("registerSessionCommands", () => {
     telegramBotToken: "token",
     adminIds: [1],
     backendUrl: "http://backend:3000",
-    publicBaseUrl: "http://localhost:4173"
+    publicBaseUrl: "http://localhost:4173",
+    opencodePublicBaseUrl: "http://localhost:4096"
   };
 
   const createBotMock = (): {
@@ -104,10 +105,19 @@ describe("registerSessionCommands", () => {
 
   it("handles session select callback and confirms switch", async () => {
     /* Callback flow should mirror permission UI and clear inline keyboard on success. */
-    jest.spyOn(global, "fetch" as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true, projectSlug: "arena", sessionID: "session-archive" })
-    } as Response);
+    jest
+      .spyOn(global, "fetch" as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, projectSlug: "arena", sessionID: "session-archive" })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          sessions: [{ title: "Greeting in Russian conversation", active: true }]
+        })
+      } as Response);
 
     const mock = createBotMock();
     registerSessionCommands({ bot: mock.bot, config, isAdmin: (id: number | undefined) => id === 1 });
@@ -126,8 +136,10 @@ describe("registerSessionCommands", () => {
       reply
     });
 
-    expect(answerCbQuery).toHaveBeenCalledWith("Сессия выбрана");
+    expect(answerCbQuery).toHaveBeenCalledWith("Переключаю сессию...");
     expect(editMessageReplyMarkup).toHaveBeenCalledWith({ inline_keyboard: [] });
-    expect(reply).toHaveBeenCalledWith("✅ Активная сессия переключена (проект: arena).");
+    expect(reply).toHaveBeenCalledWith(
+      "✅ Активная сессия переключена (проект: arena).\nТекущая сессия: Greeting in Russian conversation"
+    );
   });
 });

@@ -27,6 +27,7 @@ import { useProviderAuth } from "./hooks/use-provider-auth";
 import { useProjectGit } from "./hooks/use-project-git";
 import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
+import { useProjectRuntime } from "./hooks/use-project-runtime";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
 import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
@@ -135,6 +136,15 @@ export const App = () => {
     loadProjects,
     clearActiveSelection
   );
+  const {
+    runtime,
+    isRuntimeLoading,
+    isRuntimeSaving,
+    loadRuntime,
+    saveSettings,
+    deployStart,
+    deployStop
+  } = useProjectRuntime(setError, loadProjects);
 
   const restoreActiveProject = async (): Promise<void> => {
     /* Reopen project context on the last workspace tab instead of forcing Files. */
@@ -430,6 +440,11 @@ export const App = () => {
     if (activeTab === "settings") {
       void loadSettingsOverview(activeId);
       void loadOpenCodeVersionStatus();
+      if (activeId) {
+        void loadRuntime(activeId);
+      } else {
+        void loadRuntime(null);
+      }
       if (canControlTelegramStream) {
         void loadVoiceControlSettings();
       }
@@ -439,6 +454,7 @@ export const App = () => {
     activeTab,
     canControlTelegramStream,
     loadOpenCodeVersionStatus,
+    loadRuntime,
     loadSettingsOverview,
     loadVoiceControlSettings
   ]);
@@ -495,6 +511,8 @@ export const App = () => {
           settingsActiveFile={settingsActiveFile}
           onQueryChange={setQuery}
           onSelectProject={(id) => void selectProject(id)}
+          onDeployProject={(id) => void deployStart(id)}
+          onStopProjectDeploy={(id) => void deployStop(id)}
           onCreateProjectFolder={(name) => void createProjectFolder(name)}
           onCloneRepository={(repositoryUrl, folderName) =>
             void cloneProjectRepository(repositoryUrl, folderName)
@@ -542,6 +560,17 @@ export const App = () => {
             if (window.confirm(`Delete local project folder '${activeId}'?`)) {
               void deleteProjectFolder(activeId);
             }
+          }}
+          projectRuntime={{
+            snapshot: runtime,
+            isLoading: isRuntimeLoading,
+            isSaving: isRuntimeSaving
+          }}
+          onSaveProjectRuntimeSettings={(patch) => {
+            if (!activeId) {
+              return;
+            }
+            void saveSettings(activeId, patch);
           }}
           restartOpenCodeState={restartOpenCodeState}
           voiceControl={canControlTelegramStream ? voiceControlState : undefined}

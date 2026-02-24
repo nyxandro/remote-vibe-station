@@ -11,11 +11,14 @@ import { MoonStar, Sun } from "lucide-react";
 import {
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
+  ProjectRuntimeSettingsPatch,
+  ProjectRuntimeSnapshot,
   OpenCodeVersionStatus,
   SettingsFileSummary,
   VoiceControlSettings
 } from "../types";
 import { ThemeMode } from "../utils/theme";
+import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
 import { SettingsEditorModal } from "./SettingsEditorModal";
 
 type ActiveFile = {
@@ -40,6 +43,12 @@ type Props = {
   onCreateFile: (kind: OpenCodeSettingsKind, name?: string) => void;
   onSaveActiveFile: (content: string) => Promise<void> | void;
   onDeleteActiveProject: () => void;
+  projectRuntime: {
+    snapshot: ProjectRuntimeSnapshot | null;
+    isLoading: boolean;
+    isSaving: boolean;
+  };
+  onSaveProjectRuntimeSettings: (patch: ProjectRuntimeSettingsPatch) => void;
   restartOpenCodeState: {
     isRestarting: boolean;
     lastResult: "idle" | "success" | "error";
@@ -345,6 +354,14 @@ export const SettingsTab = (props: Props) => {
         <div className="settings-accordion-body">
           {props.activeId ? (
             <>
+              <ProjectRuntimeSettingsBlock
+                activeId={props.activeId}
+                snapshot={props.projectRuntime.snapshot}
+                isLoading={props.projectRuntime.isLoading}
+                isSaving={props.projectRuntime.isSaving}
+                onSaveSettings={props.onSaveProjectRuntimeSettings}
+              />
+
               {(props.overview?.projectEnvFiles ?? []).length === 0 ? (
                 <div className="placeholder">No env files found in this project.</div>
               ) : null}

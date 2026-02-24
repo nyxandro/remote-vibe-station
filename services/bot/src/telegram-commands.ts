@@ -27,6 +27,7 @@ export const BOT_LOCAL_COMMANDS: TelegramMenuCommand[] = [
   /* Entry point and Mini App access. */
   { command: "start", description: "Запуск бота и справка" },
   { command: "open", description: "Открыть Mini App" },
+  { command: "access", description: "Ссылка во внешний OpenCode UI" },
   { command: "mode", description: "Настроить model/agent" },
   /* Stream management commands required by product flow. */
   { command: "chat", description: "Включить стрим ответов" },

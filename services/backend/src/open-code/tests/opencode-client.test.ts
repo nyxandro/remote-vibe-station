@@ -355,4 +355,48 @@ describe("OpenCodeClient command APIs", () => {
     );
   });
 
+  it("selects existing session by id even when status map is unavailable", async () => {
+    /* Session selection should rely on session list endpoint, not status-only payload. */
+    const fetchMock = jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify([{ id: "session-archive" }, { id: "session-latest" }])
+    } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await client.selectSession({ directory: "/srv/projects/demo", sessionID: "session-archive" });
+
+    expect(client.getSelectedSessionID("/srv/projects/demo")).toBe("session-archive");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://opencode:4096/session?directory=%2Fsrv%2Fprojects%2Fdemo&limit=200",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when selected session id is missing in project session list", async () => {
+    /* Fail fast when stale callback references non-existing session in current directory. */
+    jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify([{ id: "session-1" }])
+    } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await expect(
+      client.selectSession({ directory: "/srv/projects/demo", sessionID: "session-missing" })
+    ).rejects.toThrow("Session not found in current project");
+  });
+
+  it("accepts selected session id with extra spaces", async () => {
+    /* Telegram callback payload may contain accidental spaces; selection should trim input id. */
+    jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify([{ id: "session-1" }])
+    } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await client.selectSession({ directory: "/srv/projects/demo", sessionID: "  session-1  " });
+
+    expect(client.getSelectedSessionID("/srv/projects/demo")).toBe("session-1");
+  });
+
 });

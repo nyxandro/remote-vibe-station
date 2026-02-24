@@ -15,7 +15,8 @@ describe("registerRepairCommand", () => {
     telegramBotToken: "token",
     adminIds: [1],
     backendUrl: "http://backend:3000",
-    publicBaseUrl: "http://localhost:4173"
+    publicBaseUrl: "http://localhost:4173",
+    opencodePublicBaseUrl: "http://localhost:4096"
   };
 
   const createBotMock = (): {

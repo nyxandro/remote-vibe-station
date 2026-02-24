@@ -15,9 +15,13 @@ describe("project workspace utils", () => {
   });
 
   test("normalizes and validates project folder names", () => {
-    /* Allow docker/project-friendly characters only. */
-    expect(normalizeProjectFolderName("  my.app_01  ")).toBe("my.app_01");
+    /* Convert arbitrary name into safe lowercase slug-like folder name. */
+    expect(normalizeProjectFolderName("  My App_01  ")).toBe("my-app_01");
+    expect(normalizeProjectFolderName("Привет Мир")).toBe("privet-mir");
     expect(() => normalizeProjectFolderName("../bad")).toThrow();
+    expect(() => normalizeProjectFolderName("   ")).toThrow();
+    expect(() => normalizeProjectFolderName("!!!")).toThrow();
+    expect(() => normalizeProjectFolderName("- -")).toThrow();
   });
 
   test("recognizes common git clone url formats", () => {

@@ -22,9 +22,13 @@ export const registerOpenCodeCallbacks = (input: {
   isAdmin: (id: number | undefined) => boolean;
 }): void => {
   /* Register callback routes for OpenCode question and permission prompts. */
-  input.bot.on("callback_query", async (ctx) => {
+  input.bot.on("callback_query", async (ctx, next) => {
     const raw = "data" in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? "") : "";
     if (!raw.startsWith(QUESTION_CALLBACK_PREFIX) && !raw.startsWith(PERMISSION_CALLBACK_PREFIX)) {
+      /* Let other callback handlers (sessions/mode/...) process non-OpenCode payloads. */
+      if (typeof next === "function") {
+        await next();
+      }
       return;
     }
 

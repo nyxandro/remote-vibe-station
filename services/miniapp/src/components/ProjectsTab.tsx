@@ -20,6 +20,8 @@ type Props = {
   gitSummaryMap: Record<string, ProjectGitSummary | null | undefined>;
   onQueryChange: (value: string) => void;
   onSelectProject: (projectId: string) => void;
+  onDeployProject: (projectId: string) => void;
+  onStopProjectDeploy: (projectId: string) => void;
   onCreateProjectFolder: (name: string) => void;
   onCloneRepository: (repositoryUrl: string, folderName?: string) => void;
 };
@@ -157,6 +159,7 @@ export const ProjectsTab = (props: Props) => {
           const health = deriveProjectContainerHealth(props.statusMap[project.id]);
           const healthClass = health ? `project-health project-health-${health.level}` : null;
           const gitSummary = props.gitSummaryMap[project.id] ?? null;
+          const isDeployed = project.status === "running";
 
           return (
             <article key={project.id} className={isActive ? "project-card active" : "project-card"}>
@@ -192,6 +195,20 @@ export const ProjectsTab = (props: Props) => {
               </div>
 
               <div className="project-actions">
+                <button
+                  className={isDeployed ? "btn ghost" : "btn"}
+                  onClick={() => {
+                    if (isDeployed) {
+                      props.onStopProjectDeploy(project.id);
+                      return;
+                    }
+                    props.onDeployProject(project.id);
+                  }}
+                  type="button"
+                >
+                  {isDeployed ? "Stop deploy" : "Deploy"}
+                </button>
+
                 {!isActive ? (
                   <button className="btn outline" onClick={() => props.onSelectProject(project.id)}>
                     Select

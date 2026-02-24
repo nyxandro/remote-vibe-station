@@ -24,6 +24,8 @@ import {
   ProviderOverview,
   ProjectGitSummary,
   ProjectRecord,
+  ProjectRuntimeSettingsPatch,
+  ProjectRuntimeSnapshot,
   ProjectStatus
 } from "../types";
 
@@ -55,6 +57,8 @@ type Props = {
   } | null;
   onQueryChange: (value: string) => void;
   onSelectProject: (id: string) => void;
+  onDeployProject: (id: string) => void;
+  onStopProjectDeploy: (id: string) => void;
   onCreateProjectFolder: (name: string) => void;
   onCloneRepository: (repositoryUrl: string, folderName?: string) => void;
   onRunComposeAction: (action: ContainerAction) => void;
@@ -74,6 +78,12 @@ type Props = {
   onCreateSettingsFile: (kind: OpenCodeSettingsKind, name?: string) => void;
   onSaveSettingsFile: (content: string) => Promise<void> | void;
   onDeleteActiveProject: () => void;
+  projectRuntime: {
+    snapshot: ProjectRuntimeSnapshot | null;
+    isLoading: boolean;
+    isSaving: boolean;
+  };
+  onSaveProjectRuntimeSettings: (patch: ProjectRuntimeSettingsPatch) => void;
   restartOpenCodeState: {
     isRestarting: boolean;
     lastResult: "idle" | "success" | "error";
@@ -137,6 +147,8 @@ export const WorkspaceTabsContent = (props: Props) => {
         gitSummaryMap={props.gitSummaryMap}
         onQueryChange={props.onQueryChange}
         onSelectProject={props.onSelectProject}
+        onDeployProject={props.onDeployProject}
+        onStopProjectDeploy={props.onStopProjectDeploy}
         onCreateProjectFolder={props.onCreateProjectFolder}
         onCloneRepository={props.onCloneRepository}
       />
@@ -235,6 +247,8 @@ export const WorkspaceTabsContent = (props: Props) => {
       onCreateFile={props.onCreateSettingsFile}
       onSaveActiveFile={props.onSaveSettingsFile}
       onDeleteActiveProject={props.onDeleteActiveProject}
+      projectRuntime={props.projectRuntime}
+      onSaveProjectRuntimeSettings={props.onSaveProjectRuntimeSettings}
       restartOpenCodeState={props.restartOpenCodeState}
       voiceControl={props.voiceControl}
       onVoiceControlApiKeyChange={props.onVoiceControlApiKeyChange}

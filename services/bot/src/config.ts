@@ -17,6 +17,7 @@ export type BotConfig = {
   adminIds: number[];
   backendUrl: string;
   publicBaseUrl: string;
+  opencodePublicBaseUrl: string;
 };
 
 const HTTPS_PREFIX = "https://";
@@ -27,7 +28,8 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   ADMIN_IDS: z.string().min(1),
   BACKEND_URL: z.string().min(1),
-  PUBLIC_BASE_URL: z.string().min(1)
+  PUBLIC_BASE_URL: z.string().min(1),
+  OPENCODE_PUBLIC_BASE_URL: z.string().min(1)
 });
 
 const parseAdminIds = (value: string): number[] => {
@@ -63,6 +65,17 @@ const requirePublicBaseUrl = (value: string, name: string): string => {
     throw new Error(`${name} must start with ${HTTPS_PREFIX} (or localhost http for dev)`);
   }
 
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid URL`);
+  }
+
+  if (!parsedUrl.hostname) {
+    throw new Error(`${name} must include a valid hostname`);
+  }
+
   return value;
 };
 
@@ -75,6 +88,10 @@ export const loadConfig = (): BotConfig => {
     telegramBotToken: env.TELEGRAM_BOT_TOKEN,
     adminIds: parseAdminIds(env.ADMIN_IDS),
     backendUrl: env.BACKEND_URL,
-    publicBaseUrl: requirePublicBaseUrl(env.PUBLIC_BASE_URL, "PUBLIC_BASE_URL")
+    publicBaseUrl: requirePublicBaseUrl(env.PUBLIC_BASE_URL, "PUBLIC_BASE_URL"),
+    opencodePublicBaseUrl: requirePublicBaseUrl(
+      env.OPENCODE_PUBLIC_BASE_URL,
+      "OPENCODE_PUBLIC_BASE_URL"
+    )
   };
 };

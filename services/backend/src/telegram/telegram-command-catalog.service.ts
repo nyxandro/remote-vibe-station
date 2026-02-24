@@ -28,6 +28,7 @@ const EXCLUDED_OPENCODE_COMMANDS = new Set(["init", "review"]);
 const BOT_LOCAL_COMMANDS: TelegramMenuCommand[] = [
   { command: "start", description: "Запуск бота и справка" },
   { command: "open", description: "Открыть Mini App" },
+  { command: "access", description: "Ссылка во внешний OpenCode UI" },
   { command: "mode", description: "Настроить model/agent" },
   { command: "chat", description: "Включить стрим ответов" },
   { command: "end", description: "Выключить стрим ответов" },

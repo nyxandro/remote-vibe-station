@@ -77,18 +77,28 @@ export const selectSessionViaApi = async (input: {
   request: <T>(path: string, init: RequestInit) => Promise<T>;
   directory: string;
   sessionID: string;
+  limit?: number;
   sessionIdsByDirectory: Map<string, string>;
 }): Promise<void> => {
-  /* Validate selected session exists in target directory before switching context. */
-  const statuses = await input.request<Record<string, { type?: string }>>(
-    `/session/status?directory=${encodeURIComponent(input.directory)}`,
+  /* Validate selected session exists in directory based on canonical session list. */
+  const requestedSessionID = String(input.sessionID ?? "").trim();
+  if (!requestedSessionID) {
+    throw new Error("Session id is required");
+  }
+
+  const sessions = await input.request<Array<Record<string, unknown>>>(
+    `/session?directory=${encodeURIComponent(input.directory)}&limit=${input.limit ?? 200}`,
     { method: "GET" }
   );
-  if (!statuses?.[input.sessionID]) {
+  const exists = (Array.isArray(sessions) ? sessions : []).some(
+    (item) => String(item?.id ?? "").trim() === requestedSessionID
+  );
+
+  if (!exists) {
     throw new Error("Session not found in current project");
   }
 
-  input.sessionIdsByDirectory.set(input.directory, input.sessionID);
+  input.sessionIdsByDirectory.set(input.directory, requestedSessionID);
 };
 
 export const isSessionBusyViaApi = async (input: {
