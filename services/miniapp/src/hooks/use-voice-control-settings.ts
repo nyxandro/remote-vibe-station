@@ -17,6 +17,7 @@ export type VoiceControlFormState = {
   supportedModels: VoiceControlSettings["supportedModels"];
   isLoading: boolean;
   isSaving: boolean;
+  saveResult: "idle" | "success" | "error";
 };
 
 export const useVoiceControlSettings = (setError: (value: string | null) => void) => {
@@ -25,7 +26,8 @@ export const useVoiceControlSettings = (setError: (value: string | null) => void
     model: null,
     supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"],
     isLoading: false,
-    isSaving: false
+    isSaving: false,
+    saveResult: "idle"
   });
 
   const loadSettings = useCallback(async (): Promise<void> => {
@@ -55,7 +57,7 @@ export const useVoiceControlSettings = (setError: (value: string | null) => void
   const saveSettings = useCallback(async (): Promise<void> => {
     /* Persist raw key/model values exactly as provided in the settings form. */
     try {
-      setState((prev) => ({ ...prev, isSaving: true }));
+      setState((prev) => ({ ...prev, isSaving: true, saveResult: "idle" }));
       setError(null);
 
       const payload = await apiPost<VoiceControlSettings>("/api/telegram/voice-control", {
@@ -72,19 +74,22 @@ export const useVoiceControlSettings = (setError: (value: string | null) => void
           supportedModels.length > 0
             ? supportedModels
             : ["whisper-large-v3-turbo", "whisper-large-v3"],
-        isSaving: false
+        isSaving: false,
+        saveResult: "success"
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save voice control settings";
-      setState((prev) => ({ ...prev, isSaving: false }));
+      setState((prev) => ({ ...prev, isSaving: false, saveResult: "error" }));
       setError(message);
     }
   }, [setError, state.apiKey, state.model]);
 
   return {
     state,
-    setApiKey: (value: string) => setState((prev) => ({ ...prev, apiKey: value })),
-    setModel: (value: VoiceControlSettings["model"]) => setState((prev) => ({ ...prev, model: value })),
+    setApiKey: (value: string) =>
+      setState((prev) => ({ ...prev, apiKey: value, saveResult: prev.isSaving ? prev.saveResult : "idle" })),
+    setModel: (value: VoiceControlSettings["model"]) =>
+      setState((prev) => ({ ...prev, model: value, saveResult: prev.isSaving ? prev.saveResult : "idle" })),
     loadSettings,
     saveSettings
   };

@@ -2,8 +2,8 @@
  * @fileoverview Compact workspace header with active project actions and tabs.
  *
  * Exports:
- * - TabKey (L13) - Available workspace tabs.
- * - WorkspaceHeader (L49) - Renders top icon-tab bar and active project card.
+ * - TabKey (L24) - Available workspace tabs.
+ * - WorkspaceHeader (L46) - Renders top icon-tab bar and active project card.
  */
 
 import {
@@ -11,6 +11,7 @@ import {
   FileText,
   Folder,
   Github,
+  Plug,
   Radio,
   RadioTower,
   Settings,
@@ -20,7 +21,7 @@ import { ComponentType } from "react";
 
 import { ProjectRecord } from "../types";
 
-export type TabKey = "projects" | "files" | "github" | "terminal" | "containers" | "settings";
+export type TabKey = "projects" | "files" | "providers" | "github" | "terminal" | "containers" | "settings";
 
 type Props = {
   activeProject: ProjectRecord | null;
@@ -36,6 +37,7 @@ type Props = {
 const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: ComponentType<{ size?: number }> }> = [
   { key: "projects", title: "Projects", icon: Folder },
   { key: "files", title: "Files", icon: FileText },
+  { key: "providers", title: "Providers", icon: Plug },
   { key: "github", title: "GitHub", icon: Github },
   { key: "terminal", title: "Terminal", icon: Terminal },
   { key: "containers", title: "Containers", icon: Box },
@@ -54,10 +56,11 @@ export const WorkspaceHeader = (props: Props) => {
     <header className="workspace-header-shell">
       <nav className="workspace-top-tabs" aria-label="Workspace navigation">
         {TAB_ITEMS.map((tab) => {
-          /* Keep 5 equal icon tabs across the full width. */
+          /* Keep icon tabs evenly distributed across the full width. */
           const Icon = tab.icon;
           const isActive = props.activeTab === tab.key;
-          const disabled = tab.key !== "projects" && tab.key !== "settings" && !props.canUseProjectTabs;
+          const disabled =
+            tab.key !== "projects" && tab.key !== "providers" && tab.key !== "settings" && !props.canUseProjectTabs;
 
           return (
             <button

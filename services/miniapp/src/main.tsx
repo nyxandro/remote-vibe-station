@@ -5,7 +5,7 @@
  * - (none)
  *
  * Constructs:
- * - container (L16) - Root DOM mount element.
+ * - container (L22) - Root DOM mount element.
  */
 
 import { createRoot } from "react-dom/client";
@@ -16,6 +16,8 @@ import "./theme-layout.css";
 import "./containers-layout.css";
 import "./workspace-header.css";
 import "./git-tab.css";
+import "./providers-tab.css";
+import "./miniapp-blocking-overlay.css";
 
 const container = document.getElementById("root");
 if (!container) {
