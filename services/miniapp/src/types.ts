@@ -38,6 +38,26 @@ export type ProjectStatus = {
 
 export type ContainerAction = "start" | "restart" | "stop";
 
+export type ProjectRuntimeMode = "docker" | "static";
+
+export type ProjectRuntimeSnapshot = {
+  slug: string;
+  mode: ProjectRuntimeMode;
+  serviceName: string | null;
+  internalPort: number | null;
+  staticRoot: string | null;
+  availableServices: string[];
+  previewUrl: string;
+  deployed: boolean;
+};
+
+export type ProjectRuntimeSettingsPatch = {
+  mode?: ProjectRuntimeMode;
+  serviceName?: string | null;
+  internalPort?: number | null;
+  staticRoot?: string | null;
+};
+
 export type ProjectGitSummary = {
   filesChanged: number;
   additions: number;

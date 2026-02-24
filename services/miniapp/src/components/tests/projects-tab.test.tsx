@@ -43,6 +43,8 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -65,6 +67,8 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={onSelectProject}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -73,9 +77,7 @@ describe("ProjectsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
 
     expect(onSelectProject).toHaveBeenCalledWith("tvoc");
-    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Restart" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Deploy" })).toBeTruthy();
   });
 
   it("hides manual sync/filter controls from toolbar", () => {
@@ -90,6 +92,8 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -118,6 +122,8 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -138,6 +144,8 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{ tvoc: { additions: 12, deletions: 5, filesChanged: 3 } }}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -152,6 +160,8 @@ describe("ProjectsTab", () => {
     /* Toolbar should expose plus action with folder-create and git-clone flows. */
     const onCreateProjectFolder = vi.fn();
     const onCloneRepository = vi.fn();
+    const onDeployProject = vi.fn();
+    const onStopProjectDeploy = vi.fn();
     render(
       <ProjectsTab
         visibleProjects={[buildProject()]}
@@ -162,6 +172,8 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
+        onDeployProject={onDeployProject}
+        onStopProjectDeploy={onStopProjectDeploy}
         onCreateProjectFolder={onCreateProjectFolder}
         onCloneRepository={onCloneRepository}
       />
@@ -180,5 +192,9 @@ describe("ProjectsTab", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Clone" }));
     expect(onCloneRepository).toHaveBeenCalledWith("https://github.com/acme/repo.git", undefined);
+
+    fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
+    expect(onDeployProject).toHaveBeenCalledWith("tvoc");
+    expect(onStopProjectDeploy).not.toHaveBeenCalled();
   });
 });
