@@ -1,0 +1,9 @@
+http:
+  middlewares:
+    opencode-forward-auth:
+      forwardAuth:
+        address: "http://bot:3001/opencode-auth/check"
+        trustForwardHeader: false
+        maxResponseBodySize: 1048576
+        authResponseHeaders:
+          - "X-Auth-Admin-ID"

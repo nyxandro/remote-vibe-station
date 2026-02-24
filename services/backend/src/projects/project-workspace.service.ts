@@ -22,20 +22,34 @@ import {
 
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 120_000;
+const MAX_FOLDER_SUFFIX_ATTEMPTS = 500;
+const CREATE_FOLDER_RACE_RETRIES = 5;
 
 @Injectable()
 export class ProjectWorkspaceService {
   public constructor(@Inject(ConfigToken) private readonly config: AppConfig) {}
 
   public createProjectFolder(name: string): { slug: string; rootPath: string } {
-    /* Create an empty project folder inside PROJECTS_ROOT. */
-    const slug = normalizeProjectFolderName(name);
-    const rootPath = this.resolveTargetPath(slug);
-    if (fs.existsSync(rootPath)) {
-      throw new Error(`Project folder already exists: ${slug}`);
+    /* Create folder and retry on EEXIST race between slug check and mkdir. */
+    const baseSlug = normalizeProjectFolderName(name);
+
+    for (let attempt = 0; attempt < CREATE_FOLDER_RACE_RETRIES; attempt += 1) {
+      const slug = this.resolveUniqueFolderSlug(baseSlug);
+      const rootPath = this.resolveTargetPath(slug);
+
+      try {
+        fs.mkdirSync(rootPath, { recursive: false });
+        return { slug, rootPath };
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EEXIST") {
+          continue;
+        }
+        throw error;
+      }
     }
-    fs.mkdirSync(rootPath, { recursive: false });
-    return { slug, rootPath };
+
+    throw new Error(`Cannot allocate unique project folder slug for: ${baseSlug}`);
   }
 
   public async cloneRepository(input: {
@@ -48,14 +62,11 @@ export class ProjectWorkspaceService {
       throw new Error("Repository URL must be HTTPS or SSH git URL");
     }
 
-    const folderName = input.folderName?.trim()
+    const baseFolderName = input.folderName?.trim()
       ? normalizeProjectFolderName(input.folderName)
       : deriveFolderNameFromRepositoryUrl(repositoryUrl);
-
+    const folderName = this.resolveUniqueFolderSlug(baseFolderName);
     const rootPath = this.resolveTargetPath(folderName);
-    if (fs.existsSync(rootPath)) {
-      throw new Error(`Project folder already exists: ${folderName}`);
-    }
 
     try {
       await this.runGitCommand(["clone", repositoryUrl, rootPath], this.config.projectsRoot);
@@ -93,6 +104,24 @@ export class ProjectWorkspaceService {
     const rootPath = path.resolve(this.config.projectsRoot, folderName);
     assertWithinRoot(this.config.projectsRoot, rootPath);
     return rootPath;
+  }
+
+  private resolveUniqueFolderSlug(baseSlug: string): string {
+    /* Avoid slug collisions by appending numeric suffix while preserving baseSlug. */
+    const initial = this.resolveTargetPath(baseSlug);
+    if (!fs.existsSync(initial)) {
+      return baseSlug;
+    }
+
+    for (let suffix = 2; suffix <= MAX_FOLDER_SUFFIX_ATTEMPTS; suffix += 1) {
+      const candidate = `${baseSlug}-${suffix}`;
+      const candidatePath = this.resolveTargetPath(candidate);
+      if (!fs.existsSync(candidatePath)) {
+        return candidate;
+      }
+    }
+
+    throw new Error(`Cannot allocate unique project folder slug for: ${baseSlug}`);
   }
 
   private async isGitRepository(cwd: string): Promise<boolean> {

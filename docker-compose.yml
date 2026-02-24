@@ -1,8 +1,6 @@
-version: "3.9"
-
 services:
   proxy:
-    image: traefik:v3.1
+    image: traefik:v3.4
     # Reverse proxy, TLS и маршрутизация
     command:
       - "--configFile=/etc/traefik/traefik.yml"
@@ -10,8 +8,8 @@ services:
       - "--certificatesresolvers.le.acme.storage=/acme/acme.json"
       - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
     ports:
-      - "80:80"
-      - "443:443"
+      - "${PROXY_HTTP_PORT:-80}:80"
+      - "${PROXY_HTTPS_PORT:-443}:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
@@ -69,11 +67,18 @@ services:
       - ADMIN_IDS=${ADMIN_IDS}
       - BACKEND_URL=http://backend:3000
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL:?OPENCODE_PUBLIC_BASE_URL must be set}
+    volumes:
+      - bot_data:/app/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.bot.rule=Host(`${PUBLIC_DOMAIN}`) && Path(`/bot/webhook`)"
       - "traefik.http.routers.bot.entrypoints=websecure"
       - "traefik.http.routers.bot.tls.certresolver=le"
+      - "traefik.http.routers.bot-auth.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`) && PathPrefix(`/opencode-auth`)"
+      - "traefik.http.routers.bot-auth.entrypoints=websecure"
+      - "traefik.http.routers.bot-auth.tls.certresolver=le"
+      - "traefik.http.routers.bot-auth.middlewares=noindex-headers@file"
       - "traefik.http.services.bot.loadbalancer.server.port=3001"
     networks:
       - internal
@@ -102,8 +107,6 @@ services:
       dockerfile: Dockerfile
     # OpenCode server mode
     command: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
-    ports:
-      - "${OPENCODE_HOST_PORT:-4096}:4096"
     environment:
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
@@ -113,8 +116,17 @@ services:
       - opencode_data:/root/.local/share/opencode
       # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).
       - opencode_config:/root/.config/opencode
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=public"
+      - "traefik.http.routers.opencode.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`)"
+      - "traefik.http.routers.opencode.entrypoints=websecure"
+      - "traefik.http.routers.opencode.tls.certresolver=le"
+      - "traefik.http.routers.opencode.middlewares=opencode-forward-auth@file,noindex-headers@file"
+      - "traefik.http.services.opencode.loadbalancer.server.port=4096"
     networks:
       - internal
+      - public
 
 networks:
   public:
@@ -127,3 +139,4 @@ volumes:
   opencode_config:
   backend_data:
   opencode_data:
+  bot_data:

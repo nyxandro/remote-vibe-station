@@ -19,11 +19,13 @@ import { Request } from "express";
 
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { ProjectGitOpsService } from "./project-git-ops.service";
+import { ProjectDeploymentService } from "./project-deployment.service";
 import { ProjectGitService } from "./project-git.service";
 import { ProjectWorkspaceService } from "./project-workspace.service";
 import { ProjectCreateRequest } from "./project.types";
 import { ProjectsService } from "./projects.service";
 import { EventsService } from "../events/events.service";
+import { ProjectRuntimeSettingsPatch } from "./project-runtime.types";
 
 @Controller("api/projects")
 @UseGuards(AppAuthGuard)
@@ -32,6 +34,7 @@ export class ProjectsController {
     private readonly projects: ProjectsService,
     private readonly gitSummaryService: ProjectGitService,
     private readonly gitOps: ProjectGitOpsService,
+    private readonly deployment: ProjectDeploymentService,
     private readonly workspace: ProjectWorkspaceService,
     private readonly events: EventsService
   ) {}
@@ -152,6 +155,58 @@ export class ProjectsController {
     const result = await this.projects.restartProject(id);
     void this.emitLifecycleEvent({ adminId, slug: id, action: "restart" });
     return result;
+  }
+
+  @Get(":id/deploy/settings")
+  public async getDeploySettings(@Param("id") id: string) {
+    /* Return project deploy settings snapshot used by Mini App settings panel. */
+    try {
+      return await this.deployment.getRuntimeSnapshot(id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
+  }
+
+  @Post(":id/deploy/settings")
+  public async updateDeploySettings(@Param("id") id: string, @Body() body: ProjectRuntimeSettingsPatch) {
+    /* Persist project deploy settings from Mini App Project settings accordion. */
+    const hasPatch =
+      typeof body === "object" &&
+      body !== null &&
+      ("mode" in body || "serviceName" in body || "internalPort" in body || "staticRoot" in body);
+    if (!hasPatch) {
+      throw new BadRequestException("Deploy settings patch is required");
+    }
+
+    try {
+      return await this.deployment.updateRuntimeSettings(id, body);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
+  }
+
+  @Post(":id/deploy/start")
+  public async startDeploy(@Param("id") id: string) {
+    /* Start external deployment endpoint for selected project domain. */
+    try {
+      return await this.deployment.startDeployment(id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
+  }
+
+  @Post(":id/deploy/stop")
+  public async stopDeploy(@Param("id") id: string) {
+    /* Stop external deployment endpoint for selected project domain. */
+    try {
+      return await this.deployment.stopDeployment(id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
   }
 
   @Post(":id/containers/:service/:action")
