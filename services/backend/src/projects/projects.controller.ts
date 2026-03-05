@@ -283,9 +283,12 @@ export class ProjectsController {
     /* Return status of project containers. */
     try {
       return await this.projects.statusProject(id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+    } catch {
+      /*
+       * Status is polled frequently by Mini App and should degrade gracefully.
+       * Returning an empty list prevents noisy 400 loops for transient compose/env issues.
+       */
+      return [];
     }
   }
 

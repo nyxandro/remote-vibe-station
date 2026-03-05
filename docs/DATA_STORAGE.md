@@ -16,7 +16,8 @@ Backend writes JSON files under `data/` (relative to backend working directory):
 - `active-project.json` - selected project slug (per-admin + global fallback).
 - `projects.state.json` - derived runtime status by project slug.
 - `projects.json` - explicit project registry entries (created via register flow).
-- `overrides/*.override.yml` - generated Traefik override files per project slug.
+- `runtime-overrides/*.docker.override.json` - generated docker deploy overrides per project slug.
+- `runtime-overrides/*.static.compose.json` - generated static deploy compose files per project slug.
 
 ## Retention / Cleanup
 
@@ -33,7 +34,9 @@ The backend runs a best-effort periodic maintenance job (`DataMaintenanceService
   - `telegram.preferences.json`, `telegram.stream.json`, `active-project.json`.
 - Removes derived data for projects that no longer exist on disk:
   - prunes unknown slugs from `projects.state.json`;
-  - deletes `overrides/*.override.yml` for missing slugs.
+  - runtime override cleanup/regeneration is handled by backend deploy endpoints:
+    - `POST /api/projects/:id/deploy/start` rewrites `data/runtime-overrides/*.json` before `docker compose up -d`;
+    - `POST /api/projects/:id/deploy/stop` uses the same generated files for `docker compose stop`.
 - Removes stale registry entries pointing to missing project folders:
   - prunes missing roots from `projects.json`.
 

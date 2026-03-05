@@ -5,7 +5,7 @@
  * - useProjectRuntime (L21) - Loads runtime snapshot and exposes deploy/start/stop actions.
  */
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiGet, apiPost } from "../api/client";
 import { ProjectRuntimeMode, ProjectRuntimeSettingsPatch, ProjectRuntimeSnapshot } from "../types";
@@ -20,112 +20,133 @@ export const useProjectRuntime = (
   const [isRuntimeLoading, setIsRuntimeLoading] = useState<boolean>(false);
   const [isRuntimeSaving, setIsRuntimeSaving] = useState<boolean>(false);
   const loadRuntimeSeq = useRef<number>(0);
+  const refreshProjectsRef = useRef<RefreshProjects>(refreshProjects);
 
-  const saveSettings = async (projectId: string, patch: ProjectRuntimeSettingsPatch): Promise<void> => {
-    /* Save runtime settings patch and refresh project cards once backend accepts update. */
-    setError(null);
-    setIsRuntimeSaving(true);
-    try {
-      const snapshot = await apiPost<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/settings`, patch);
-      setRuntime(snapshot);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to save deploy settings");
-      setIsRuntimeSaving(false);
-      return;
-    }
+  useEffect(() => {
+    /* Keep latest refresh callback without changing public handler identities. */
+    refreshProjectsRef.current = refreshProjects;
+  }, [refreshProjects]);
 
-    try {
-      await refreshProjects();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Deploy settings saved, but projects refresh failed");
-    } finally {
-      setIsRuntimeSaving(false);
-    }
-  };
-
-  const loadRuntime = async (projectId: string | null): Promise<void> => {
-    /* Load runtime settings for selected project and clear stale state on null selection. */
-    const seq = loadRuntimeSeq.current + 1;
-    loadRuntimeSeq.current = seq;
-
-    if (!projectId) {
-      if (seq === loadRuntimeSeq.current) {
-        setError(null);
-        setRuntime(null);
-        setIsRuntimeLoading(false);
-      }
-      return;
-    }
-
-    try {
-      if (seq === loadRuntimeSeq.current) {
-        setError(null);
-        setIsRuntimeLoading(true);
-      }
-      const snapshot = await apiGet<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/settings`);
-      if (seq === loadRuntimeSeq.current) {
+  const saveSettings = useCallback(
+    async (projectId: string, patch: ProjectRuntimeSettingsPatch): Promise<void> => {
+      /* Save runtime settings patch and refresh project cards once backend accepts update. */
+      setError(null);
+      setIsRuntimeSaving(true);
+      try {
+        const snapshot = await apiPost<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/settings`, patch);
         setRuntime(snapshot);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to save deploy settings");
+        setIsRuntimeSaving(false);
+        return;
       }
-    } catch (error) {
-      if (seq === loadRuntimeSeq.current) {
-        setError(error instanceof Error ? error.message : "Failed to load deploy settings");
-        setRuntime(null);
+
+      try {
+        await refreshProjectsRef.current();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Deploy settings saved, but projects refresh failed");
+      } finally {
+        setIsRuntimeSaving(false);
       }
-    } finally {
-      if (seq === loadRuntimeSeq.current) {
-        setIsRuntimeLoading(false);
+    },
+    [setError]
+  );
+
+  const loadRuntime = useCallback(
+    async (projectId: string | null): Promise<void> => {
+      /* Load runtime settings for selected project and clear stale state on null selection. */
+      const seq = loadRuntimeSeq.current + 1;
+      loadRuntimeSeq.current = seq;
+
+      if (!projectId) {
+        if (seq === loadRuntimeSeq.current) {
+          setError(null);
+          setRuntime(null);
+          setIsRuntimeLoading(false);
+        }
+        return;
       }
-    }
-  };
 
-  const saveMode = async (projectId: string, mode: ProjectRuntimeMode): Promise<void> => {
-    /* Persist selected runtime mode and refresh local runtime snapshot. */
-    await saveSettings(projectId, { mode });
-  };
+      try {
+        if (seq === loadRuntimeSeq.current) {
+          setError(null);
+          setIsRuntimeLoading(true);
+        }
+        const snapshot = await apiGet<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/settings`);
+        if (seq === loadRuntimeSeq.current) {
+          setRuntime(snapshot);
+        }
+      } catch (error) {
+        if (seq === loadRuntimeSeq.current) {
+          setError(error instanceof Error ? error.message : "Failed to load deploy settings");
+          setRuntime(null);
+        }
+      } finally {
+        if (seq === loadRuntimeSeq.current) {
+          setIsRuntimeLoading(false);
+        }
+      }
+    },
+    [setError]
+  );
 
-  const deployStart = async (projectId: string): Promise<void> => {
-    /* Start public deployment for project and refresh project cards. */
-    setError(null);
-    setIsRuntimeSaving(true);
-    try {
-      const snapshot = await apiPost<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/start`, {});
-      setRuntime(snapshot);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to deploy project");
-      setIsRuntimeSaving(false);
-      return;
-    }
+  const saveMode = useCallback(
+    async (projectId: string, mode: ProjectRuntimeMode): Promise<void> => {
+      /* Persist selected runtime mode and refresh local runtime snapshot. */
+      await saveSettings(projectId, { mode });
+    },
+    [saveSettings]
+  );
 
-    try {
-      await refreshProjects();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Project deployed, but projects refresh failed");
-    } finally {
-      setIsRuntimeSaving(false);
-    }
-  };
+  const deployStart = useCallback(
+    async (projectId: string): Promise<void> => {
+      /* Start public deployment for project and refresh project cards. */
+      setError(null);
+      setIsRuntimeSaving(true);
+      try {
+        const snapshot = await apiPost<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/start`, {});
+        setRuntime(snapshot);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to deploy project");
+        setIsRuntimeSaving(false);
+        return;
+      }
 
-  const deployStop = async (projectId: string): Promise<void> => {
-    /* Stop public deployment for project and refresh project cards. */
-    setError(null);
-    setIsRuntimeSaving(true);
-    try {
-      const snapshot = await apiPost<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/stop`, {});
-      setRuntime(snapshot);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Failed to stop deploy");
-      setIsRuntimeSaving(false);
-      return;
-    }
+      try {
+        await refreshProjectsRef.current();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Project deployed, but projects refresh failed");
+      } finally {
+        setIsRuntimeSaving(false);
+      }
+    },
+    [setError]
+  );
 
-    try {
-      await refreshProjects();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Deploy stopped, but projects refresh failed");
-    } finally {
-      setIsRuntimeSaving(false);
-    }
-  };
+  const deployStop = useCallback(
+    async (projectId: string): Promise<void> => {
+      /* Stop public deployment for project and refresh project cards. */
+      setError(null);
+      setIsRuntimeSaving(true);
+      try {
+        const snapshot = await apiPost<ProjectRuntimeSnapshot>(`/api/projects/${projectId}/deploy/stop`, {});
+        setRuntime(snapshot);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to stop deploy");
+        setIsRuntimeSaving(false);
+        return;
+      }
+
+      try {
+        await refreshProjectsRef.current();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Deploy stopped, but projects refresh failed");
+      } finally {
+        setIsRuntimeSaving(false);
+      }
+    },
+    [setError]
+  );
 
   return {
     runtime,

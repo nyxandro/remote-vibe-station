@@ -1,12 +1,12 @@
 services:
   proxy:
-    image: traefik:v3.4
+    image: traefik:v2.11
     # Reverse proxy, TLS и маршрутизация
     command:
       - "--configFile=/etc/traefik/traefik.yml"
       - "--certificatesresolvers.le.acme.email=${TLS_EMAIL}"
       - "--certificatesresolvers.le.acme.storage=/acme/acme.json"
-      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.httpChallenge.entryPoint=web"
     ports:
       - "${PROXY_HTTP_PORT:-80}:80"
       - "${PROXY_HTTPS_PORT:-443}:443"
@@ -43,10 +43,10 @@ services:
       - backend_data:/app/data
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`${PUBLIC_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/events`))"
-      - "traefik.http.routers.backend.entrypoints=websecure"
-      - "traefik.http.routers.backend.tls.certresolver=le"
-      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+      - "traefik.docker.network=public"
+      - "traefik.http.routers.rvs-backend.rule=Host(`${PUBLIC_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/events`))"
+      - "traefik.http.routers.rvs-backend.entrypoints=websecure"
+      - "traefik.http.services.rvs-backend.loadbalancer.server.port=3000"
     networks:
       - internal
       - public
@@ -74,10 +74,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.bot.rule=Host(`${PUBLIC_DOMAIN}`) && Path(`/bot/webhook`)"
       - "traefik.http.routers.bot.entrypoints=websecure"
-      - "traefik.http.routers.bot.tls.certresolver=le"
       - "traefik.http.routers.bot-auth.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`) && PathPrefix(`/opencode-auth`)"
       - "traefik.http.routers.bot-auth.entrypoints=websecure"
-      - "traefik.http.routers.bot-auth.tls.certresolver=le"
       - "traefik.http.routers.bot-auth.middlewares=noindex-headers@file"
       - "traefik.http.services.bot.loadbalancer.server.port=3001"
     networks:
@@ -95,7 +93,6 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.miniapp.rule=Host(`${PUBLIC_DOMAIN}`) && PathPrefix(`/miniapp`)"
       - "traefik.http.routers.miniapp.entrypoints=websecure"
-      - "traefik.http.routers.miniapp.tls.certresolver=le"
       - "traefik.http.services.miniapp.loadbalancer.server.port=4173"
     networks:
       - internal
@@ -121,7 +118,6 @@ services:
       - "traefik.docker.network=public"
       - "traefik.http.routers.opencode.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`)"
       - "traefik.http.routers.opencode.entrypoints=websecure"
-      - "traefik.http.routers.opencode.tls.certresolver=le"
       - "traefik.http.routers.opencode.middlewares=opencode-forward-auth@file,noindex-headers@file"
       - "traefik.http.services.opencode.loadbalancer.server.port=4096"
     networks:
