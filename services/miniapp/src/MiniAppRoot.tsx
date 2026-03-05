@@ -11,9 +11,11 @@ import { App } from "./App";
 import { MiniAppBlockingOverlay } from "./components/MiniAppBlockingOverlay";
 import { DiffPreviewScreen } from "./components/DiffPreviewScreen";
 import { useMiniAppReadiness } from "./hooks/use-miniapp-readiness";
+import { useTelegramWebApp } from "./hooks/use-telegram-webapp";
 import { readDiffPreviewToken } from "./utils/start-param";
 
 export const MiniAppRoot = () => {
+  useTelegramWebApp();
   const readiness = useMiniAppReadiness();
   const launchToken = useMemo(() => {
     /* Parse token only once from launch context. */

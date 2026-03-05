@@ -59,4 +59,19 @@ describe("MiniAppRoot readiness overlay", () => {
     });
     expect(screen.queryByText("Mini App временно недоступен")).toBeNull();
   });
+
+  it("shows Telegram launch hint on missing authentication", async () => {
+    /* Auth-specific backend rejection should guide user to open app from Telegram. */
+    apiGetMock.mockRejectedValueOnce(new Error("Request failed: 401 - Missing authentication"));
+
+    render(<MiniAppRoot />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /Mini App требует Telegram initData\. Открой приложение из кнопки в Telegram/i
+        )
+      ).toBeTruthy();
+    });
+  });
 });

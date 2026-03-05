@@ -20,10 +20,16 @@ export type MiniAppReadinessState = {
 const POLL_INTERVAL_MS = 7000;
 const UNAVAILABLE_MESSAGE =
   "Mini App временно недоступен: нет связи с backend. Проверь контейнеры и сеть, затем повтори.";
+const AUTH_HINT_MESSAGE =
+  "Mini App требует Telegram initData. Открой приложение из кнопки в Telegram, а не по обычной ссылке браузера.";
 
 const normalizeErrorMessage = (error: unknown): string => {
   /* Keep technical reason visible to speed up incident triage. */
   if (error instanceof Error && error.message.trim().length > 0) {
+    /* Distinguish auth failures to make Telegram launch requirements explicit. */
+    if (error.message.includes("401") && error.message.includes("Missing authentication")) {
+      return `${AUTH_HINT_MESSAGE}\n\n${error.message}`;
+    }
     return `${UNAVAILABLE_MESSAGE}\n\n${error.message}`;
   }
   return UNAVAILABLE_MESSAGE;
