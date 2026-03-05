@@ -111,25 +111,25 @@ configure_ufw() {
   if ! ufw status | grep -q "Status: active"; then
     ufw --force default deny incoming
     ufw --force default allow outgoing
-    ufw --force allow 22/tcp
-    ufw --force limit 22/tcp
-    ufw --force allow 80/tcp
-    ufw --force allow 443/tcp
+    ufw allow 22/tcp
+    ufw limit 22/tcp
+    ufw allow 80/tcp
+    ufw allow 443/tcp
     ufw --force enable
     return
   fi
 
   if ! ufw status | grep -qE '^22/tcp'; then
-    ufw --force allow 22/tcp
+    ufw allow 22/tcp
   fi
   if ! ufw status | grep -qE '^80/tcp'; then
-    ufw --force allow 80/tcp
+    ufw allow 80/tcp
   fi
   if ! ufw status | grep -qE '^443/tcp'; then
-    ufw --force allow 443/tcp
+    ufw allow 443/tcp
   fi
   if ! ufw status | grep -qE '^22/tcp\s+LIMIT'; then
-    ufw --force limit 22/tcp
+    ufw limit 22/tcp
   fi
 }
 
@@ -199,6 +199,7 @@ EOF
 # Runtime-generated CLIProxyAPI config.
 request-log: false
 request-retry: 2
+auth-dir: "~/.cli-proxy-api"
 api-keys:
   - ${CLIPROXY_API_KEY}
 EOF
@@ -222,7 +223,7 @@ OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
 CLIPROXY_PROVIDER_ID=cliproxy
 CLIPROXY_PROVIDER_NAME=CLIProxy
 CLIPROXY_API_KEY=${CLIPROXY_API_KEY}
-CLIPROXY_DEFAULT_MODEL_ID=claude-sonnet
+CLIPROXY_DEFAULT_MODEL_ID=
 CLIPROXY_MODELS_JSON={"claude-sonnet":"Claude Sonnet","gpt-5":"GPT-5","gemini-2.5-pro":"Gemini 2.5 Pro"}
 CLIPROXY_MANAGEMENT_PASSWORD=${CLIPROXY_MANAGEMENT_PASSWORD}
 RVS_BACKEND_IMAGE=${BACKEND_IMAGE}

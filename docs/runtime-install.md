@@ -30,6 +30,16 @@
 
 ## Быстрый запуск
 
+### Open-source one-liner (рекомендуется)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master/scripts/bootstrap-runtime.sh | sudo bash -s -- --bot-token "<TELEGRAM_BOT_TOKEN>" --admin-id "<TELEGRAM_ADMIN_ID>" --domain auto --tls-email "ops@example.com"
+```
+
+Скрипт сам скачает installer-assets во временную папку и запустит установку.
+
+### Прямой запуск локального скрипта
+
 ```bash
 sudo ./scripts/install-runtime.sh \
   --bot-token "<TELEGRAM_BOT_TOKEN>" \

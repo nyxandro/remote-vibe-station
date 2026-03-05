@@ -65,11 +65,6 @@ const config = {
   }
 };
 
-const defaultModelID = String(process.env.CLIPROXY_DEFAULT_MODEL_ID || "").trim();
-if (defaultModelID) {
-  config.default = { [providerID]: defaultModelID };
-}
-
 fs.writeFileSync(outPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 NODE
 
