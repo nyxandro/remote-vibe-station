@@ -43,6 +43,9 @@ describe("loadConfig", () => {
       OPENCODE_SERVER_URL: undefined,
       OPENCODE_SERVER_PASSWORD: undefined,
       OPENCODE_SERVER_USERNAME: undefined,
+      GITHUB_APP_ID: undefined,
+      GITHUB_APP_SLUG: undefined,
+      GITHUB_APP_PRIVATE_KEY_BASE64: undefined,
       EVENT_BUFFER_SIZE: undefined
     });
   });
@@ -67,5 +70,13 @@ describe("loadConfig", () => {
     /* Fail when password is set without username. */
     setEnv({ ...baseEnv, OPENCODE_SERVER_PASSWORD: "secret" });
     expect(() => loadConfig()).toThrow();
+  });
+
+  it("requires all GitHub App vars together", () => {
+    /* Reject partial GitHub App config to avoid broken OAuth/token runtime. */
+    setEnv({ ...baseEnv, GITHUB_APP_ID: "123" });
+    expect(() => loadConfig()).toThrow(
+      "GITHUB_APP_ID, GITHUB_APP_SLUG and GITHUB_APP_PRIVATE_KEY_BASE64 must be set together"
+    );
   });
 });

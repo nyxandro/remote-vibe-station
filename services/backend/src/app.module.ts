@@ -53,6 +53,9 @@ import { TelegramInitDataGuard } from "./security/telegram.guard";
 import { TerminalController } from "./terminal/terminal.controller";
 import { TerminalService } from "./terminal/terminal.service";
 import { DataMaintenanceService } from "./maintenance/data-maintenance.service";
+import { GithubAppService } from "./github/github-app.service";
+import { GithubAppStore } from "./github/github-app.store";
+import { TelegramGithubController } from "./telegram/telegram-github.controller";
 
 @Module({
   imports: [ConfigModule],
@@ -64,6 +67,7 @@ import { DataMaintenanceService } from "./maintenance/data-maintenance.service";
     OpenCodeController,
     TelegramController,
     TelegramProviderController,
+    TelegramGithubController,
     TelegramSessionController,
     TelegramOutboxController
   ],
@@ -103,7 +107,9 @@ import { DataMaintenanceService } from "./maintenance/data-maintenance.service";
     AdminHeaderGuard,
     AppAuthGuard,
     TelegramInitDataGuard,
-    DataMaintenanceService
+    DataMaintenanceService,
+    GithubAppStore,
+    GithubAppService
   ]
 })
 export class AppModule {}

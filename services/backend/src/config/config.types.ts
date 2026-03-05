@@ -30,6 +30,12 @@ export type AppConfig = {
   opencodeServerUrl: string;
   opencodeServerPassword?: string;
   opencodeServerUsername?: string;
+  /** GitHub App ID used to mint short-lived installation tokens. */
+  githubAppId?: string;
+  /** GitHub App slug used to build installation URL. */
+  githubAppSlug?: string;
+  /** Base64-encoded PEM private key for GitHub App JWT signing. */
+  githubAppPrivateKeyBase64?: string;
   eventBufferSize: number;
 };
 

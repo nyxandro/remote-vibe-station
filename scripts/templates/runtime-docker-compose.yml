@@ -1,15 +1,14 @@
 services:
   proxy:
     image: traefik:v2.11
-    # Reverse proxy, TLS и маршрутизация
     command:
       - "--configFile=/etc/traefik/traefik.yml"
       - "--certificatesresolvers.le.acme.email=${TLS_EMAIL}"
       - "--certificatesresolvers.le.acme.storage=/acme/acme.json"
       - "--certificatesresolvers.le.acme.httpChallenge.entryPoint=web"
     ports:
-      - "${PROXY_HTTP_PORT:-80}:80"
-      - "${PROXY_HTTPS_PORT:-443}:443"
+      - "80:80"
+      - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
@@ -18,26 +17,26 @@ services:
     networks:
       - public
       - internal
-
+    restart: unless-stopped
   backend:
-    build:
-      context: ./services/backend
-      dockerfile: Dockerfile
-    # Middleware: OpenCode API, Telegram webhook, управление Docker
+    image: ${RVS_BACKEND_IMAGE:?RVS_BACKEND_IMAGE must be set}
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_MINIAPP_SHORT_NAME=${TELEGRAM_MINIAPP_SHORT_NAME}
       - ADMIN_IDS=${ADMIN_IDS}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
       - PROJECTS_ROOT=${PROJECTS_ROOT}
       - OPENCODE_CONFIG_DIR=/opencode-config
-      - OPENCODE_SERVER_URL=${OPENCODE_SERVER_URL}
+      - OPENCODE_SERVER_URL=http://opencode:4096
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+      - OPENCODE_SYNC_ON_START=true
+      - OPENCODE_WARM_RECENTS_ON_START=false
+      - OPENCODE_WARM_RECENTS_LIMIT=50
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
-      # Shared OpenCode state volume (projects/sessions/messages).
       - opencode_data:/opencode-data
       - opencode_config:/opencode-config
       - backend_data:/app/data
@@ -50,45 +49,29 @@ services:
     networks:
       - internal
       - public
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/projects"]
-      interval: 10s
-      timeout: 3s
-      retries: 30
-      start_period: 10s
-
+    restart: unless-stopped
   bot:
-    build:
-      context: ./services/bot
-      dockerfile: Dockerfile
-    # Telegram webhook обработчик
+    image: ${RVS_BOT_IMAGE:?RVS_BOT_IMAGE must be set}
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_IDS=${ADMIN_IDS}
       - BACKEND_URL=http://backend:3000
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
-      - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL:?OPENCODE_PUBLIC_BASE_URL must be set}
-    volumes:
-      - bot_data:/app/data
+      - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.bot.rule=Host(`${PUBLIC_DOMAIN}`) && Path(`/bot/webhook`)"
       - "traefik.http.routers.bot.entrypoints=websecure"
-      - "traefik.http.routers.bot-auth.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`) && PathPrefix(`/opencode-auth`)"
+      - "traefik.http.routers.bot-auth.rule=Host(`${OPENCODE_PUBLIC_DOMAIN}`) && PathPrefix(`/opencode-auth`)"
       - "traefik.http.routers.bot-auth.entrypoints=websecure"
       - "traefik.http.routers.bot-auth.middlewares=noindex-headers@file"
       - "traefik.http.services.bot.loadbalancer.server.port=3001"
     networks:
       - internal
       - public
-
+    restart: unless-stopped
   miniapp:
-    build:
-      context: ./services/miniapp
-      dockerfile: Dockerfile
-    # Mini App для управления
-    ports:
-      - "${MINIAPP_HOST_PORT:-4173}:4173"
+    image: ${RVS_MINIAPP_IMAGE:?RVS_MINIAPP_IMAGE must be set}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.miniapp.rule=Host(`${PUBLIC_DOMAIN}`) && PathPrefix(`/miniapp`)"
@@ -97,72 +80,54 @@ services:
     networks:
       - internal
       - public
-
+    restart: unless-stopped
+  cliproxy:
+    image: ${RVS_CLIPROXY_IMAGE:?RVS_CLIPROXY_IMAGE must be set}
+    pull_policy: always
+    environment:
+      - MANAGEMENT_PASSWORD=${CLIPROXY_MANAGEMENT_PASSWORD}
+    volumes:
+      - ./infra/cliproxy/config.yaml:/CLIProxyAPI/config.yaml
+      - cliproxy_auth:/root/.cli-proxy-api
+      - cliproxy_logs:/CLIProxyAPI/logs
+    networks:
+      - internal
+    restart: unless-stopped
   opencode:
-    build:
-      context: ./services/opencode
-      dockerfile: Dockerfile
-    # OpenCode server mode
-    command: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
+    image: ${RVS_OPENCODE_IMAGE:?RVS_OPENCODE_IMAGE must be set}
     environment:
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
-      - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID:-cliproxy}
-      - CLIPROXY_PROVIDER_NAME=${CLIPROXY_PROVIDER_NAME:-CLIProxy}
-      - CLIPROXY_BASE_URL=${CLIPROXY_BASE_URL:-http://cliproxy:8317/v1}
-      - CLIPROXY_API_KEY=${CLIPROXY_API_KEY:?CLIPROXY_API_KEY must be set}
-      - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID:-}
-      - CLIPROXY_MODELS_JSON=${CLIPROXY_MODELS_JSON:-}
+      - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID}
+      - CLIPROXY_PROVIDER_NAME=${CLIPROXY_PROVIDER_NAME}
+      - CLIPROXY_BASE_URL=http://cliproxy:8317/v1
+      - CLIPROXY_API_KEY=${CLIPROXY_API_KEY}
+      - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID}
+      - CLIPROXY_MODELS_JSON=${CLIPROXY_MODELS_JSON}
     volumes:
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
-      # Persist OpenCode state (projects/sessions/messages) in a named volume.
       - opencode_data:/root/.local/share/opencode
-      # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).
       - opencode_config:/root/.config/opencode
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=public"
-      - "traefik.http.routers.opencode.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`)"
+      - "traefik.http.routers.opencode.rule=Host(`${OPENCODE_PUBLIC_DOMAIN}`)"
       - "traefik.http.routers.opencode.entrypoints=websecure"
       - "traefik.http.routers.opencode.middlewares=opencode-forward-auth@file,noindex-headers@file"
       - "traefik.http.services.opencode.loadbalancer.server.port=4096"
     networks:
       - internal
       - public
-    depends_on:
-      cliproxy:
-        condition: service_healthy
-
-  cliproxy:
-    image: ${CLI_PROXY_IMAGE:-eceasy/cli-proxy-api:latest}
-    pull_policy: always
-    # CLIProxyAPI gateway for OpenCode OpenAI-compatible provider.
-    environment:
-      - MANAGEMENT_PASSWORD=${CLIPROXY_MANAGEMENT_PASSWORD:?CLIPROXY_MANAGEMENT_PASSWORD must be set}
-    volumes:
-      - ./infra/cliproxy/config.yaml:/CLIProxyAPI/config.yaml
-      - cliproxy_auth:/root/.cli-proxy-api
-      - cliproxy_logs:/CLIProxyAPI/logs
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8317/v1/models"]
-      interval: 10s
-      timeout: 3s
-      retries: 30
-      start_period: 10s
-    networks:
-      - internal
-
+    restart: unless-stopped
 networks:
   public:
     name: public
     driver: bridge
   internal:
     driver: bridge
-
 volumes:
   opencode_config:
   backend_data:
   opencode_data:
-  bot_data:
   cliproxy_auth:
   cliproxy_logs:

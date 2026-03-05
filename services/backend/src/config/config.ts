@@ -36,6 +36,9 @@ const envSchema = z.object({
   OPENCODE_SERVER_URL: z.string().min(1),
   OPENCODE_SERVER_PASSWORD: z.string().optional(),
   OPENCODE_SERVER_USERNAME: z.string().optional(),
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_SLUG: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY_BASE64: z.string().optional(),
   EVENT_BUFFER_SIZE: z.string().optional()
 });
 
@@ -135,6 +138,21 @@ export const loadConfig = (): AppConfig => {
     throw new Error("OPENCODE_SERVER_USERNAME required when password is set");
   }
 
+  /* Keep GitHub App onboarding explicit: all three vars must be set together. */
+  const githubAppId = env.GITHUB_APP_ID?.trim() ? env.GITHUB_APP_ID.trim() : undefined;
+  const githubAppSlug = env.GITHUB_APP_SLUG?.trim() ? env.GITHUB_APP_SLUG.trim() : undefined;
+  const githubAppPrivateKeyBase64 = env.GITHUB_APP_PRIVATE_KEY_BASE64?.trim()
+    ? env.GITHUB_APP_PRIVATE_KEY_BASE64.trim()
+    : undefined;
+  const githubCount = [githubAppId, githubAppSlug, githubAppPrivateKeyBase64].filter(
+    (item) => typeof item === "string" && item.trim().length > 0
+  ).length;
+  if (githubCount > 0 && githubCount < 3) {
+    throw new Error(
+      "GITHUB_APP_ID, GITHUB_APP_SLUG and GITHUB_APP_PRIVATE_KEY_BASE64 must be set together"
+    );
+  }
+
   /* Assemble config object. */
   return {
     telegramBotToken: env.TELEGRAM_BOT_TOKEN,
@@ -153,6 +171,9 @@ export const loadConfig = (): AppConfig => {
     opencodeServerUrl: env.OPENCODE_SERVER_URL,
     opencodeServerPassword: env.OPENCODE_SERVER_PASSWORD,
     opencodeServerUsername: env.OPENCODE_SERVER_USERNAME,
+    githubAppId,
+    githubAppSlug,
+    githubAppPrivateKeyBase64,
     eventBufferSize
   };
 };

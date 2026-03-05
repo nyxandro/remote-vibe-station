@@ -57,6 +57,12 @@ services:
     environment:
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+      - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID:-cliproxy}
+      - CLIPROXY_PROVIDER_NAME=${CLIPROXY_PROVIDER_NAME:-CLIProxy}
+      - CLIPROXY_BASE_URL=${CLIPROXY_BASE_URL:-http://cliproxy:8317/v1}
+      - CLIPROXY_API_KEY=${CLIPROXY_API_KEY:-sk-cliproxy-local}
+      - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID:-}
+      - CLIPROXY_MODELS_JSON=${CLIPROXY_MODELS_JSON:-}
     volumes:
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
       # Persist OpenCode state (projects/sessions/messages) in a named volume.
@@ -70,6 +76,27 @@ services:
       interval: 3s
       timeout: 2s
       retries: 20
+      start_period: 5s
+    depends_on:
+      cliproxy:
+        condition: service_healthy
+
+  cliproxy:
+    image: ${CLI_PROXY_IMAGE:-eceasy/cli-proxy-api:latest}
+    pull_policy: always
+    environment:
+      - MANAGEMENT_PASSWORD=${CLIPROXY_MANAGEMENT_PASSWORD:-dev-management-password}
+    volumes:
+      - ./infra/cliproxy/config.yaml:/CLIProxyAPI/config.yaml
+      - cliproxy_auth:/root/.cli-proxy-api
+      - cliproxy_logs:/CLIProxyAPI/logs
+    ports:
+      - "8317:8317"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8317/v1/models"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
       start_period: 5s
 
   bot:
@@ -90,3 +117,5 @@ volumes:
   opencode_config:
   backend_data:
   opencode_data:
+  cliproxy_auth:
+  cliproxy_logs:

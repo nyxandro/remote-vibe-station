@@ -485,7 +485,6 @@ export class ProjectsService {
       "      - \"traefik.enable=true\"",
       `      - \"traefik.http.routers.${project.slug}.rule=Host(\`${project.domain}\`)\"`,
       `      - \"traefik.http.routers.${project.slug}.entrypoints=websecure\"`,
-      `      - \"traefik.http.routers.${project.slug}.tls.certresolver=le\"`,
       `      - \"traefik.http.routers.${project.slug}.middlewares=noindex-headers@file\"`,
       `      - \"traefik.http.services.${project.slug}.loadbalancer.server.port=${project.servicePort}\"`,
       "    networks:",
