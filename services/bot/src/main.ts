@@ -32,6 +32,7 @@ import {
 import {
   VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE,
   VOICE_TRANSCRIPTION_PROGRESS_MESSAGE,
+  buildTranscriptionFailureMessage,
   buildTranscriptionSuccessHtml,
   extractTelegramVoiceInput,
   fetchVoiceControlSettings,
@@ -482,17 +483,21 @@ const bootstrap = async (): Promise<void> => {
         text: transcribedText,
         errorLabel: "Ошибка запроса"
       });
-    } catch {
+    } catch (error) {
+      /* Log root cause so operations can distinguish setup and runtime failures. */
+      // eslint-disable-next-line no-console
+      console.error("Voice transcription failed", error);
+      const failureMessage = buildTranscriptionFailureMessage(error);
       if (statusMessageId !== null) {
         await ctx.telegram.editMessageText(
           chatId,
           statusMessageId,
           undefined,
-          VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE
+          failureMessage
         );
         return;
       }
-      await ctx.reply(VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE);
+      await ctx.reply(failureMessage);
     }
   });
 

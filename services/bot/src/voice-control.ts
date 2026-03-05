@@ -12,6 +12,7 @@
  * - validateVoiceInput (L96) - Enforces Groq file-size and duration limits.
  * - transcribeTelegramAudioWithGroq (L124) - Downloads Telegram file and calls Groq API.
  * - buildTranscriptionSuccessHtml (L187) - Formats recognized text as Telegram quote.
+ * - buildTranscriptionFailureMessage (L197) - Maps runtime errors to user-facing hints.
  */
 
 export const GROQ_TRANSCRIPTION_MODELS = ["whisper-large-v3-turbo", "whisper-large-v3"] as const;
@@ -173,6 +174,20 @@ export const buildTranscriptionSuccessHtml = (transcribedText: string): string =
     `<blockquote>${escapedText}</blockquote>`,
     "и отправлено в чат агента"
   ].join("\n");
+};
+
+export const buildTranscriptionFailureMessage = (error: unknown): string => {
+  /* Keep setup hint only for actual settings errors. */
+  if (error instanceof Error && error.message.includes("Failed to fetch voice-control settings")) {
+    return VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE;
+  }
+
+  /* Surface actionable API/runtime details instead of misleading setup text. */
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return `Не удалось распознать голосовое сообщение: ${error.message}`;
+  }
+
+  return "Не удалось распознать голосовое сообщение: неизвестная ошибка.";
 };
 
 const escapeHtml = (value: string): string => {

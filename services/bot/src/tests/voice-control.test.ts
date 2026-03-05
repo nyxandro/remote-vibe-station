@@ -6,6 +6,8 @@
  */
 
 import {
+  VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE,
+  buildTranscriptionFailureMessage,
   buildTranscriptionSuccessHtml,
   extractTelegramVoiceInput,
   validateVoiceInput
@@ -70,5 +72,24 @@ describe("buildTranscriptionSuccessHtml", () => {
     expect(html).toContain("🎤 Голосовое сообщение распознано как:");
     expect(html).toContain("<blockquote>");
     expect(html).toContain("&lt;done&gt; &amp; ok");
+  });
+});
+
+describe("buildTranscriptionFailureMessage", () => {
+  it("returns setup hint for settings endpoint failures", () => {
+    /* Missing/invalid saved settings must still show concise setup instruction. */
+    const message = buildTranscriptionFailureMessage(
+      new Error("Failed to fetch voice-control settings: 401")
+    );
+
+    expect(message).toBe(VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE);
+  });
+
+  it("returns detailed runtime message for other failures", () => {
+    /* Runtime errors should be visible to help distinguish API/network issues. */
+    const message = buildTranscriptionFailureMessage(new Error("Groq transcription failed: 429"));
+
+    expect(message).toContain("Не удалось распознать голосовое сообщение");
+    expect(message).toContain("Groq transcription failed: 429");
   });
 });
