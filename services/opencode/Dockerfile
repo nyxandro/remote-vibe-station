@@ -14,4 +14,7 @@ RUN npm install -g opencode-ai
 
 WORKDIR /workspace
 
+COPY --chmod=755 entrypoint.sh /usr/local/bin/opencode-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/opencode-entrypoint.sh"]
 CMD ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]

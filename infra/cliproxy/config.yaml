@@ -1,0 +1,12 @@
+# CLIProxyAPI base config for OpenCode integration.
+# OAuth accounts and runtime auth files are persisted in /root/.cli-proxy-api volume.
+
+# Keep request logging off by default to avoid persisting sensitive prompt payloads.
+request-log: false
+
+# Keep retries explicit for transient upstream errors.
+request-retry: 2
+
+# Note: `api-keys` is intentionally omitted here.
+# If you enable API-key auth later, add keys via Management API or a private config override,
+# then keep CLIPROXY_API_KEY in .env aligned with that configured value.
