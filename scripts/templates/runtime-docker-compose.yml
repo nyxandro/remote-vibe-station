@@ -3,11 +3,6 @@ services:
     image: traefik:v2.11
     command:
       - "--configFile=/etc/traefik/traefik.yml"
-      - "--entrypoints.websecure.http.tls=true"
-      - "--entrypoints.websecure.http.tls.certResolver=le"
-      - "--certificatesresolvers.le.acme.email=${TLS_EMAIL}"
-      - "--certificatesresolvers.le.acme.storage=/acme/acme.json"
-      - "--certificatesresolvers.le.acme.httpChallenge.entryPoint=web"
     ports:
       - "80:80"
       - "443:443"
@@ -86,6 +81,10 @@ services:
       - "traefik.http.routers.miniapp.entrypoints=websecure"
       - "traefik.http.routers.miniapp.tls=true"
       - "traefik.http.routers.miniapp.tls.certresolver=le"
+      - "traefik.http.routers.miniapp.middlewares=miniapp-slash"
+      - "traefik.http.middlewares.miniapp-slash.redirectregex.regex=^https?://([^/]+)/miniapp$"
+      - "traefik.http.middlewares.miniapp-slash.redirectregex.replacement=https://$$1/miniapp/"
+      - "traefik.http.middlewares.miniapp-slash.redirectregex.permanent=true"
       - "traefik.http.services.miniapp.loadbalancer.server.port=4173"
     networks:
       - internal

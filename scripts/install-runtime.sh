@@ -160,12 +160,20 @@ generate_runtime_files() {
   : >"$INSTALL_DIR/infra/traefik/acme.json"
   chmod 600 "$INSTALL_DIR/infra/traefik/acme.json"
 
-  write_file "$INSTALL_DIR/infra/traefik/traefik.yml" <<'EOF'
+  write_file "$INSTALL_DIR/infra/traefik/traefik.yml" <<EOF
 entryPoints:
   web:
     address: ":80"
   websecure:
     address: ":443"
+
+certificatesResolvers:
+  le:
+    acme:
+      email: "${TLS_EMAIL}"
+      storage: /acme/acme.json
+      httpChallenge:
+        entryPoint: web
 
 providers:
   docker:
