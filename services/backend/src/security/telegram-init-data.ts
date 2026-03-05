@@ -13,6 +13,7 @@ import * as crypto from "node:crypto";
 
 const HASH_KEY = "hash";
 const NEWLINE = "\n";
+const WEB_APP_DATA_KEY = "WebAppData";
 
 export const parseInitData = (initData: string): Map<string, string> => {
   /* Parse query string into a map. */
@@ -42,11 +43,8 @@ export const verifyInitData = (initData: string, botToken: string): boolean => {
     .map(([key, value]) => `${key}=${value}`)
     .join(NEWLINE);
 
-  /* Compute HMAC using SHA256(botToken) as secret. */
-  const secretKey = crypto
-    .createHash("sha256")
-    .update(botToken)
-    .digest();
+  /* Compute Telegram WebApp secret key: HMAC-SHA256("WebAppData", botToken). */
+  const secretKey = crypto.createHmac("sha256", WEB_APP_DATA_KEY).update(botToken).digest();
   const computedHash = crypto
     .createHmac("sha256", secretKey)
     .update(dataCheckString)

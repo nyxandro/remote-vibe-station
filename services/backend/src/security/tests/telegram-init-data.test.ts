@@ -13,6 +13,8 @@ import * as crypto from "node:crypto";
 
 import { extractUserId, verifyInitData } from "../telegram-init-data";
 
+const WEB_APP_DATA_KEY = "WebAppData";
+
 const buildInitData = (botToken: string): string => {
   /* Build a signed initData string with valid hash. */
   const params = new URLSearchParams();
@@ -25,7 +27,8 @@ const buildInitData = (botToken: string): string => {
     .map(([key, value]) => `${key}=${value}`)
     .join("\n");
 
-  const secretKey = crypto.createHash("sha256").update(botToken).digest();
+  /* Build secret key exactly as Telegram WebApp docs define it. */
+  const secretKey = crypto.createHmac("sha256", WEB_APP_DATA_KEY).update(botToken).digest();
   const hash = crypto
     .createHmac("sha256", secretKey)
     .update(dataCheckString)
@@ -51,5 +54,13 @@ describe("verifyInitData", () => {
     const initData = buildInitData(botToken).replace("hash=", "hash=deadbeef");
 
     expect(verifyInitData(initData, botToken)).toBe(false);
+  });
+
+  it("returns false when bot token differs", () => {
+    /* initData must be verified only with the token of the launching bot. */
+    const botToken = "test:token";
+    const initData = buildInitData(botToken);
+
+    expect(verifyInitData(initData, "another:token")).toBe(false);
   });
 });

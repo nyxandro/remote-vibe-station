@@ -21,7 +21,6 @@ import { registerOpenCodeWebAuthHttp } from "./opencode-web-auth-http";
 import { OpenCodeWebAuthService } from "./opencode-web-auth";
 import { registerRepairCommand } from "./repair-command";
 import { registerSessionCommands } from "./session-command";
-import { createWebToken } from "./web-token";
 import { OutboxWorker } from "./outbox-worker";
 import { buildStartSummaryMessage, fetchStartupSummary } from "./start-summary";
 import { ThinkingIndicator } from "./thinking-indicator";
@@ -196,25 +195,22 @@ const bootstrap = async (): Promise<void> => {
   };
 
   bot.command("open", async (ctx) => {
-    /* Provide Mini App link to admin users. */
+    /* Provide only Telegram-native Mini App launch without browser fallback links. */
     if (!isAdmin(ctx.from?.id)) {
       await ctx.reply("Access denied");
       return;
     }
 
     const url = `${config.publicBaseUrl}/miniapp`;
-    const token = createWebToken({ adminId: ctx.from!.id, botToken: config.telegramBotToken });
-    const browserUrl = `${url}/#token=${token}`;
 
-    /* Telegram WebApp buttons require HTTPS; fallback to plain link in dev. */
+    /* Telegram WebApp buttons require HTTPS and are the only supported entrypoint. */
     if (url.startsWith("https://")) {
       const button = Markup.button.webApp("Open Mini App", url);
       await ctx.reply("Mini App", Markup.inlineKeyboard([button]));
-      await ctx.reply(`Browser link: ${browserUrl}`);
       return;
     }
 
-    await ctx.reply(`Mini App (dev): ${browserUrl}`);
+    await ctx.reply("Mini App доступен только через Telegram WebApp (нужен HTTPS).");
   });
 
   bot.catch(async (error, ctx) => {
