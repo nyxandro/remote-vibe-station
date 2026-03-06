@@ -13,12 +13,7 @@ const fs = require("node:fs");
 
 const CLIPROXY_MODELS_ENDPOINT_SUFFIX = "/models";
 const DEFAULT_FETCH_TIMEOUT_MS = 10000;
-const OPENAI_REASONING_VARIANTS = {
-  minimal: {
-    reasoningEffort: "minimal",
-    reasoningSummary: "auto",
-    include: ["reasoning.encrypted_content"]
-  },
+const OPENAI_GPT5_DEFAULT_VARIANTS = {
   low: {
     reasoningEffort: "low",
     reasoningSummary: "auto",
@@ -29,6 +24,21 @@ const OPENAI_REASONING_VARIANTS = {
     reasoningSummary: "auto",
     include: ["reasoning.encrypted_content"]
   },
+  high: {
+    reasoningEffort: "high",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  }
+};
+const OPENAI_GPT54_VARIANTS = {
+  ...OPENAI_GPT5_DEFAULT_VARIANTS,
+  xhigh: {
+    reasoningEffort: "xhigh",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  }
+};
+const OPENAI_GPT5_PRO_VARIANTS = {
   high: {
     reasoningEffort: "high",
     reasoningSummary: "auto",
@@ -120,8 +130,17 @@ function resolveVariantsForModel(modelID) {
     return null;
   }
 
+  /* GPT-5.4 supports low/medium/high/xhigh while gpt-5-pro is high-only. */
+  if (normalized.startsWith("gpt-5-pro")) {
+    return cloneVariants(OPENAI_GPT5_PRO_VARIANTS);
+  }
+
+  if (normalized.startsWith("gpt-5.4")) {
+    return cloneVariants(OPENAI_GPT54_VARIANTS);
+  }
+
   if (normalized.startsWith("gpt-5")) {
-    return OPENAI_REASONING_VARIANTS;
+    return cloneVariants(OPENAI_GPT5_DEFAULT_VARIANTS);
   }
 
   if (normalized.startsWith("claude")) {
@@ -133,6 +152,11 @@ function resolveVariantsForModel(modelID) {
   }
 
   return null;
+}
+
+function cloneVariants(variants) {
+  /* Return a per-model copy so one model update never mutates another model descriptor. */
+  return JSON.parse(JSON.stringify(variants));
 }
 
 async function fetchCliproxyModelIds(input) {

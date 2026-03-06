@@ -38,15 +38,12 @@ test("extractModelIdsFromCatalog throws on empty catalog", () => {
 
 test("buildModelsMap maps every id to OpenCode model descriptor", () => {
   /* Dynamic mapper should attach thinking variants for known model families. */
-  assert.deepEqual(buildModelsMap(["gpt-5", "claude-sonnet", "gemini-2.5-pro", "random-model"]), {
-    "gpt-5": {
-      name: "gpt-5",
+  assert.deepEqual(
+    buildModelsMap(["gpt-5.4", "gpt-5-pro", "claude-sonnet", "gemini-2.5-pro", "random-model"]),
+    {
+    "gpt-5.4": {
+      name: "gpt-5.4",
       variants: {
-        minimal: {
-          reasoningEffort: "minimal",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
         low: {
           reasoningEffort: "low",
           reasoningSummary: "auto",
@@ -57,6 +54,21 @@ test("buildModelsMap maps every id to OpenCode model descriptor", () => {
           reasoningSummary: "auto",
           include: ["reasoning.encrypted_content"]
         },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        xhigh: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    },
+    "gpt-5-pro": {
+      name: "gpt-5-pro",
+      variants: {
         high: {
           reasoningEffort: "high",
           reasoningSummary: "auto",
@@ -101,7 +113,8 @@ test("buildModelsMap maps every id to OpenCode model descriptor", () => {
     "random-model": {
       name: "random-model"
     }
-  });
+  }
+  );
 });
 
 test("generateOpenCodeConfigFromEnv fetches /models and builds provider config", async () => {
@@ -113,7 +126,7 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
       CLIPROXY_PROVIDER_NAME: "CLIProxy",
       CLIPROXY_BASE_URL: "http://cliproxy:8317/v1",
       CLIPROXY_API_KEY: "sk-test",
-      CLIPROXY_DEFAULT_MODEL_ID: "gpt-5"
+      CLIPROXY_DEFAULT_MODEL_ID: "gpt-5.4"
     },
     {
       fetchImpl: async (url, init) => {
@@ -121,7 +134,7 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
         return {
           ok: true,
           status: 200,
-          text: async () => JSON.stringify({ data: [{ id: "gpt-5" }, { id: "gpt-5-codex" }] })
+          text: async () => JSON.stringify({ data: [{ id: "gpt-5.4" }, { id: "gpt-5-pro" }] })
         };
       }
     }
@@ -131,14 +144,9 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
   assert.equal(calls[0].url, "http://cliproxy:8317/v1/models");
   assert.equal(calls[0].init.headers.Authorization, "Bearer sk-test");
   assert.deepEqual(config.provider.cliproxy.models, {
-    "gpt-5": {
-      name: "gpt-5",
+    "gpt-5.4": {
+      name: "gpt-5.4",
       variants: {
-        minimal: {
-          reasoningEffort: "minimal",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
         low: {
           reasoningEffort: "low",
           reasoningSummary: "auto",
@@ -153,27 +161,17 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
           reasoningEffort: "high",
           reasoningSummary: "auto",
           include: ["reasoning.encrypted_content"]
+        },
+        xhigh: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
         }
       }
     },
-    "gpt-5-codex": {
-      name: "gpt-5-codex",
+    "gpt-5-pro": {
+      name: "gpt-5-pro",
       variants: {
-        minimal: {
-          reasoningEffort: "minimal",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
         high: {
           reasoningEffort: "high",
           reasoningSummary: "auto",
