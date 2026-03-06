@@ -4,6 +4,9 @@
 # Keep request logging off by default to avoid persisting sensitive prompt payloads.
 request-log: false
 
+# Collect in-memory usage so Mini App can show observed per-account activity.
+usage-statistics-enabled: true
+
 # Keep retries explicit for transient upstream errors.
 request-retry: 2
 

@@ -8,12 +8,13 @@ import { CliproxyAccountService } from "../cliproxy-account.service";
 
 describe("CliproxyAccountService", () => {
   test("builds provider statuses and normalized connected accounts from auth files", async () => {
-    /* Account state should surface both provider connectivity and concrete account identities. */
+    /* Account state should surface both provider connectivity, concrete identities, and observed per-account usage. */
     const api = {
       getAuthFiles: jest.fn().mockResolvedValue([
         {
           id: "codex-user@example.com",
           name: "codex-user@example.com",
+          authIndex: "codex-1",
           provider: "codex",
           email: "codex-user@example.com",
           account: "workspace-1",
@@ -24,6 +25,7 @@ describe("CliproxyAccountService", () => {
         {
           id: "claude-user@example.com",
           name: "claude-user@example.com",
+          authIndex: "claude-1",
           provider: "claude",
           email: "claude-user@example.com",
           account: "team-prod",
@@ -38,6 +40,30 @@ describe("CliproxyAccountService", () => {
         "gemini-api-key": null,
         "vertex-api-key": null
       }),
+      getUsageStatisticsEnabled: jest.fn().mockResolvedValue(true),
+      getUsage: jest.fn().mockResolvedValue([
+        {
+          model: "gpt-5.4",
+          authIndex: "codex-1",
+          timestamp: "2026-03-06T10:05:00.000Z",
+          failed: false,
+          totalTokens: 400
+        },
+        {
+          model: "gpt-5.4",
+          authIndex: "claude-1",
+          timestamp: "2026-03-06T10:06:00.000Z",
+          failed: true,
+          totalTokens: 300
+        },
+        {
+          model: "claude-sonnet-4-5",
+          authIndex: "codex-1",
+          timestamp: "2026-03-06T10:07:00.000Z",
+          failed: false,
+          totalTokens: 200
+        }
+      ]),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn()
     };
@@ -48,6 +74,7 @@ describe("CliproxyAccountService", () => {
     expect(state.providers.find((item: { id: string }) => item.id === "codex")?.connected).toBe(true);
     expect(state.providers.find((item: { id: string }) => item.id === "anthropic")?.connected).toBe(true);
     expect(state.providers.find((item: { id: string }) => item.id === "qwen")?.connected).toBe(false);
+    expect(state.usageTrackingEnabled).toBe(true);
     expect(state.accounts).toEqual([
       {
         id: "claude-user@example.com",
@@ -58,7 +85,14 @@ describe("CliproxyAccountService", () => {
         account: "team-prod",
         label: "Claude Prod",
         status: "ready",
-        statusMessage: "ok"
+        statusMessage: "ok",
+        usage: {
+          requestCount: 1,
+          tokenCount: 300,
+          failedRequestCount: 1,
+          models: ["gpt-5.4"],
+          lastUsedAt: "2026-03-06T10:06:00.000Z"
+        }
       },
       {
         id: "codex-user@example.com",
@@ -69,7 +103,14 @@ describe("CliproxyAccountService", () => {
         account: "workspace-1",
         label: null,
         status: "ready",
-        statusMessage: "ok"
+        statusMessage: "ok",
+        usage: {
+          requestCount: 2,
+          tokenCount: 600,
+          failedRequestCount: 0,
+          models: ["claude-sonnet-4-5", "gpt-5.4"],
+          lastUsedAt: "2026-03-06T10:07:00.000Z"
+        }
       }
     ]);
   });

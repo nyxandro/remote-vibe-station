@@ -139,6 +139,33 @@ export const ProvidersTab = (props: Props) => {
     return Array.from(uniqueDetails);
   };
 
+  const maxTrackedTokens = useMemo(() => {
+    /* Relative bar uses the busiest observed account as 100% to avoid implying provider quota availability. */
+    return Math.max(0, ...(props.cliproxyAccounts?.accounts ?? []).map((account) => account.usage.tokenCount));
+  }, [props.cliproxyAccounts]);
+
+  const formatUsageNumber = (value: number): string => {
+    /* Keep token and request counts compact and locale-aware for quick scanning on mobile. */
+    return new Intl.NumberFormat("en-US").format(Math.max(0, Math.trunc(value)));
+  };
+
+  const formatUsageDate = (value: string | null): string => {
+    /* Empty timestamps should read as no activity yet instead of rendering Invalid Date. */
+    if (!value) {
+      return "еще нет";
+    }
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? "еще нет" : parsed.toLocaleString();
+  };
+
+  const getUsageActivityPercent = (account: CliproxyAccountState["accounts"][number]): number => {
+    /* This bar shows observed activity relative to the busiest connected account, not remaining provider quota. */
+    if (maxTrackedTokens <= 0) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round((account.usage.tokenCount / maxTrackedTokens) * 100)));
+  };
+
   return (
     <section className="providers-shell">
       <div className="settings-header-row">
@@ -243,6 +270,12 @@ export const ProvidersTab = (props: Props) => {
           Здесь отображаются аккаунты, уже подключенные внутри CLIProxy, и отсюда же запускается новая авторизация.
         </div>
 
+        {!props.cliproxyAccounts?.usageTrackingEnabled ? (
+          <div className="project-create-note">
+            CLIProxy: наблюдаемая статистика usage выключена, поэтому активность по аккаунтам пока не собирается.
+          </div>
+        ) : null}
+
         <div className="providers-list">
           {props.cliproxyAccounts?.accounts.map((account) => (
             <div key={`cliproxy-account:${account.id}`} className="providers-item-card">
@@ -256,6 +289,23 @@ export const ProvidersTab = (props: Props) => {
                   {detail}
                 </div>
               ))}
+
+              {/* Observed activity is sourced from CLIProxy usage stats and intentionally labeled as usage, not quota. */}
+              <div className="project-create-note">Запросы: {formatUsageNumber(account.usage.requestCount)}</div>
+              <div className="project-create-note">Токены: {formatUsageNumber(account.usage.tokenCount)}</div>
+              <div className="project-create-note">Ошибки: {formatUsageNumber(account.usage.failedRequestCount)}</div>
+              <div className="project-create-note">Последняя активность: {formatUsageDate(account.usage.lastUsedAt)}</div>
+              {account.usage.models.length > 0 ? (
+                <div className="project-create-note">Модели: {account.usage.models.join(", ")}</div>
+              ) : null}
+              {props.cliproxyAccounts?.usageTrackingEnabled ? (
+                <>
+                  <div className="project-create-note">
+                    Относительная активность: {getUsageActivityPercent(account)}% от самого активного аккаунта
+                  </div>
+                  <progress max={100} value={getUsageActivityPercent(account)} />
+                </>
+              ) : null}
             </div>
           ))}
 

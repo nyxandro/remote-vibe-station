@@ -11,6 +11,7 @@ import { ProvidersTab } from "../ProvidersTab";
 import { CliproxyAccountState, ProxySettingsSnapshot } from "../../types";
 
 const cliproxyAccounts: CliproxyAccountState = {
+  usageTrackingEnabled: true,
   providers: [
     { id: "codex", label: "Codex", connected: true },
     { id: "anthropic", label: "Claude", connected: false }
@@ -25,7 +26,14 @@ const cliproxyAccounts: CliproxyAccountState = {
       account: "workspace-1",
       label: null,
       status: "ready",
-      statusMessage: "ok"
+      statusMessage: "ok",
+      usage: {
+        requestCount: 3,
+        tokenCount: 1450,
+        failedRequestCount: 1,
+        models: ["gpt-5.4", "gpt-5.4-mini"],
+        lastUsedAt: "2026-03-06T16:00:00.000Z"
+      }
     }
   ]
 };
@@ -271,7 +279,7 @@ describe("ProvidersTab", () => {
   });
 
   it("renders CLIProxy account section under add-provider button and shows connected identities", () => {
-    /* CLIProxy accounts should be managed from Providers tab and expose concrete connected account ids. */
+    /* CLIProxy accounts should be managed from Providers tab and expose concrete identities plus observed usage. */
     const onStartCliproxyAuth = vi.fn();
 
     render(
@@ -315,6 +323,10 @@ describe("ProvidersTab", () => {
     expect(screen.getByText("CLIProxy accounts")).toBeTruthy();
     expect(screen.getByText("codex-user@example.com")).toBeTruthy();
     expect(screen.getByText("workspace-1")).toBeTruthy();
+    expect(screen.getByText("Запросы: 3")).toBeTruthy();
+    expect(screen.getByText("Токены: 1,450")).toBeTruthy();
+    expect(screen.getByText("Ошибки: 1")).toBeTruthy();
+    expect(screen.getByText(/Относительная активность:/)).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
     expect(onStartCliproxyAuth).toHaveBeenCalledWith("codex");
@@ -341,6 +353,7 @@ describe("ProvidersTab", () => {
         onCompleteOAuthAuto={vi.fn()}
         onDisconnect={vi.fn()}
         cliproxyAccounts={{
+          usageTrackingEnabled: true,
           providers: [{ id: "codex", label: "Codex", connected: true }],
           accounts: [
             {
@@ -352,7 +365,14 @@ describe("ProvidersTab", () => {
               account: "za.nyxa@gmail.com",
               label: "za.nyxa@gmail.com",
               status: "active",
-              statusMessage: "za.nyxa@gmail.com"
+              statusMessage: "za.nyxa@gmail.com",
+              usage: {
+                requestCount: 1,
+                tokenCount: 10,
+                failedRequestCount: 0,
+                models: ["gpt-5.4"],
+                lastUsedAt: null
+              }
             }
           ]
         }}
@@ -374,5 +394,69 @@ describe("ProvidersTab", () => {
     );
 
     expect(screen.getAllByText("za.nyxa@gmail.com")).toHaveLength(1);
+  });
+
+  it("shows explicit message when CLIProxy usage tracking is disabled", () => {
+    /* Operators should see why activity metrics are missing instead of reading all-zero stats as real usage. */
+    render(
+      <ProvidersTab
+        selected={{
+          model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+          thinking: "high",
+          agent: "build"
+        }}
+        providers={[]}
+        authMethods={{}}
+        isLoading={false}
+        isSubmitting={false}
+        oauthState={null}
+        onRefresh={vi.fn()}
+        onStartConnect={vi.fn()}
+        onSubmitApiKey={vi.fn()}
+        onSubmitOAuthCode={vi.fn()}
+        onCompleteOAuthAuto={vi.fn()}
+        onDisconnect={vi.fn()}
+        cliproxyAccounts={{
+          usageTrackingEnabled: false,
+          providers: [{ id: "codex", label: "Codex", connected: true }],
+          accounts: [
+            {
+              id: "codex-user@example.com",
+              provider: "codex",
+              providerLabel: "Codex",
+              name: "codex-user@example.com",
+              email: "codex-user@example.com",
+              account: null,
+              label: null,
+              status: "ready",
+              statusMessage: null,
+              usage: {
+                requestCount: 0,
+                tokenCount: 0,
+                failedRequestCount: 0,
+                models: [],
+                lastUsedAt: null
+              }
+            }
+          ]
+        }}
+        cliproxyOAuthStart={null}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={proxySnapshot}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={vi.fn()}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/наблюдаемая статистика usage выключена/i)).toBeTruthy();
   });
 });

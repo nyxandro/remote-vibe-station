@@ -12,8 +12,9 @@ describe("CliproxyAccountController", () => {
     /* Controller should pass account status payload through unchanged. */
     const service = {
       getState: jest.fn().mockResolvedValue({
+        usageTrackingEnabled: false,
         providers: [{ id: "codex", label: "Codex", connected: false }],
-        authFiles: []
+        accounts: []
       }),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn()

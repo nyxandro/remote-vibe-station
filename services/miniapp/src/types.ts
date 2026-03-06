@@ -217,6 +217,7 @@ export type CliproxyProviderState = {
 };
 
 export type CliproxyAccountState = {
+  usageTrackingEnabled: boolean;
   providers: CliproxyProviderState[];
   accounts: Array<{
     id: string;
@@ -228,6 +229,13 @@ export type CliproxyAccountState = {
     label: string | null;
     status: string | null;
     statusMessage: string | null;
+    usage: {
+      requestCount: number;
+      tokenCount: number;
+      failedRequestCount: number;
+      models: string[];
+      lastUsedAt: string | null;
+    };
   }>;
 };
 

@@ -10,7 +10,7 @@
 
 import { BadRequestException, Injectable } from "@nestjs/common";
 
-import { CliproxyAuthFile, CliproxyManagementClient, CliproxyProviderId } from "./cliproxy-management.client";
+import { CliproxyAuthFile, CliproxyManagementClient, CliproxyProviderId, CliproxyUsageDetail } from "./cliproxy-management.client";
 
 const PROVIDER_DEFINITIONS: Array<{ id: CliproxyProviderId; label: string }> = [
   { id: "codex", label: "Codex" },
@@ -46,9 +46,17 @@ type CliproxyConnectedAccount = {
   label: string | null;
   status: string | null;
   statusMessage: string | null;
+  usage: {
+    requestCount: number;
+    tokenCount: number;
+    failedRequestCount: number;
+    models: string[];
+    lastUsedAt: string | null;
+  };
 };
 
 export type CliproxyAccountState = {
+  usageTrackingEnabled: boolean;
   providers: ProviderState[];
   accounts: CliproxyConnectedAccount[];
 };
@@ -70,10 +78,15 @@ export class CliproxyAccountService {
   public constructor(private readonly api: CliproxyManagementClient) {}
 
   public async getState(): Promise<CliproxyAccountState> {
-    /* State merges oauth auth-files and static API-key config fields into one provider list. */
-    const [authFiles, config] = await Promise.all([this.api.getAuthFiles(), this.api.getConfig()]);
+    /* State merges oauth auth-files, static API-key config, and observed usage into one provider view. */
+    const [authFiles, config, usageTrackingEnabled, usageDetails] = await Promise.all([
+      this.api.getAuthFiles(),
+      this.api.getConfig(),
+      this.api.getUsageStatisticsEnabled(),
+      this.api.getUsage()
+    ]);
     const loweredAuthFiles = authFiles.map((item) => item.name.toLowerCase());
-    const accounts = this.buildConnectedAccounts(authFiles);
+    const accounts = this.buildConnectedAccounts(authFiles, usageDetails);
 
     const providers = PROVIDER_DEFINITIONS.map((provider) => {
       const hasOauthFile = PROVIDER_FILE_MARKERS[provider.id].some((marker) =>
@@ -88,6 +101,7 @@ export class CliproxyAccountService {
     });
 
     return {
+      usageTrackingEnabled,
       providers,
       accounts
     };
@@ -172,8 +186,8 @@ export class CliproxyAccountService {
     });
   }
 
-  private buildConnectedAccounts(authFiles: CliproxyAuthFile[]): CliproxyConnectedAccount[] {
-    /* Structured auth-file entries should expose human-readable account identity in UI. */
+  private buildConnectedAccounts(authFiles: CliproxyAuthFile[], usageDetails: CliproxyUsageDetail[]): CliproxyConnectedAccount[] {
+    /* Structured auth-file entries should expose human-readable account identity and observed per-account activity. */
     return authFiles
       .map((entry) => {
         const provider = this.resolveProviderFromAuthFile(entry);
@@ -191,11 +205,55 @@ export class CliproxyAccountService {
           account: entry.account,
           label: entry.label,
           status: entry.status,
-          statusMessage: entry.statusMessage
+          statusMessage: entry.statusMessage,
+          usage: this.buildUsageSummary(entry, usageDetails)
         };
       })
       .filter((entry): entry is CliproxyConnectedAccount => entry !== null)
       .sort((left, right) => left.providerLabel.localeCompare(right.providerLabel) || left.name.localeCompare(right.name));
+  }
+
+  private buildUsageSummary(
+    entry: Pick<CliproxyAuthFile, "authIndex" | "id" | "name">,
+    usageDetails: CliproxyUsageDetail[]
+  ): CliproxyConnectedAccount["usage"] {
+    /* Prefer runtime auth_index joins because they are stable across provider account naming differences. */
+    const authIndex = String(entry.authIndex ?? "").trim();
+    const accountMatchers = [authIndex, String(entry.id).trim(), String(entry.name).trim()].filter(Boolean);
+    const matchedUsage = usageDetails.filter((detail) => {
+      const detailIndex = String(detail.authIndex ?? "").trim();
+      return detailIndex.length > 0 && accountMatchers.includes(detailIndex);
+    });
+
+    /* Aggregate only the request details bound to this concrete account identity. */
+    const modelSet = new Set<string>();
+    let requestCount = 0;
+    let tokenCount = 0;
+    let failedRequestCount = 0;
+    let lastUsedAt: string | null = null;
+
+    matchedUsage.forEach((detail) => {
+      const safeTotalTokens = Number.isFinite(detail.totalTokens) ? Math.max(0, detail.totalTokens) : 0;
+
+      requestCount += 1;
+      tokenCount += safeTotalTokens;
+      failedRequestCount += detail.failed ? 1 : 0;
+      if (detail.model.trim()) {
+        modelSet.add(detail.model.trim());
+      }
+
+      if (detail.timestamp && (!lastUsedAt || detail.timestamp > lastUsedAt)) {
+        lastUsedAt = detail.timestamp;
+      }
+    });
+
+    return {
+      requestCount,
+      tokenCount,
+      failedRequestCount,
+      models: Array.from(modelSet).sort((left, right) => left.localeCompare(right)),
+      lastUsedAt
+    };
   }
 
   private resolveProviderFromAuthFile(entry: CliproxyAuthFile): CliproxyProviderId | null {
