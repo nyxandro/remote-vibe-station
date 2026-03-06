@@ -14,11 +14,13 @@ import {
   ProjectRuntimeSettingsPatch,
   ProjectRuntimeSnapshot,
   OpenCodeVersionStatus,
+  SystemMetricsSnapshot,
   SettingsFileSummary,
   VoiceControlSettings
 } from "../types";
 import { ThemeMode } from "../utils/theme";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
+import { ServerParametersAccordion } from "./ServerParametersAccordion";
 import { SettingsEditorModal } from "./SettingsEditorModal";
 
 type ActiveFile = {
@@ -71,6 +73,11 @@ type Props = {
     isUpdating: boolean;
   };
   onUpdateOpenCodeVersion?: () => void;
+  serverMetrics?: {
+    snapshot: SystemMetricsSnapshot | null;
+    isLoading: boolean;
+  };
+  onReloadServerMetrics?: () => void;
 };
 
 export const SettingsTab = (props: Props) => {
@@ -470,8 +477,14 @@ export const SettingsTab = (props: Props) => {
         </div>
       ) : null}
 
+      <ServerParametersAccordion
+        metrics={props.serverMetrics?.snapshot ?? null}
+        isLoading={props.serverMetrics?.isLoading ?? false}
+        onReload={props.onReloadServerMetrics ?? (() => {})}
+      />
+
       <details className="settings-accordion-item">
-        <summary>7. General settings</summary>
+        <summary>8. General settings</summary>
         <div className="settings-accordion-body">
           <div className="settings-theme-toggle" role="group" aria-label="Theme mode">
             <button

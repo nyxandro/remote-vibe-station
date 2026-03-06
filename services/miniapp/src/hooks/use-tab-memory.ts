@@ -19,11 +19,17 @@ const STORAGE_KEY_LAST_WORKSPACE_TAB = "tvoc.miniapp.lastWorkspaceTab";
 
 const WORKSPACE_FALLBACK_TAB: Exclude<TabKey, "projects"> = "files";
 
+const normalizeLegacyTab = (value: string | null): string | null => {
+  /* Keep hook ready for future key migrations while preserving current tab names. */
+  return value;
+};
+
 const isTabKey = (value: string | null): value is TabKey => {
   return (
     value === "projects" ||
     value === "files" ||
     value === "providers" ||
+    value === "proxy" ||
     value === "github" ||
     value === "terminal" ||
     value === "containers" ||
@@ -35,6 +41,7 @@ const isWorkspaceTab = (value: string | null): value is Exclude<TabKey, "project
   return (
     value === "files" ||
     value === "providers" ||
+    value === "proxy" ||
     value === "github" ||
     value === "terminal" ||
     value === "containers" ||
@@ -44,11 +51,11 @@ const isWorkspaceTab = (value: string | null): value is Exclude<TabKey, "project
 
 export const readTabPersistenceState = (): TabPersistenceState => {
   /* Restore current active tab, fallback to Projects for cold start. */
-  const rawActive = localStorage.getItem(STORAGE_KEY_ACTIVE_TAB);
+  const rawActive = normalizeLegacyTab(localStorage.getItem(STORAGE_KEY_ACTIVE_TAB));
   const activeTab: TabKey = isTabKey(rawActive) ? rawActive : "projects";
 
   /* Keep separate memory for last non-project workspace tab. */
-  const rawWorkspace = localStorage.getItem(STORAGE_KEY_LAST_WORKSPACE_TAB);
+  const rawWorkspace = normalizeLegacyTab(localStorage.getItem(STORAGE_KEY_LAST_WORKSPACE_TAB));
   const lastWorkspaceTab = isWorkspaceTab(rawWorkspace) ? rawWorkspace : WORKSPACE_FALLBACK_TAB;
 
   return { activeTab, lastWorkspaceTab };

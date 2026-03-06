@@ -1,0 +1,91 @@
+/**
+ * @fileoverview Tests for CLI/Proxy settings controller contracts.
+ */
+
+import { Request } from "express";
+
+import { ProxySettingsController } from "../proxy-settings.controller";
+
+describe("ProxySettingsController", () => {
+  test("returns current proxy settings snapshot", async () => {
+    /* Mini App should receive both values and export-ready env preview. */
+    const service = {
+      getSettings: jest.fn().mockResolvedValue({
+        mode: "direct",
+        vlessProxyUrl: null,
+        noProxy: "localhost,127.0.0.1,backend",
+        updatedAt: "2026-03-06T10:40:00.000Z",
+        envPreview: {
+          HTTP_PROXY: null,
+          HTTPS_PROXY: null,
+          ALL_PROXY: null,
+          NO_PROXY: "localhost,127.0.0.1,backend"
+        }
+      })
+    };
+
+    const controller = new ProxySettingsController(service as never);
+    const result = await controller.getSettings({ authAdminId: 649624756 } as unknown as Request);
+
+    expect(service.getSettings).toHaveBeenCalledTimes(1);
+    expect(result.mode).toBe("direct");
+    expect(result.envPreview.NO_PROXY).toContain("backend");
+  });
+
+  test("saves proxy settings payload", async () => {
+    /* Save endpoint must pass validated mode/url/no_proxy to service layer. */
+    const service = {
+      getSettings: jest.fn(),
+      applyRuntimeStack: jest.fn(),
+      updateSettings: jest.fn().mockResolvedValue({
+        mode: "vless",
+        vlessProxyUrl: "socks5://vless-proxy:1080",
+        noProxy: "localhost,127.0.0.1,backend",
+        updatedAt: "2026-03-06T10:41:00.000Z",
+        envPreview: {
+          HTTP_PROXY: "socks5://vless-proxy:1080",
+          HTTPS_PROXY: "socks5://vless-proxy:1080",
+          ALL_PROXY: "socks5://vless-proxy:1080",
+          NO_PROXY: "localhost,127.0.0.1,backend"
+        }
+      })
+    };
+
+    const controller = new ProxySettingsController(service as never);
+    const result = await controller.saveSettings(
+      {
+        mode: "vless",
+        vlessProxyUrl: "socks5://vless-proxy:1080",
+        noProxy: "localhost,127.0.0.1,backend"
+      },
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(service.updateSettings).toHaveBeenCalledWith({
+      mode: "vless",
+      vlessProxyUrl: "socks5://vless-proxy:1080",
+      noProxy: "localhost,127.0.0.1,backend"
+    });
+    expect(result.mode).toBe("vless");
+  });
+
+  test("applies runtime compose command", async () => {
+    /* Controller should expose explicit endpoint for applying generated proxy runtime files. */
+    const service = {
+      getSettings: jest.fn(),
+      updateSettings: jest.fn(),
+      applyRuntimeStack: jest.fn().mockResolvedValue({
+        ok: true,
+        command: "docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d",
+        stdout: "started",
+        stderr: ""
+      })
+    };
+
+    const controller = new ProxySettingsController(service as never);
+    const result = await controller.applySettings({ authAdminId: 649624756 } as unknown as Request);
+
+    expect(service.applyRuntimeStack).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(true);
+  });
+});

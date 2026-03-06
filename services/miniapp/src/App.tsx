@@ -28,6 +28,8 @@ import { useProjectGit } from "./hooks/use-project-git";
 import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useProjectRuntime } from "./hooks/use-project-runtime";
+import { useProxySettings } from "./hooks/use-proxy-settings";
+import { useServerMetrics } from "./hooks/use-server-metrics";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
 import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
@@ -114,6 +116,21 @@ export const App = () => {
     checkStatus: checkOpenCodeVersionStatus,
     updateNow: updateOpenCodeVersionNow
   } = useOpenCodeVersion(setError);
+  const {
+    metrics: serverMetrics,
+    isLoading: isServerMetricsLoading,
+    loadMetrics: loadServerMetrics
+  } = useServerMetrics(setError);
+  const {
+    snapshot: proxySettings,
+    isLoading: isProxySettingsLoading,
+    isSaving: isProxySettingsSaving,
+    isApplying: isProxySettingsApplying,
+    applyResult: proxyApplyResult,
+    loadSettings: loadProxySettings,
+    saveSettings: saveProxySettings,
+    applySettings: applyProxySettings
+  } = useProxySettings(setError);
 
   const loadProjects = async (): Promise<void> => {
     try {
@@ -467,6 +484,22 @@ export const App = () => {
     void loadProviderOverview();
   }, [activeTab, loadProviderOverview]);
 
+  useEffect(() => {
+    /* Refresh server diagnostics only when Settings screen is visible. */
+    if (activeTab !== "settings") {
+      return;
+    }
+    void loadServerMetrics();
+  }, [activeTab, loadServerMetrics]);
+
+  useEffect(() => {
+    /* Dedicated CLI/Proxy tab lazily loads persisted proxy profile from backend. */
+    if (activeTab !== "proxy") {
+      return;
+    }
+    void loadProxySettings();
+  }, [activeTab, loadProxySettings]);
+
   const withActiveProject = (run: (projectId: string) => void): void => {
     if (activeId) {
       run(activeId);
@@ -584,6 +617,11 @@ export const App = () => {
             isUpdating: isOpenCodeVersionUpdating
           }}
           onUpdateOpenCodeVersion={() => void updateOpenCodeVersionNow()}
+          serverMetrics={{
+            snapshot: serverMetrics,
+            isLoading: isServerMetricsLoading
+          }}
+          onReloadServerMetrics={() => void loadServerMetrics()}
           iconForEntry={iconForFileEntry}
           onGitRefresh={() => withActiveProject((id) => void loadGitOverview(id))}
           onGitCheckout={(branch) => withActiveProject((id) => void checkoutBranch(id, branch))}
@@ -604,6 +642,16 @@ export const App = () => {
             onDisconnect: (providerID) => void disconnectProvider(providerID),
             onChangeOAuthCodeDraft: (value) =>
               setProviderOAuthState((prev) => (prev ? { ...prev, codeDraft: value } : prev))
+          }}
+          proxyState={{
+            snapshot: proxySettings,
+            isLoading: isProxySettingsLoading,
+            isSaving: isProxySettingsSaving,
+            isApplying: isProxySettingsApplying,
+            applyResult: proxyApplyResult,
+            onReload: () => void loadProxySettings(),
+            onSave: (input) => void saveProxySettings(input),
+            onApply: () => void applyProxySettings()
           }}
         />
       </section>

@@ -11,6 +11,9 @@
  * - VoiceControlSettings (L93) - Persisted Telegram voice-control settings.
  * - ProviderAuthMethod (L99) - Available connect methods per provider.
  * - ProviderOverview (L104) - Providers tab payload from backend.
+ * - SystemMetricsSnapshot - CPU/RAM/disk/network snapshot for Settings diagnostics.
+ * - ProxySettingsSnapshot - CLI/Proxy profile and env preview payload.
+ * - ProxyApplyResult - Result of runtime apply action from CLI/Proxy tab.
  * - OpenCodeVersionStatus (L124) - Current/latest OpenCode version metadata.
  * - OpenCodeVersionUpdateResult (L131) - Result payload for OpenCode update operation.
  * - DiffPreviewResponse (L159) - Token-based diff preview payload.
@@ -141,6 +144,67 @@ export type ProviderOverview = {
     defaultModelID?: string;
   }>;
   authMethods: Record<string, ProviderAuthMethod[]>;
+};
+
+export type SystemMetricsSnapshot = {
+  capturedAt: string;
+  cpu: {
+    cores: number;
+    load1: number;
+    load5: number;
+    load15: number;
+  };
+  memory: {
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    freePercent: number;
+    usedPercent: number;
+  };
+  disk: {
+    rootPath: string;
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    freePercent: number;
+    usedPercent: number;
+  };
+  network: {
+    interfaces: number;
+    rxBytes: number;
+    txBytes: number;
+  };
+};
+
+export type ProxySettingsMode = "direct" | "vless";
+
+export type ProxySettingsInput = {
+  mode: ProxySettingsMode;
+  vlessProxyUrl: string | null;
+  noProxy: string;
+};
+
+export type ProxySettingsSnapshot = ProxySettingsInput & {
+  updatedAt: string;
+  envPreview: {
+    HTTP_PROXY: string | null;
+    HTTPS_PROXY: string | null;
+    ALL_PROXY: string | null;
+    NO_PROXY: string;
+  };
+  runtimeFiles: {
+    runtimeConfigDir: string | null;
+    proxyEnvPath: string | null;
+    overridePath: string | null;
+    recommendedApplyCommand: string | null;
+  };
+};
+
+export type ProxyApplyResult = {
+  ok: true;
+  command: string;
+  stdout: string;
+  stderr: string;
 };
 
 export type OpenCodeVersionStatus = {

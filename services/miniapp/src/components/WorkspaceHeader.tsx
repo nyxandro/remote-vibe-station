@@ -21,7 +21,15 @@ import { ComponentType } from "react";
 
 import { ProjectRecord } from "../types";
 
-export type TabKey = "projects" | "files" | "providers" | "github" | "terminal" | "containers" | "settings";
+export type TabKey =
+  | "projects"
+  | "files"
+  | "providers"
+  | "proxy"
+  | "github"
+  | "terminal"
+  | "containers"
+  | "settings";
 
 type Props = {
   activeProject: ProjectRecord | null;
@@ -38,6 +46,7 @@ const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: ComponentType<{ size?
   { key: "projects", title: "Projects", icon: Folder },
   { key: "files", title: "Files", icon: FileText },
   { key: "providers", title: "Providers", icon: Plug },
+  { key: "proxy", title: "CLI/Proxy", icon: Plug },
   { key: "github", title: "GitHub", icon: Github },
   { key: "terminal", title: "Terminal", icon: Terminal },
   { key: "containers", title: "Containers", icon: Box },
@@ -60,7 +69,11 @@ export const WorkspaceHeader = (props: Props) => {
           const Icon = tab.icon;
           const isActive = props.activeTab === tab.key;
           const disabled =
-            tab.key !== "projects" && tab.key !== "providers" && tab.key !== "settings" && !props.canUseProjectTabs;
+            tab.key !== "projects" &&
+            tab.key !== "providers" &&
+            tab.key !== "proxy" &&
+            tab.key !== "settings" &&
+            !props.canUseProjectTabs;
 
           return (
             <button

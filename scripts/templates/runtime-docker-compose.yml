@@ -1,3 +1,9 @@
+x-logging-defaults: &logging_defaults
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   proxy:
     image: traefik:v2.11
@@ -14,6 +20,7 @@ services:
     networks:
       - public
       - internal
+    logging: *logging_defaults
     restart: unless-stopped
   backend:
     image: ${RVS_BACKEND_IMAGE:?RVS_BACKEND_IMAGE must be set}
@@ -31,8 +38,10 @@ services:
       - OPENCODE_SYNC_ON_START=true
       - OPENCODE_WARM_RECENTS_ON_START=false
       - OPENCODE_WARM_RECENTS_LIMIT=50
+      - RUNTIME_CONFIG_DIR=/runtime-config
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/runtime-config
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
       - opencode_data:/opencode-data
       - opencode_config:/opencode-config
@@ -48,6 +57,7 @@ services:
     networks:
       - internal
       - public
+    logging: *logging_defaults
     restart: unless-stopped
   bot:
     image: ${RVS_BOT_IMAGE:?RVS_BOT_IMAGE must be set}
@@ -72,6 +82,7 @@ services:
     networks:
       - internal
       - public
+    logging: *logging_defaults
     restart: unless-stopped
   miniapp:
     image: ${RVS_MINIAPP_IMAGE:?RVS_MINIAPP_IMAGE must be set}
@@ -89,6 +100,7 @@ services:
     networks:
       - internal
       - public
+    logging: *logging_defaults
     restart: unless-stopped
   cliproxy:
     image: ${RVS_CLIPROXY_IMAGE:?RVS_CLIPROXY_IMAGE must be set}
@@ -101,6 +113,7 @@ services:
       - cliproxy_logs:/CLIProxyAPI/logs
     networks:
       - internal
+    logging: *logging_defaults
     restart: unless-stopped
   opencode:
     image: ${RVS_OPENCODE_IMAGE:?RVS_OPENCODE_IMAGE must be set}
@@ -129,6 +142,7 @@ services:
     networks:
       - internal
       - public
+    logging: *logging_defaults
     restart: unless-stopped
 networks:
   public:

@@ -33,6 +33,16 @@ describe("tab memory", () => {
     });
   });
 
+  it("stores proxy tab independently from providers", () => {
+    /* Proxy section should persist as separate workspace tab without rewriting provider tab state. */
+    persistTabSelection("proxy");
+
+    expect(readTabPersistenceState()).toEqual({
+      activeTab: "proxy",
+      lastWorkspaceTab: "proxy"
+    });
+  });
+
   it("does not overwrite lastWorkspaceTab when selecting projects", () => {
     persistTabSelection("terminal");
     persistTabSelection("projects");

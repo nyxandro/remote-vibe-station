@@ -10,6 +10,7 @@ import { FilesTab } from "./FilesTab";
 import { GitHubTab, GitOverview } from "./GitHubTab";
 import { ProjectsTab } from "./ProjectsTab";
 import { ProvidersTab } from "./ProvidersTab";
+import { ProxyTab } from "./ProxyTab";
 import { SettingsTab } from "./SettingsTab";
 import { TerminalTab } from "./TerminalTab";
 import { TabKey } from "./WorkspaceHeader";
@@ -22,6 +23,10 @@ import {
   OpenCodeSettingsOverview,
   OpenCodeVersionStatus,
   ProviderOverview,
+  ProxyApplyResult,
+  ProxySettingsInput,
+  ProxySettingsSnapshot,
+  SystemMetricsSnapshot,
   ProjectGitSummary,
   ProjectRecord,
   ProjectRuntimeSettingsPatch,
@@ -104,6 +109,11 @@ type Props = {
     isLoading: boolean;
     isUpdating: boolean;
   };
+  serverMetrics?: {
+    snapshot: SystemMetricsSnapshot | null;
+    isLoading: boolean;
+  };
+  onReloadServerMetrics?: () => void;
   onUpdateOpenCodeVersion: () => void;
   iconForEntry: (kind: "file" | "dir", name: string) => JSX.Element;
   onGitRefresh: () => void;
@@ -131,6 +141,16 @@ type Props = {
     onCompleteOAuthAuto: () => void;
     onDisconnect: (providerID: string) => void;
     onChangeOAuthCodeDraft: (value: string) => void;
+  };
+  proxyState: {
+    snapshot: ProxySettingsSnapshot | null;
+    isLoading: boolean;
+    isSaving: boolean;
+    isApplying: boolean;
+    applyResult: ProxyApplyResult | null;
+    onReload: () => void;
+    onSave: (input: ProxySettingsInput) => void;
+    onApply: () => void;
   };
 };
 
@@ -232,6 +252,21 @@ export const WorkspaceTabsContent = (props: Props) => {
     );
   }
 
+  if (props.activeTab === "proxy") {
+    return (
+      <ProxyTab
+        snapshot={props.proxyState.snapshot}
+        isLoading={props.proxyState.isLoading}
+        isSaving={props.proxyState.isSaving}
+        isApplying={props.proxyState.isApplying}
+        applyResult={props.proxyState.applyResult}
+        onReload={props.proxyState.onReload}
+        onSave={props.proxyState.onSave}
+        onApply={props.proxyState.onApply}
+      />
+    );
+  }
+
   return (
     <SettingsTab
       activeId={props.activeId}
@@ -257,6 +292,8 @@ export const WorkspaceTabsContent = (props: Props) => {
       onSaveVoiceControl={props.onSaveVoiceControl}
       openCodeVersion={props.openCodeVersion}
       onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
+      serverMetrics={props.serverMetrics}
+      onReloadServerMetrics={props.onReloadServerMetrics}
     />
   );
 };

@@ -1,3 +1,9 @@
+x-logging-defaults: &logging_defaults
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   vless-proxy:
     image: ghcr.io/xtls/xray-core:latest
@@ -6,6 +12,7 @@ services:
       - ./infra/vless/xray.json:/etc/xray/config.json:ro
     networks:
       - ai_proxy
+    logging: *logging_defaults
     restart: unless-stopped
 
   bot:

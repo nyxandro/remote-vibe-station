@@ -89,6 +89,21 @@ sudo ./scripts/install-runtime.sh \
 
 ## Опциональный VLESS после установки
 
+Можно включать/выключать режим через Mini App -> `CLI/Proxy`.
+При сохранении настроек backend автоматически обновляет:
+
+- `infra/vless/proxy.env`
+- `docker-compose.vless.yml` (в `direct` режиме файл становится no-op override)
+
+После изменения примените compose:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d
+```
+
+Либо делайте это вручную как раньше:
+
 1. Отредактируйте `infra/vless/xray.json` (подставьте реальные VLESS параметры вместо `CHANGE_ME_*`).
 2. При необходимости скорректируйте `infra/vless/proxy.env`.
 3. Запустите стек с override:

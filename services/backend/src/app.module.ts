@@ -56,6 +56,11 @@ import { DataMaintenanceService } from "./maintenance/data-maintenance.service";
 import { GithubAppService } from "./github/github-app.service";
 import { GithubAppStore } from "./github/github-app.store";
 import { TelegramGithubController } from "./telegram/telegram-github.controller";
+import { SystemMetricsController } from "./system/system-metrics.controller";
+import { SystemMetricsService } from "./system/system-metrics.service";
+import { ProxySettingsController } from "./proxy/proxy-settings.controller";
+import { ProxySettingsService } from "./proxy/proxy-settings.service";
+import { ProxySettingsStore } from "./proxy/proxy-settings.store";
 
 @Module({
   imports: [ConfigModule],
@@ -69,7 +74,9 @@ import { TelegramGithubController } from "./telegram/telegram-github.controller"
     TelegramProviderController,
     TelegramGithubController,
     TelegramSessionController,
-    TelegramOutboxController
+    TelegramOutboxController,
+    SystemMetricsController,
+    ProxySettingsController
   ],
   providers: [
     EventsService,
@@ -109,7 +116,10 @@ import { TelegramGithubController } from "./telegram/telegram-github.controller"
     TelegramInitDataGuard,
     DataMaintenanceService,
     GithubAppStore,
-    GithubAppService
+    GithubAppService,
+    SystemMetricsService,
+    ProxySettingsStore,
+    ProxySettingsService
   ]
 })
 export class AppModule {}

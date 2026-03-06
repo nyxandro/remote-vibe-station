@@ -573,7 +573,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("7. General settings"));
+    fireEvent.click(screen.getByText("8. General settings"));
     expect(screen.getByText("OpenCode: 1.2.3")).toBeTruthy();
     expect(screen.getByText("Latest: 1.2.4")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Update OpenCode" }));

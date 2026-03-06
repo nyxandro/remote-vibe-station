@@ -175,6 +175,33 @@
   min-height: 40px;
 }
 
+/* Server diagnostics cards keep CPU/RAM/disk/network grouped and scannable. */
+.server-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+/* Card styling mirrors other settings surfaces for visual consistency. */
+.server-metrics-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.8125rem;
+}
+
+/* Compact section title separates metric categories inside each card. */
+.server-metrics-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .settings-editor-card {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -464,6 +491,7 @@ html[data-theme="dark"] .icon-tool-btn,
 html[data-theme="dark"] .input,
 html[data-theme="dark"] .files-list,
 html[data-theme="dark"] .status-card,
+html[data-theme="dark"] .server-metrics-card,
 html[data-theme="dark"] .placeholder,
 html[data-theme="dark"] .codebox,
 html[data-theme="dark"] .project-card,
