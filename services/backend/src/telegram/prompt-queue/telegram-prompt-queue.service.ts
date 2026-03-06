@@ -182,7 +182,8 @@ export class TelegramPromptQueueService implements OnModuleInit {
             projectSlug: item.projectSlug,
             directory: item.directory,
             promptTextForTelemetry: item.text,
-            parts
+            parts,
+            allowEmptyResponse: true
           });
           this.store.markCompleted(item.id, new Date().toISOString());
         } catch (error) {

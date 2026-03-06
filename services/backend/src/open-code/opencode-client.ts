@@ -32,6 +32,7 @@ import { isBusySessionStale } from "./opencode-session-repair";
 type PromptResult = {
   sessionId: string;
   responseText: string;
+  emptyResponse?: boolean;
   info: {
     providerID: string;
     modelID: string;
@@ -110,6 +111,28 @@ export class OpenCodeClient {
         })
       }
     );
+
+    /* Some multipart prompt flows return 204/empty body while the real answer arrives via runtime events. */
+    if (!response) {
+      return {
+        sessionId,
+        responseText: "",
+        emptyResponse: true,
+        info: {
+          providerID: model.providerID,
+          modelID: model.modelID,
+          mode: "primary",
+          agent,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 }
+          }
+        },
+        parts: []
+      };
+    }
 
     const responseText = this.extractText(response);
     return {

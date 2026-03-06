@@ -185,6 +185,47 @@ describe("OpenCodeClient command APIs", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("returns synthetic result when multipart request has empty response body", async () => {
+    /* Image prompt fallback should keep queue flow alive when OpenCode streams answer without HTTP body. */
+    jest
+      .spyOn(global, "fetch" as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ id: "session-2" })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => ""
+      } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    const result = await client.sendPromptParts(
+      [
+        { type: "text", text: "Посмотри на картинку" },
+        { type: "file", mime: "image/png", url: "file:///tmp/image.png", filename: "image.png" }
+      ],
+      {
+        directory: "/srv/projects/demo",
+        model: { providerID: "opencode", modelID: "big-pickle", variant: "high" },
+        agent: "build"
+      }
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        sessionId: "session-2",
+        responseText: "",
+        emptyResponse: true,
+        parts: [],
+        info: expect.objectContaining({
+          providerID: "opencode",
+          modelID: "big-pickle",
+          agent: "build"
+        })
+      })
+    );
+  });
+
   it("surfaces provider rate-limit details with retry seconds", async () => {
     /* HTTP 429 from OpenCode should include actionable retry hint for Telegram user. */
     jest

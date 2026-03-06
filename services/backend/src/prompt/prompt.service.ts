@@ -90,6 +90,7 @@ export class PromptService {
     directory: string;
     promptTextForTelemetry: string;
     parts: OpenCodePromptInputPart[];
+    allowEmptyResponse?: boolean;
   }): Promise<PromptResult> {
     /* Emit prompt start event before the actual OpenCode request for observability parity. */
     this.events.publish({
@@ -130,6 +131,25 @@ export class PromptService {
         }
       }
     });
+
+    /* Multipart image prompts can finish via runtime stream without immediate HTTP body. */
+    if ((result as { emptyResponse?: boolean }).emptyResponse) {
+      if (input.allowEmptyResponse) {
+        return {
+          sessionId: result.sessionId,
+          responseText: "",
+          model: {
+            providerID: result.info.providerID,
+            modelID: result.info.modelID
+          },
+          mode: result.info.mode,
+          agent: result.info.agent,
+          tokens: { input: 0, output: 0, reasoning: 0 }
+        };
+      }
+
+      throw new Error("OpenCode returned an empty prompt response");
+    }
 
     return this.publishMessageResult(result, {
       activeProject: { slug: input.projectSlug, rootPath: input.directory },
