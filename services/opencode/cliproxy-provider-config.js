@@ -130,9 +130,17 @@ function resolveVariantsForModel(modelID) {
     return null;
   }
 
-  /* GPT-5.4 supports low/medium/high/xhigh while gpt-5-pro is high-only. */
+  /* GPT-5.2+ supports low/medium/high/xhigh while gpt-5-pro is high-only. */
   if (normalized.startsWith("gpt-5-pro")) {
     return cloneVariants(OPENAI_GPT5_PRO_VARIANTS);
+  }
+
+  if (normalized.startsWith("gpt-5.3")) {
+    return cloneVariants(OPENAI_GPT54_VARIANTS);
+  }
+
+  if (normalized.startsWith("gpt-5.2")) {
+    return cloneVariants(OPENAI_GPT54_VARIANTS);
   }
 
   if (normalized.startsWith("gpt-5.4")) {

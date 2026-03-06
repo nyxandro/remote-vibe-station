@@ -39,8 +39,66 @@ test("extractModelIdsFromCatalog throws on empty catalog", () => {
 test("buildModelsMap maps every id to OpenCode model descriptor", () => {
   /* Dynamic mapper should attach thinking variants for known model families. */
   assert.deepEqual(
-    buildModelsMap(["gpt-5.4", "gpt-5-pro", "claude-sonnet", "gemini-2.5-pro", "random-model"]),
+    buildModelsMap([
+      "gpt-5.2",
+      "gpt-5.3-codex",
+      "gpt-5.4",
+      "gpt-5-pro",
+      "claude-sonnet",
+      "gemini-2.5-pro",
+      "random-model"
+    ]),
     {
+    "gpt-5.2": {
+      name: "gpt-5.2",
+      variants: {
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        xhigh: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    },
+    "gpt-5.3-codex": {
+      name: "gpt-5.3-codex",
+      variants: {
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        xhigh: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    },
     "gpt-5.4": {
       name: "gpt-5.4",
       variants: {
@@ -125,8 +183,7 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
       CLIPROXY_PROVIDER_ID: "cliproxy",
       CLIPROXY_PROVIDER_NAME: "CLIProxy",
       CLIPROXY_BASE_URL: "http://cliproxy:8317/v1",
-      CLIPROXY_API_KEY: "sk-test",
-      CLIPROXY_DEFAULT_MODEL_ID: "gpt-5.4"
+      CLIPROXY_API_KEY: "sk-test"
     },
     {
       fetchImpl: async (url, init) => {
@@ -134,7 +191,8 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
         return {
           ok: true,
           status: 200,
-          text: async () => JSON.stringify({ data: [{ id: "gpt-5.4" }, { id: "gpt-5-pro" }] })
+          text: async () =>
+            JSON.stringify({ data: [{ id: "gpt-5.2" }, { id: "gpt-5.3-codex" }, { id: "gpt-5.4" }, { id: "gpt-5-pro" }] })
         };
       }
     }
@@ -144,6 +202,56 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
   assert.equal(calls[0].url, "http://cliproxy:8317/v1/models");
   assert.equal(calls[0].init.headers.Authorization, "Bearer sk-test");
   assert.deepEqual(config.provider.cliproxy.models, {
+    "gpt-5.2": {
+      name: "gpt-5.2",
+      variants: {
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        xhigh: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    },
+    "gpt-5.3-codex": {
+      name: "gpt-5.3-codex",
+      variants: {
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        xhigh: {
+          reasoningEffort: "xhigh",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    },
     "gpt-5.4": {
       name: "gpt-5.4",
       variants: {
