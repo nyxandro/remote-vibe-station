@@ -15,6 +15,7 @@ RUN npm install -g opencode-ai
 WORKDIR /workspace
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/opencode-entrypoint.sh
+COPY cliproxy-provider-config.js /usr/local/bin/cliproxy-provider-config.js
 
 ENTRYPOINT ["/usr/local/bin/opencode-entrypoint.sh"]
 CMD ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]

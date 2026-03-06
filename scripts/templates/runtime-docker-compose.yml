@@ -128,7 +128,6 @@ services:
       - CLIPROXY_BASE_URL=http://cliproxy:8317/v1
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID}
-      - CLIPROXY_MODELS_JSON=${CLIPROXY_MODELS_JSON}
     volumes:
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
       - opencode_data:/root/.local/share/opencode
