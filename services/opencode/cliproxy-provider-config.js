@@ -13,6 +13,56 @@ const fs = require("node:fs");
 
 const CLIPROXY_MODELS_ENDPOINT_SUFFIX = "/models";
 const DEFAULT_FETCH_TIMEOUT_MS = 10000;
+const OPENAI_REASONING_VARIANTS = {
+  minimal: {
+    reasoningEffort: "minimal",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  },
+  low: {
+    reasoningEffort: "low",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  },
+  medium: {
+    reasoningEffort: "medium",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  },
+  high: {
+    reasoningEffort: "high",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  }
+};
+const ANTHROPIC_THINKING_VARIANTS = {
+  high: {
+    thinking: {
+      type: "enabled",
+      budgetTokens: 16000
+    }
+  },
+  max: {
+    thinking: {
+      type: "enabled",
+      budgetTokens: 31999
+    }
+  }
+};
+const GEMINI_THINKING_VARIANTS = {
+  high: {
+    thinkingConfig: {
+      includeThoughts: true,
+      thinkingBudget: 16000
+    }
+  },
+  max: {
+    thinkingConfig: {
+      includeThoughts: true,
+      thinkingBudget: 24576
+    }
+  }
+};
 
 function normalizeNonEmpty(input, fieldName) {
   /* Required fields must be explicit to avoid silently generating broken provider config. */
@@ -55,11 +105,34 @@ function extractModelIdsFromCatalog(payload) {
 }
 
 function buildModelsMap(modelIDs) {
-  /* OpenCode provider config expects object map: modelId -> { name }. */
+  /* OpenCode provider config expects object map: modelId -> { name, variants? }. */
   return modelIDs.reduce((acc, modelID) => {
-    acc[modelID] = { name: modelID };
+    const variants = resolveVariantsForModel(modelID);
+    acc[modelID] = variants ? { name: modelID, variants } : { name: modelID };
     return acc;
   }, {});
+}
+
+function resolveVariantsForModel(modelID) {
+  /* Re-use OpenCode-native variant shapes so Telegram "thinking" picker works for proxied models. */
+  const normalized = String(modelID || "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.startsWith("gpt-5")) {
+    return OPENAI_REASONING_VARIANTS;
+  }
+
+  if (normalized.startsWith("claude")) {
+    return ANTHROPIC_THINKING_VARIANTS;
+  }
+
+  if (normalized.startsWith("gemini")) {
+    return GEMINI_THINKING_VARIANTS;
+  }
+
+  return null;
 }
 
 async function fetchCliproxyModelIds(input) {

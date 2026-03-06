@@ -37,10 +37,70 @@ test("extractModelIdsFromCatalog throws on empty catalog", () => {
 });
 
 test("buildModelsMap maps every id to OpenCode model descriptor", () => {
-  /* OpenCode provider config expects object shape { modelId: { name } }. */
-  assert.deepEqual(buildModelsMap(["gpt-5", "claude-sonnet"]), {
-    "gpt-5": { name: "gpt-5" },
-    "claude-sonnet": { name: "claude-sonnet" }
+  /* Dynamic mapper should attach thinking variants for known model families. */
+  assert.deepEqual(buildModelsMap(["gpt-5", "claude-sonnet", "gemini-2.5-pro", "random-model"]), {
+    "gpt-5": {
+      name: "gpt-5",
+      variants: {
+        minimal: {
+          reasoningEffort: "minimal",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    },
+    "claude-sonnet": {
+      name: "claude-sonnet",
+      variants: {
+        high: {
+          thinking: {
+            type: "enabled",
+            budgetTokens: 16000
+          }
+        },
+        max: {
+          thinking: {
+            type: "enabled",
+            budgetTokens: 31999
+          }
+        }
+      }
+    },
+    "gemini-2.5-pro": {
+      name: "gemini-2.5-pro",
+      variants: {
+        high: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 16000
+          }
+        },
+        max: {
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 24576
+          }
+        }
+      }
+    },
+    "random-model": {
+      name: "random-model"
+    }
   });
 });
 
@@ -71,8 +131,56 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
   assert.equal(calls[0].url, "http://cliproxy:8317/v1/models");
   assert.equal(calls[0].init.headers.Authorization, "Bearer sk-test");
   assert.deepEqual(config.provider.cliproxy.models, {
-    "gpt-5": { name: "gpt-5" },
-    "gpt-5-codex": { name: "gpt-5-codex" }
+    "gpt-5": {
+      name: "gpt-5",
+      variants: {
+        minimal: {
+          reasoningEffort: "minimal",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    },
+    "gpt-5-codex": {
+      name: "gpt-5-codex",
+      variants: {
+        minimal: {
+          reasoningEffort: "minimal",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        low: {
+          reasoningEffort: "low",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        medium: {
+          reasoningEffort: "medium",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        },
+        high: {
+          reasoningEffort: "high",
+          reasoningSummary: "auto",
+          include: ["reasoning.encrypted_content"]
+        }
+      }
+    }
   });
 });
 
