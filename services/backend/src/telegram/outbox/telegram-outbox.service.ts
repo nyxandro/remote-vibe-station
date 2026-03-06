@@ -125,6 +125,9 @@ const buildTrace = (telemetry?: AssistantDelivery["telemetry"]): string => {
 
 @Injectable()
 export class TelegramOutboxService {
+  private readonly assistantResponseSeqBySession = new Map<string, number>();
+  private readonly activeAssistantProgressKeyBySession = new Map<string, string>();
+
   public constructor(
     private readonly streamStore: TelegramStreamStore,
     private readonly outbox: TelegramOutboxStore
@@ -159,7 +162,13 @@ export class TelegramOutboxService {
     this.enqueueThinkingControl({ adminId: input.adminId, action: "stop" });
 
     const chunks = splitTelegramTextWithFooter(body, footer);
-    const streamProgressKey = input.delivery.sessionId ? `assistant:${input.adminId}:${input.delivery.sessionId}` : null;
+    const streamProgressKey = input.delivery.sessionId
+      ? this.resolveAssistantProgressKey({
+          adminId: input.adminId,
+          sessionId: input.delivery.sessionId,
+          createIfMissing: true
+        })
+      : null;
 
     if (binding.streamEnabled && streamProgressKey && chunks.length > 0) {
       /* Reuse the live streamed message as the first final chunk to avoid duplicates. */
@@ -183,6 +192,7 @@ export class TelegramOutboxService {
           disableNotification: !isFinalChunk
         });
       });
+      this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
       return;
     }
 
@@ -197,6 +207,26 @@ export class TelegramOutboxService {
         parseMode: "HTML",
         disableNotification: !isFinalChunk
       });
+    });
+    this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
+  }
+
+  public enqueueAssistantStreamDelta(input: { adminId: number; sessionId: string; text: string }): void {
+    /* Route one assistant delta into the currently active live Telegram message for this response. */
+    const progressKey = this.resolveAssistantProgressKey({
+      adminId: input.adminId,
+      sessionId: input.sessionId,
+      createIfMissing: true
+    });
+    if (!progressKey) {
+      return;
+    }
+
+    this.enqueueProgressReplace({
+      adminId: input.adminId,
+      progressKey,
+      text: input.text,
+      disableNotification: true
     });
   }
 
@@ -310,5 +340,33 @@ export class TelegramOutboxService {
         action: input.action
       }
     });
+  }
+
+  private resolveAssistantProgressKey(input: { adminId: number; sessionId: string; createIfMissing: boolean }): string | null {
+    /* Keep one live Telegram message per assistant response, not per whole OpenCode session. */
+    const existing = this.activeAssistantProgressKeyBySession.get(input.sessionId);
+    if (existing) {
+      return existing;
+    }
+
+    if (!input.createIfMissing) {
+      return null;
+    }
+
+    const nextSeq = (this.assistantResponseSeqBySession.get(input.sessionId) ?? 0) + 1;
+    this.assistantResponseSeqBySession.set(input.sessionId, nextSeq);
+
+    const progressKey = `assistant:${input.adminId}:${input.sessionId}:${nextSeq}`;
+    this.activeAssistantProgressKeyBySession.set(input.sessionId, progressKey);
+    return progressKey;
+  }
+
+  private clearAssistantProgressKey(sessionId: string | null): void {
+    /* Final answer closes the current live message so the next reply gets a fresh one. */
+    if (!sessionId) {
+      return;
+    }
+
+    this.activeAssistantProgressKeyBySession.delete(sessionId);
   }
 }

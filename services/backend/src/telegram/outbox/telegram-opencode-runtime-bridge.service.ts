@@ -234,11 +234,10 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     const nextText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
     const normalizedText = this.normalizeDraftText(nextText);
 
-    this.outbox.enqueueProgressReplace({
+    this.outbox.enqueueAssistantStreamDelta({
       adminId: route.adminId,
-      progressKey: `assistant:${route.adminId}:${sessionID}`,
-      text: normalizedText,
-      disableNotification: true
+      sessionId: sessionID,
+      text: normalizedText
     });
     this.assistantTextBySession.set(sessionID, nextText);
   }

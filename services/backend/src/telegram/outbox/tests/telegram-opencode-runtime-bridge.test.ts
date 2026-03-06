@@ -26,6 +26,7 @@ const makeBridge = () => {
   } as any;
 
   const outbox = {
+    enqueueAssistantStreamDelta: jest.fn(),
     enqueueProgressReplace: jest.fn(),
     enqueueThinkingControl: jest.fn(),
     enqueueStreamNotification: jest.fn()
@@ -62,7 +63,7 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     });
 
     /* No replace-progress message should be enqueued for probe commands. */
-    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
+    expect(outbox.enqueueAssistantStreamDelta).not.toHaveBeenCalled();
   });
 
   it("reuses one progressKey when callID changes for the same tool part", () => {
@@ -243,15 +244,15 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenCalledWith(
       expect.objectContaining({
-        progressKey: "assistant:10:session-delta",
+        sessionId: "session-delta",
         text: "Первая часть"
       })
     );
-    expect(outbox.enqueueProgressReplace).toHaveBeenLastCalledWith(
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        progressKey: "assistant:10:session-delta",
+        sessionId: "session-delta",
         text: "Первая часть и вторая"
       })
     );
