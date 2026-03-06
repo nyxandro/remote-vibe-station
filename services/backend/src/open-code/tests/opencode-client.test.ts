@@ -446,6 +446,42 @@ describe("OpenCodeClient command APIs", () => {
     );
   });
 
+  it("filters archived sessions when OpenCode marks them explicitly", async () => {
+    /* Telegram /sessions should not show archive rows when API exposes archive state. */
+    jest
+      .spyOn(global, "fetch" as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify([
+            { id: "session-active", title: "Current thread", archived: false },
+            { id: "session-archive-1", title: "Old thread", archived: true },
+            { id: "session-archive-2", title: "Old thread 2", archivedAt: "2026-03-01T10:00:00.000Z" }
+          ])
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            "session-active": { type: "idle", updatedAt: "2026-03-06T11:23:01.000Z" },
+            "session-archive-1": { type: "idle" },
+            "session-archive-2": { type: "idle" }
+          })
+      } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    const sessions = await client.listSessions({ directory: "/srv/projects/demo", limit: 12 });
+
+    expect(sessions).toEqual([
+      {
+        id: "session-active",
+        title: "Current thread",
+        status: "idle",
+        updatedAt: "2026-03-06T11:23:01.000Z"
+      }
+    ]);
+  });
+
   it("creates and selects explicit session for directory", async () => {
     /* /new should pin created session as active for subsequent prompt execution. */
     const fetchMock = jest.spyOn(global, "fetch" as any).mockResolvedValue({

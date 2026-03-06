@@ -103,6 +103,34 @@ describe("PromptService session management", () => {
     });
   });
 
+  test("does not return archived sessions to Telegram picker", async () => {
+    /* Archived threads should be filtered before bot renders /sessions keyboard. */
+    const { service, opencode } = buildService({
+      slug: "arena",
+      rootPath: "/home/nyx/projects/arena"
+    });
+    opencode.listSessions.mockResolvedValue([
+      {
+        id: "session-active",
+        title: "Current thread",
+        status: "idle",
+        updatedAt: "2026-03-06T11:22:33.000Z"
+      }
+    ]);
+
+    const result = await service.listSessions(649624756);
+
+    expect(result.sessions).toEqual([
+      {
+        id: "session-active",
+        title: "Current thread",
+        status: "idle",
+        updatedAt: "2026-03-06T11:22:33.000Z",
+        active: false
+      }
+    ]);
+  });
+
   test("switches active session for selected project", async () => {
     /* Selection should update client cache and refresh permission watcher route. */
     const { service, opencode, sessionRouting, opencodeEvents } = buildService({

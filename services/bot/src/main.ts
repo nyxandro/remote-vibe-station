@@ -8,12 +8,13 @@
 
 import express from "express";
 import { isIP } from "node:net";
-import { Markup, Telegraf } from "telegraf";
+import { Telegraf } from "telegraf";
 
 import { buildBackendErrorMessage } from "./backend-error";
 import { fetchActiveSessionTitle, formatActiveSessionLine } from "./active-session";
 import { startPeriodicTask } from "./command-sync";
 import { loadConfig } from "./config";
+import { syncMiniAppMenuButton } from "./miniapp-menu-button";
 import { modeReplyKeyboard, registerModeControl } from "./mode-control";
 import { registerOpenCodeCallbacks } from "./opencode-callbacks";
 import { registerOpenCodeAccessCommand } from "./opencode-access-command";
@@ -198,25 +199,6 @@ const bootstrap = async (): Promise<void> => {
     periodicCommandSyncStop?.();
     periodicCommandSyncStop = null;
   };
-
-  bot.command("open", async (ctx) => {
-    /* Provide only Telegram-native Mini App launch without browser fallback links. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    const url = `${config.publicBaseUrl}/miniapp`;
-
-    /* Telegram WebApp buttons require HTTPS and are the only supported entrypoint. */
-    if (url.startsWith("https://")) {
-      const button = Markup.button.webApp("Open Mini App", url);
-      await ctx.reply("Mini App", Markup.inlineKeyboard([button]));
-      return;
-    }
-
-    await ctx.reply("Mini App доступен только через Telegram WebApp (нужен HTTPS).");
-  });
 
   bot.catch(async (error, ctx) => {
     /* Never crash the bot on handler errors. */
@@ -730,6 +712,9 @@ const bootstrap = async (): Promise<void> => {
   };
 
   if (isLocal) {
+    /* Keep Telegram menu button aligned with current deployment even in polling mode. */
+    await syncMiniAppMenuButton(bot.telegram, config.publicBaseUrl);
+
     /* Best-effort initial slash command sync for Telegram menu suggestions. */
     if (primaryAdminId !== null) {
       try {
@@ -760,6 +745,7 @@ const bootstrap = async (): Promise<void> => {
   app.use(bot.webhookCallback("/bot/webhook"));
 
   await bot.telegram.setWebhook(`${config.publicBaseUrl}/bot/webhook`);
+  await syncMiniAppMenuButton(bot.telegram, config.publicBaseUrl);
 
   /* Best-effort initial slash command sync for webhook mode. */
   if (primaryAdminId !== null) {

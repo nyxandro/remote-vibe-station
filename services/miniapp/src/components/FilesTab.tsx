@@ -80,11 +80,13 @@ export const FilesTab = (props: Props) => {
           {props.filePreview ? (
             <>
               <div className="files-preview-title">{props.filePreview.path}</div>
-              <div
-                className="codebox"
-                // Shiki emits already-escaped HTML with spans.
-                dangerouslySetInnerHTML={{ __html: props.filePreviewHtml }}
-              />
+              <div className="files-preview-body">
+                <div
+                  className="codebox"
+                  // Shiki emits already-escaped HTML with spans.
+                  dangerouslySetInnerHTML={{ __html: props.filePreviewHtml }}
+                />
+              </div>
             </>
           ) : (
             <div className="placeholder">Select a file to preview.</div>

@@ -57,7 +57,7 @@ export const WorkspaceHeader = (props: Props) => {
     ? props.telegramStreamEnabled
       ? "Stop streaming to Telegram"
       : "Start streaming to Telegram"
-    : "Open the Mini App inside Telegram or via the /open link (with token)";
+    : "Open the Mini App inside Telegram from the bot menu button";
 
   return (
     <header className="workspace-header-shell">

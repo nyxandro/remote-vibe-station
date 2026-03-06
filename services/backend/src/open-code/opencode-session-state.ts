@@ -16,6 +16,16 @@ export type OpenCodeSessionSummary = {
   updatedAt: string | null;
 };
 
+const isArchivedSessionRecord = (item: Record<string, unknown>): boolean => {
+  /* OpenCode payload shape may vary, so treat common archive markers as authoritative when present. */
+  if (item.archived === true || item.isArchived === true) {
+    return true;
+  }
+
+  const archivedAt = item.archivedAt ?? item.archived_at;
+  return typeof archivedAt === "string" && archivedAt.trim().length > 0;
+};
+
 export const listSessionsViaApi = async (input: {
   request: <T>(path: string, init: RequestInit) => Promise<T>;
   directory: string;
@@ -35,6 +45,8 @@ export const listSessionsViaApi = async (input: {
 
   /* Normalize optional title/status fields because OpenCode payload is not strictly typed. */
   return (Array.isArray(sessions) ? sessions : [])
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .filter((item) => !isArchivedSessionRecord(item))
     .map((item) => {
       const id = String(item?.id ?? "").trim();
       if (!id) {

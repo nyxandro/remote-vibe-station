@@ -30,8 +30,8 @@ describe("buildStartSummaryMessage", () => {
         title: "Sprint planning"
       },
       commands: [
-        { command: "open", description: "Открыть Mini App" },
-        { command: "mode", description: "Настроить model/agent" }
+        { command: "mode", description: "Настроить model/agent" },
+        { command: "sessions", description: "Выбрать сессию" }
       ]
     });
 
@@ -40,8 +40,8 @@ describe("buildStartSummaryMessage", () => {
     expect(text).toContain("Текущая сессия: Sprint planning");
     expect(text).toContain("Незакоммиченные изменения: 4 файлов (+33/-12)");
     expect(text).toContain("Режим: model=opencode/gpt-5-nano, agent=build, thinking=medium");
-    expect(text).toContain("/open - Открыть Mini App");
     expect(text).toContain("/mode - Настроить model/agent");
+    expect(text).toContain("/sessions - Выбрать сессию");
   });
 
   test("handles empty project and command list", () => {
@@ -86,7 +86,7 @@ describe("buildStartSummaryMessage", () => {
         agent: "build"
       },
       session: null,
-      commands: [{ command: "open", description: "Открыть Mini App" }]
+      commands: [{ command: "sessions", description: "Выбрать сессию" }]
     });
 
     expect(text).toContain("Текущий проект: arena");

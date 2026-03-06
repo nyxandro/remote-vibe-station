@@ -24,9 +24,8 @@ export type OpenCodeCommand = {
 };
 
 export const BOT_LOCAL_COMMANDS: TelegramMenuCommand[] = [
-  /* Entry point and Mini App access. */
+  /* Entry point and browser access helper. */
   { command: "start", description: "Запуск бота и справка" },
-  { command: "open", description: "Открыть Mini App" },
   { command: "access", description: "Ссылка во внешний OpenCode UI" },
   { command: "mode", description: "Настроить model/agent" },
   /* Stream management commands required by product flow. */
