@@ -94,14 +94,14 @@ export class TelegramOutboxStore {
     const now = new Date(nowMs).toISOString();
     const file = this.readAll();
 
-    /* Coalesce pending draft snapshots so Telegram stream follows the newest text only. */
-    if (input.mode === "draft" && input.progressKey) {
+    /* Coalesce pending live-progress snapshots so Telegram stream follows the newest text only. */
+    if ((input.mode === "draft" || input.mode === "replace") && input.progressKey) {
       const existing = file.items.find(
         (item) =>
           item.status === "pending" &&
           item.adminId === input.adminId &&
           item.chatId === input.chatId &&
-          item.mode === "draft" &&
+          item.mode === input.mode &&
           item.progressKey === input.progressKey
       );
 
@@ -114,6 +114,18 @@ export class TelegramOutboxStore {
         existing.inFlightBy = undefined;
         existing.inFlightUntil = undefined;
         existing.nextAttemptAt = now;
+
+        /* Drop older duplicate pending snapshots for the same live progress slot. */
+        file.items = file.items.filter(
+          (item) =>
+            item.id === existing.id ||
+            item.status !== "pending" ||
+            item.adminId !== input.adminId ||
+            item.chatId !== input.chatId ||
+            item.mode !== input.mode ||
+            item.progressKey !== input.progressKey
+        );
+
         this.writeAll(file);
         return existing;
       }
