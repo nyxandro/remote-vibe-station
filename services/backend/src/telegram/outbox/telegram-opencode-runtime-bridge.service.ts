@@ -56,7 +56,7 @@ const isNoisyRuntimeProbeCommand = (command: string): boolean => {
 export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressEmittedAtMs = new Map<string, number>();
   private readonly bashProgressKeyByPart = new Map<string, string>();
-  private readonly textDraftLastValueBySession = new Map<string, string>();
+  private readonly assistantTextBySession = new Map<string, string>();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private botUsernamePromise: Promise<string | null> | null = null;
 
@@ -104,6 +104,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
+    if (eventType === "message.delta") {
+      this.handleMessageDelta(properties);
+      return;
+    }
+
     if (eventType === "session.status") {
       this.handleSessionStatus(properties);
       return;
@@ -142,11 +147,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       this.setThinking(route.adminId, sessionID, true);
     } else if (partType === "tool" || partType === "text") {
       this.setThinking(route.adminId, sessionID, false);
-    }
-
-    if (partType === "text") {
-      this.handleTextPartUpdated(route.adminId, sessionID, part);
-      return;
     }
 
     if (partType !== "tool") {
@@ -214,27 +214,33 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     void this.emitFileOperations(part, route);
   }
 
-  private handleTextPartUpdated(adminId: number, sessionID: string, part: any): void {
-    /* Stream the latest assistant text snapshot as a Telegram draft while generation is active. */
-    const textRaw = String(part.text ?? "");
-    const text = textRaw.trim();
-    if (!text) {
+  private handleMessageDelta(properties: Record<string, unknown>): void {
+    /* Accumulate assistant delta text exactly in arrival order for live Telegram updates. */
+    const sessionID = String(properties.sessionID ?? "").trim();
+    if (!sessionID) {
       return;
     }
 
-    const normalizedText = this.normalizeDraftText(text);
-    const previous = this.textDraftLastValueBySession.get(sessionID);
-    if (previous === normalizedText) {
+    const route = this.routes.resolve(sessionID);
+    if (!route) {
       return;
     }
+
+    const delta = String(properties.text ?? "");
+    if (!delta) {
+      return;
+    }
+
+    const nextText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
+    const normalizedText = this.normalizeDraftText(nextText);
 
     this.outbox.enqueueProgressReplace({
-      adminId,
-      progressKey: `assistant:${adminId}:${sessionID}`,
+      adminId: route.adminId,
+      progressKey: `assistant:${route.adminId}:${sessionID}`,
       text: normalizedText,
       disableNotification: true
     });
-    this.textDraftLastValueBySession.set(sessionID, normalizedText);
+    this.assistantTextBySession.set(sessionID, nextText);
   }
 
   private normalizeDraftText(text: string): string {
@@ -297,7 +303,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     const statusType = String((properties.status as any)?.type ?? "");
     if (statusType === "idle") {
       this.setThinking(route.adminId, sessionID, false);
-      this.textDraftLastValueBySession.delete(sessionID);
+      this.assistantTextBySession.delete(sessionID);
     }
   }
 
@@ -314,7 +320,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     this.setThinking(route.adminId, sessionID, false);
-    this.textDraftLastValueBySession.delete(sessionID);
+    this.assistantTextBySession.delete(sessionID);
   }
 
   private setThinking(adminId: number, sessionID: string, active: boolean): void {

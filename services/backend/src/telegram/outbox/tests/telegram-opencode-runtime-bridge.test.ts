@@ -186,8 +186,8 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     expect(firstCall.progressKey).toEqual(secondCall.progressKey);
   });
 
-  it("streams assistant text parts via stable replace key", () => {
-    /* Incremental assistant text should update one live Telegram message in chat history. */
+  it("ignores raw text part updates to avoid echoing the user prompt", () => {
+    /* Raw text parts are noisy and can mirror the user input instead of assistant output. */
     const { bridge, outbox } = makeBridge();
 
     (bridge as any).handlePartUpdated({
@@ -208,19 +208,51 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
-    expect(outbox.enqueueProgressReplace.mock.calls[0][0]).toEqual(
+    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
+  });
+
+  it("streams assistant delta events without echoing user prompt text parts", () => {
+    /* Delta events are the correct live assistant stream source; text parts may contain user echo. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.delta",
+          properties: {
+            sessionID: "session-delta",
+            text: "Первая часть"
+          }
+        })
+      }
+    });
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.delta",
+          properties: {
+            sessionID: "session-delta",
+            text: " и вторая"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
       expect.objectContaining({
-        adminId: 10,
-        progressKey: "assistant:10:session-text",
-        text: "Привет"
+        progressKey: "assistant:10:session-delta",
+        text: "Первая часть"
       })
     );
-    expect(outbox.enqueueProgressReplace.mock.calls[1][0]).toEqual(
+    expect(outbox.enqueueProgressReplace).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        adminId: 10,
-        progressKey: "assistant:10:session-text",
-        text: "Привет, мир"
+        progressKey: "assistant:10:session-delta",
+        text: "Первая часть и вторая"
       })
     );
   });
