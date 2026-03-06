@@ -212,19 +212,29 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
   });
 
-  it("streams assistant delta events without echoing user prompt text parts", () => {
-    /* Delta events are the correct live assistant stream source; text parts may contain user echo. */
+  it("streams assistant text part deltas", () => {
+    /* OpenCode emits final assistant text incrementally via message.part.delta on text parts. */
     const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-1",
+        sessionID: "session-delta"
+      }
+    });
 
     (bridge as any).onEvent({
       type: "opencode.event",
       ts: new Date().toISOString(),
       data: {
         payload: JSON.stringify({
-          type: "message.delta",
+          type: "message.part.delta",
           properties: {
             sessionID: "session-delta",
-            text: "Первая часть"
+            partID: "assistant-part-1",
+            field: "text",
+            delta: "Первая часть"
           }
         })
       }
@@ -235,10 +245,12 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       ts: new Date().toISOString(),
       data: {
         payload: JSON.stringify({
-          type: "message.delta",
+          type: "message.part.delta",
           properties: {
             sessionID: "session-delta",
-            text: " и вторая"
+            partID: "assistant-part-1",
+            field: "text",
+            delta: " и вторая"
           }
         })
       }
@@ -256,6 +268,37 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
         text: "Первая часть и вторая"
       })
     );
+  });
+
+  it("ignores non-text part deltas", () => {
+    /* Reasoning deltas should not leak into Telegram final-answer streaming. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "reasoning",
+        id: "reasoning-part-1",
+        sessionID: "session-delta"
+      }
+    });
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-delta",
+            partID: "reasoning-part-1",
+            field: "text",
+            delta: "скрытое рассуждение"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantStreamDelta).not.toHaveBeenCalled();
   });
 
   it("sends permission approval request as Telegram inline keyboard", () => {

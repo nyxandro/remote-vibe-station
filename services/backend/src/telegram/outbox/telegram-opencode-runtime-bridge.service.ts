@@ -57,6 +57,8 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressEmittedAtMs = new Map<string, number>();
   private readonly bashProgressKeyByPart = new Map<string, string>();
   private readonly assistantTextBySession = new Map<string, string>();
+  private readonly partTypeById = new Map<string, string>();
+  private readonly partIdsBySession = new Map<string, Set<string>>();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private botUsernamePromise: Promise<string | null> | null = null;
 
@@ -104,8 +106,8 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    if (eventType === "message.delta") {
-      this.handleMessageDelta(properties);
+    if (eventType === "message.part.delta") {
+      this.handleMessagePartDelta(properties);
       return;
     }
 
@@ -143,6 +145,15 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     const partType = String(part.type ?? "");
+    const partID = String(part.id ?? "").trim();
+    if (partID) {
+      /* Remember part type so later delta events can distinguish text from reasoning/tool output. */
+      this.partTypeById.set(partID, partType);
+      const sessionPartIds = this.partIdsBySession.get(sessionID) ?? new Set<string>();
+      sessionPartIds.add(partID);
+      this.partIdsBySession.set(sessionID, sessionPartIds);
+    }
+
     if (partType === "reasoning") {
       this.setThinking(route.adminId, sessionID, true);
     } else if (partType === "tool" || partType === "text") {
@@ -214,8 +225,8 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     void this.emitFileOperations(part, route);
   }
 
-  private handleMessageDelta(properties: Record<string, unknown>): void {
-    /* Accumulate assistant delta text exactly in arrival order for live Telegram updates. */
+  private handleMessagePartDelta(properties: Record<string, unknown>): void {
+    /* Stream only assistant text-part deltas; ignore reasoning/tool and unrelated fields. */
     const sessionID = String(properties.sessionID ?? "").trim();
     if (!sessionID) {
       return;
@@ -226,13 +237,20 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    const delta = String(properties.text ?? "");
+    const field = String(properties.field ?? "").trim();
+    const partID = String(properties.partID ?? "").trim();
+    const partType = partID ? this.partTypeById.get(partID) ?? "" : "";
+    if (field !== "text" || partType !== "text") {
+      return;
+    }
+
+    const delta = String(properties.delta ?? "");
     if (!delta) {
       return;
     }
 
     const nextText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
-    const normalizedText = this.normalizeDraftText(nextText);
+    const normalizedText = this.normalizeAssistantStreamText(nextText);
 
     this.outbox.enqueueAssistantStreamDelta({
       adminId: route.adminId,
@@ -242,8 +260,8 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     this.assistantTextBySession.set(sessionID, nextText);
   }
 
-  private normalizeDraftText(text: string): string {
-    /* Keep draft preview within Telegram text limits while preserving the newest output tail. */
+  private normalizeAssistantStreamText(text: string): string {
+    /* Keep streamed preview within Telegram text limits while preserving the newest output tail. */
     if (text.length <= TEXT_DRAFT_MAX_CHARS) {
       return text;
     }
@@ -302,7 +320,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     const statusType = String((properties.status as any)?.type ?? "");
     if (statusType === "idle") {
       this.setThinking(route.adminId, sessionID, false);
-      this.assistantTextBySession.delete(sessionID);
+      this.clearSessionRuntimeState(sessionID);
     }
   }
 
@@ -319,7 +337,18 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     this.setThinking(route.adminId, sessionID, false);
+    this.clearSessionRuntimeState(sessionID);
+  }
+
+  private clearSessionRuntimeState(sessionID: string): void {
+    /* Drop cached stream text and part metadata once the OpenCode turn is fully idle. */
     this.assistantTextBySession.delete(sessionID);
+
+    const sessionPartIds = this.partIdsBySession.get(sessionID);
+    if (sessionPartIds) {
+      sessionPartIds.forEach((partID) => this.partTypeById.delete(partID));
+      this.partIdsBySession.delete(sessionID);
+    }
   }
 
   private setThinking(adminId: number, sessionID: string, active: boolean): void {
