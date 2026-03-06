@@ -48,6 +48,11 @@ export type CliproxyAuthFile = {
   authIndex: string | null;
   name: string;
   provider: string | null;
+  path: string | null;
+  source: string | null;
+  runtimeOnly: boolean;
+  disabled: boolean;
+  unavailable: boolean;
   label: string | null;
   status: string | null;
   statusMessage: string | null;
@@ -244,6 +249,11 @@ export class CliproxyManagementClient {
         authIndex: null,
         name: normalized,
         provider: null,
+        path: null,
+        source: null,
+        runtimeOnly: false,
+        disabled: false,
+        unavailable: false,
         label: null,
         status: null,
         statusMessage: null,
@@ -267,6 +277,11 @@ export class CliproxyManagementClient {
       authIndex: typeof item.auth_index === "string" && item.auth_index.trim() ? item.auth_index.trim() : null,
       name,
       provider: typeof item.provider === "string" && item.provider.trim() ? item.provider.trim() : null,
+      path: typeof (item as any).path === "string" && (item as any).path.trim() ? (item as any).path.trim() : null,
+      source: typeof (item as any).source === "string" && (item as any).source.trim() ? (item as any).source.trim() : null,
+      runtimeOnly: (item as any).runtime_only === true,
+      disabled: (item as any).disabled === true,
+      unavailable: (item as any).unavailable === true,
       label: typeof item.label === "string" && item.label.trim() ? item.label.trim() : null,
       status: typeof item.status === "string" && item.status.trim() ? item.status.trim() : null,
       statusMessage:

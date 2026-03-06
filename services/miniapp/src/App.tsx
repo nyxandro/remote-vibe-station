@@ -139,7 +139,9 @@ export const App = () => {
     oauthStart: cliproxyOAuthStart,
     loadState: loadCliproxyAccounts,
     startOAuth: startCliproxyOAuth,
-    completeOAuth: completeCliproxyOAuth
+    completeOAuth: completeCliproxyOAuth,
+    activateAccount: activateCliproxyAccount,
+    deleteAccount: deleteCliproxyAccount
   } = useCliproxyAccounts(setError);
 
   const loadProjects = async (): Promise<void> => {
@@ -670,7 +672,9 @@ export const App = () => {
             onApply: () => void applyProxySettings(),
             onReloadCliproxy: () => void loadCliproxyAccounts(),
             onStartCliproxyAuth: (provider) => void startCliproxyOAuth(provider),
-            onCompleteCliproxyAuth: (input) => void completeCliproxyOAuth(input)
+            onCompleteCliproxyAuth: (input) => void completeCliproxyOAuth(input),
+            onActivateCliproxyAccount: (accountId) => void activateCliproxyAccount(accountId),
+            onDeleteCliproxyAccount: (accountId) => void deleteCliproxyAccount(accountId)
           }}
         />
       </section>

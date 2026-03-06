@@ -17,7 +17,9 @@ describe("CliproxyAccountController", () => {
         accounts: []
       }),
       startOAuth: jest.fn(),
-      completeOAuth: jest.fn()
+      completeOAuth: jest.fn(),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn()
     };
 
     const controller = new CliproxyAccountController(service as never);
@@ -37,7 +39,9 @@ describe("CliproxyAccountController", () => {
         url: "https://auth.openai.com/...",
         instructions: "Open URL and paste callback URL here"
       }),
-      completeOAuth: jest.fn()
+      completeOAuth: jest.fn(),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn()
     };
 
     const controller = new CliproxyAccountController(service as never);
@@ -52,7 +56,9 @@ describe("CliproxyAccountController", () => {
     const service = {
       getState: jest.fn(),
       startOAuth: jest.fn(),
-      completeOAuth: jest.fn()
+      completeOAuth: jest.fn(),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn()
     };
 
     const controller = new CliproxyAccountController(service as never);
@@ -68,7 +74,9 @@ describe("CliproxyAccountController", () => {
     const service = {
       getState: jest.fn(),
       startOAuth: jest.fn(),
-      completeOAuth: jest.fn().mockResolvedValue(undefined)
+      completeOAuth: jest.fn().mockResolvedValue(undefined),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn()
     };
 
     const controller = new CliproxyAccountController(service as never);
@@ -96,7 +104,9 @@ describe("CliproxyAccountController", () => {
     const service = {
       getState: jest.fn(),
       startOAuth: jest.fn(),
-      completeOAuth: jest.fn()
+      completeOAuth: jest.fn(),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn()
     };
 
     const controller = new CliproxyAccountController(service as never);
@@ -111,5 +121,63 @@ describe("CliproxyAccountController", () => {
       )
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(service.completeOAuth).not.toHaveBeenCalled();
+  });
+
+  test("activates selected CLIProxy account", async () => {
+    /* Controller should expose manual account switch for Mini App account cards. */
+    const service = {
+      getState: jest.fn(),
+      startOAuth: jest.fn(),
+      completeOAuth: jest.fn(),
+      activateAccount: jest.fn().mockResolvedValue(undefined),
+      deleteAccount: jest.fn()
+    };
+
+    const controller = new CliproxyAccountController(service as never);
+    const result = await controller.activateAccount(
+      "codex-user@example.com",
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(service.activateAccount).toHaveBeenCalledWith({ accountId: "codex-user@example.com" });
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("deletes selected CLIProxy account", async () => {
+    /* Controller should allow removing obsolete auth files from the runtime pool. */
+    const service = {
+      getState: jest.fn(),
+      startOAuth: jest.fn(),
+      completeOAuth: jest.fn(),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn().mockResolvedValue(undefined)
+    };
+
+    const controller = new CliproxyAccountController(service as never);
+    const result = await controller.deleteAccount(
+      "codex-user@example.com",
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(service.deleteAccount).toHaveBeenCalledWith({ accountId: "codex-user@example.com" });
+    expect(result).toEqual({ ok: true });
+  });
+
+  test("rejects account mutation for traversal-like account id", async () => {
+    /* Controller should block path-like ids before they reach runtime auth mutation flows. */
+    const service = {
+      getState: jest.fn(),
+      startOAuth: jest.fn(),
+      completeOAuth: jest.fn(),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn()
+    };
+
+    const controller = new CliproxyAccountController(service as never);
+
+    await expect(
+      controller.activateAccount("../codex-user@example.com", { authAdminId: 649624756 } as unknown as Request)
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(service.activateAccount).not.toHaveBeenCalled();
   });
 });

@@ -227,6 +227,9 @@ export type CliproxyAccountState = {
     email: string | null;
     account: string | null;
     label: string | null;
+    disabled: boolean;
+    unavailable: boolean;
+    canManage: boolean;
     status: string | null;
     statusMessage: string | null;
     usage: {

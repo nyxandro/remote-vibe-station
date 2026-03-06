@@ -6,6 +6,7 @@
  * - getInitData (L13) - Reads initData from Telegram WebApp.
  * - apiGet (L22) - GET helper with Telegram initData.
  * - apiPost (L35) - POST helper with Telegram initData.
+ * - apiDelete (L64) - DELETE helper with Telegram initData.
  */
 
 const INIT_DATA_HEADER = "x-telegram-init-data";
@@ -88,6 +89,16 @@ export const apiGet = async <T>(path: string): Promise<T> => {
 
 export const apiPost = async <T>(path: string, body: unknown): Promise<T> => {
   /* Perform authenticated POST request. */
+  return apiWithJsonBody<T>(path, "POST", body);
+};
+
+export const apiDelete = async <T>(path: string): Promise<T> => {
+  /* Perform authenticated DELETE request. */
+  return apiWithJsonBody<T>(path, "DELETE");
+};
+
+const apiWithJsonBody = async <T>(path: string, method: "POST" | "DELETE", body?: unknown): Promise<T> => {
+  /* Reuse one JSON request helper so POST/DELETE keep identical auth and error handling. */
   const initData = getInitData();
   const webToken = getWebToken();
   const headers: Record<string, string> = {
@@ -101,9 +112,9 @@ export const apiPost = async <T>(path: string, body: unknown): Promise<T> => {
   }
 
   const response = await fetch(path, {
-    method: "POST",
+    method,
     headers,
-    body: JSON.stringify(body)
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {})
   });
 
   if (!response.ok) {

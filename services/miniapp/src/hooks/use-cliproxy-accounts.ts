@@ -2,12 +2,12 @@
  * @fileoverview Hook for CLIProxy account onboarding and status management.
  *
  * Exports:
- * - useCliproxyAccounts - Loads provider statuses and executes OAuth start/callback.
+ * - useCliproxyAccounts - Loads provider statuses and executes OAuth/account management actions.
  */
 
 import { useCallback, useState } from "react";
 
-import { apiGet, apiPost } from "../api/client";
+import { apiDelete, apiGet, apiPost } from "../api/client";
 import { CliproxyAccountState, CliproxyOAuthStartPayload, CliproxyProviderState } from "../types";
 
 type OAuthCompletionInput = {
@@ -75,6 +75,40 @@ export const useCliproxyAccounts = (setError: (value: string | null) => void) =>
     [loadState, setError]
   );
 
+  const activateAccount = useCallback(
+    async (accountId: string): Promise<void> => {
+      /* Manual switch should persist in CLIProxy runtime and then refresh account state. */
+      try {
+        setError(null);
+        setIsSubmitting(true);
+        await apiPost<{ ok: true }>(`/api/telegram/cliproxy/accounts/${encodeURIComponent(accountId)}/activate`, {});
+        await loadState();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to activate CLIProxy account");
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [loadState, setError]
+  );
+
+  const deleteAccount = useCallback(
+    async (accountId: string): Promise<void> => {
+      /* Removing stale auth files should also refresh the list immediately after success. */
+      try {
+        setError(null);
+        setIsSubmitting(true);
+        await apiDelete<{ ok: true }>(`/api/telegram/cliproxy/accounts/${encodeURIComponent(accountId)}`);
+        await loadState();
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to delete CLIProxy account");
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [loadState, setError]
+  );
+
   return {
     state,
     isLoading,
@@ -83,6 +117,8 @@ export const useCliproxyAccounts = (setError: (value: string | null) => void) =>
     setOauthStart,
     loadState,
     startOAuth,
-    completeOAuth
+    completeOAuth,
+    activateAccount,
+    deleteAccount
   };
 };

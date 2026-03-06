@@ -167,6 +167,8 @@ type Props = {
       state?: string;
       error?: string;
     }) => void;
+    onActivateCliproxyAccount: (accountId: string) => void;
+    onDeleteCliproxyAccount: (accountId: string) => void;
   };
 };
 
@@ -276,6 +278,8 @@ export const WorkspaceTabsContent = (props: Props) => {
         onReloadCliproxy={props.proxyState.onReloadCliproxy}
         onStartCliproxyAuth={props.proxyState.onStartCliproxyAuth}
         onCompleteCliproxyAuth={props.proxyState.onCompleteCliproxyAuth}
+        onActivateCliproxyAccount={props.proxyState.onActivateCliproxyAccount}
+        onDeleteCliproxyAccount={props.proxyState.onDeleteCliproxyAccount}
         onReloadProxy={props.proxyState.onReload}
         onSaveProxy={props.proxyState.onSave}
         onApplyProxy={props.proxyState.onApply}

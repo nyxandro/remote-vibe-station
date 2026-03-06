@@ -66,6 +66,7 @@ import { ProxySettingsService } from "./proxy/proxy-settings.service";
 import { ProxySettingsStore } from "./proxy/proxy-settings.store";
 import { CliproxyAccountController } from "./proxy/cliproxy-account.controller";
 import { CliproxyAccountService } from "./proxy/cliproxy-account.service";
+import { CliproxyAuthRuntimeService } from "./proxy/cliproxy-auth-runtime.service";
 import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
 
 @Module({
@@ -131,6 +132,7 @@ import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
     ProxySettingsStore,
     ProxySettingsService,
     CliproxyManagementClient,
+    CliproxyAuthRuntimeService,
     CliproxyAccountService
   ]
 })

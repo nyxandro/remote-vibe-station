@@ -29,6 +29,8 @@ const PERMISSION_CALLBACK_PREFIX = "perm";
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
 const TELEGRAM_DEEP_LINK_BASE = "https://t.me";
 const DIFF_START_PARAM_PREFIX = "diff_";
+const COOLDOWN_MESSAGE_PATTERN = /All credentials for model[\s\S]*?(?:попытка №\d+|attempt #\d+)/gi;
+const SYSTEM_REMINDER_PATTERN = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
 
 type ExtractedFileOperation = {
   kind: "create" | "edit" | "delete";
@@ -60,6 +62,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly partTypeById = new Map<string, string>();
   private readonly partIdsBySession = new Map<string, Set<string>>();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
+  private readonly emittedSystemNotificationsBySession = new Map<string, Set<string>>();
   private botUsernamePromise: Promise<string | null> | null = null;
 
   public constructor(
@@ -252,6 +255,9 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     const nextText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
     const normalizedText = this.normalizeAssistantStreamText(nextText);
 
+    /* Forward important runtime/system notices even when stream mode is disabled. */
+    this.enqueueSystemNotifications({ sessionID, adminId: route.adminId, text: nextText });
+
     this.outbox.enqueueAssistantStreamDelta({
       adminId: route.adminId,
       sessionId: sessionID,
@@ -343,6 +349,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private clearSessionRuntimeState(sessionID: string): void {
     /* Drop cached stream text and part metadata once the OpenCode turn is fully idle. */
     this.assistantTextBySession.delete(sessionID);
+    this.emittedSystemNotificationsBySession.delete(sessionID);
 
     const sessionPartIds = this.partIdsBySession.get(sessionID);
     if (sessionPartIds) {
@@ -363,6 +370,38 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       adminId,
       action: active ? "start" : "stop"
     });
+  }
+
+  private enqueueSystemNotifications(input: { sessionID: string; adminId: number; text: string }): void {
+    /* Surface provider cooldowns and OpenCode system reminders in Telegram as operational notices. */
+    const alreadyEmitted = this.emittedSystemNotificationsBySession.get(input.sessionID) ?? new Set<string>();
+    const matches = [
+      ...this.extractPatternMatches(input.text, COOLDOWN_MESSAGE_PATTERN),
+      ...this.extractPatternMatches(input.text, SYSTEM_REMINDER_PATTERN)
+    ];
+
+    for (const match of matches) {
+      const normalized = match.trim();
+      if (!normalized || alreadyEmitted.has(normalized)) {
+        continue;
+      }
+
+      this.outbox.enqueueAdminNotification({
+        adminId: input.adminId,
+        text: `Служебное сообщение OpenCode:\n\n${normalized}`
+      });
+      alreadyEmitted.add(normalized);
+    }
+
+    if (alreadyEmitted.size > 0) {
+      this.emittedSystemNotificationsBySession.set(input.sessionID, alreadyEmitted);
+    }
+  }
+
+  private extractPatternMatches(text: string, pattern: RegExp): string[] {
+    /* Reset global regex state on every scan so repeated calls stay deterministic. */
+    pattern.lastIndex = 0;
+    return Array.from(text.matchAll(pattern)).map((entry) => String(entry[0] ?? ""));
   }
 
   private extractFileOperations(part: any): ExtractedFileOperation[] {

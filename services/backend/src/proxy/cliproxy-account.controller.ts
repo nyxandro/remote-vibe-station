@@ -9,9 +9,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   UnauthorizedException,
@@ -76,6 +78,26 @@ export class CliproxyAccountController {
     return { ok: true };
   }
 
+  @UseGuards(AppAuthGuard)
+  @Post("accounts/:accountId/activate")
+  @HttpCode(HttpStatus.OK)
+  public async activateAccount(@Param("accountId") accountId: string, @Req() req: Request) {
+    /* Manual switch pins one auth file so operators can steer traffic to a specific account. */
+    this.assertAdmin(req);
+    await this.accounts.activateAccount({ accountId: this.assertAccountId(accountId) });
+    return { ok: true };
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Delete("accounts/:accountId")
+  @HttpCode(HttpStatus.OK)
+  public async deleteAccount(@Param("accountId") accountId: string, @Req() req: Request) {
+    /* Deletion removes the stored auth file from CLIProxy management pool. */
+    this.assertAdmin(req);
+    await this.accounts.deleteAccount({ accountId: this.assertAccountId(accountId) });
+    return { ok: true };
+  }
+
   private assertAdmin(req: Request): void {
     /* Keep auth identity check explicit for parity with Telegram endpoints. */
     const adminId = (req as any).authAdminId as number | undefined;
@@ -113,5 +135,17 @@ export class CliproxyAccountController {
     if (!state || (!code && !error)) {
       throw new BadRequestException("Provide callbackUrl or state with code/error");
     }
+  }
+
+  private assertAccountId(accountId?: string): string {
+    /* Account mutations require a concrete auth file identifier from management state payload. */
+    const normalized = typeof accountId === "string" ? accountId.trim() : "";
+    if (!normalized) {
+      throw new BadRequestException("accountId is required");
+    }
+    if (normalized.includes("..") || /[\/\\\0]/.test(normalized)) {
+      throw new BadRequestException("accountId contains forbidden path characters");
+    }
+    return normalized;
   }
 }

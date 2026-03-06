@@ -29,7 +29,8 @@ const makeBridge = () => {
     enqueueAssistantStreamDelta: jest.fn(),
     enqueueProgressReplace: jest.fn(),
     enqueueThinkingControl: jest.fn(),
-    enqueueStreamNotification: jest.fn()
+    enqueueStreamNotification: jest.fn(),
+    enqueueAdminNotification: jest.fn()
   } as any;
 
   const diffPreviews = {
@@ -299,6 +300,82 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     });
 
     expect(outbox.enqueueAssistantStreamDelta).not.toHaveBeenCalled();
+  });
+
+  it("forwards cooldown notices to Telegram admin notifications", () => {
+    /* Provider cooldown messages are easy to miss in Telegram unless surfaced explicitly. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-cooldown",
+        sessionID: "session-cooldown"
+      }
+    });
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-cooldown",
+            partID: "assistant-part-cooldown",
+            field: "text",
+            delta: "All credentials for model gpt-5.4 are cooling down\nповтор через 38с - попытка №6"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 10,
+        text: expect.stringContaining("All credentials for model gpt-5.4 are cooling down")
+      })
+    );
+  });
+
+  it("forwards system reminder blocks only once per session", () => {
+    /* System reminders should reach Telegram, but duplicate deltas must not spam the admin chat. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-reminder",
+        sessionID: "session-reminder"
+      }
+    });
+
+    const payload = {
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-reminder",
+            partID: "assistant-part-reminder",
+            field: "text",
+            delta: "<system-reminder>\nYour operational mode has changed from plan to build.\n</system-reminder>"
+          }
+        })
+      }
+    };
+
+    (bridge as any).onEvent(payload);
+    (bridge as any).onEvent(payload);
+
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(1);
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 10,
+        text: expect.stringContaining("<system-reminder>")
+      })
+    );
   });
 
   it("sends permission approval request as Telegram inline keyboard", () => {

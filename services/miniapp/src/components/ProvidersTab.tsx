@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CliproxyAccountState, CliproxyOAuthStartPayload, ProviderAuthMethod, ProxyApplyResult, ProxySettingsInput, ProxySettingsMode, ProxySettingsSnapshot } from "../types";
 import { ProviderOAuthState } from "../hooks/use-provider-auth";
+import { CliproxyAccountsSection } from "./CliproxyAccountsSection";
 import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 const CLIPROXY_PROVIDER_ID = "cliproxy";
@@ -49,6 +50,8 @@ type Props = {
     state?: string;
     error?: string;
   }) => void;
+  onActivateCliproxyAccount: (accountId: string) => void;
+  onDeleteCliproxyAccount: (accountId: string) => void;
   onReloadProxy: () => void;
   onSaveProxy: (input: ProxySettingsInput) => void;
   onApplyProxy: () => void;
@@ -62,10 +65,6 @@ export const ProvidersTab = (props: Props) => {
   const [proxyMode, setProxyMode] = useState<ProxySettingsMode>("direct");
   const [vlessProxyUrl, setVlessProxyUrl] = useState<string>("");
   const [noProxy, setNoProxy] = useState<string>("localhost,127.0.0.1,backend,opencode,cliproxy");
-  const [callbackUrlDraft, setCallbackUrlDraft] = useState<string>("");
-  const [codeDraft, setCodeDraft] = useState<string>("");
-  const [stateDraft, setStateDraft] = useState<string>("");
-
   const providerMap = useMemo(() => {
     /* Keep O(1) lookup for provider labels in connect modal and oauth forms. */
     return new Map(props.providers.map((item) => [item.id, item.name]));
@@ -109,14 +108,6 @@ export const ProvidersTab = (props: Props) => {
     setNoProxy(props.proxySnapshot.noProxy);
   }, [props.proxySnapshot]);
 
-  useEffect(() => {
-    /* New CLIProxy auth flow must clear stale callback/code values from previous provider attempts. */
-    setCallbackUrlDraft("");
-    setCodeDraft("");
-    setStateDraft(props.cliproxyOAuthStart?.state ?? "");
-  }, [props.cliproxyOAuthStart]);
-
-  const selectedCliproxyProvider = props.cliproxyOAuthStart?.provider;
   const cliproxyUpdatedAtLabel = useMemo(() => {
     /* Keep runtime metadata readable even when backend has not loaded snapshot yet. */
     if (!props.proxySnapshot) {
@@ -125,47 +116,6 @@ export const ProvidersTab = (props: Props) => {
     const parsed = new Date(props.proxySnapshot.updatedAt);
     return Number.isNaN(parsed.getTime()) ? "(unknown date)" : parsed.toLocaleString();
   }, [props.proxySnapshot]);
-
-  const getCliproxyAccountDetails = (account: CliproxyAccountState["accounts"][number]): string[] => {
-    /* CLIProxy may repeat the same identity in email/account/label/status fields, so collapse duplicates for readable cards. */
-    const uniqueDetails = new Set<string>();
-
-    [account.email ?? account.name, account.account, account.label, account.statusMessage].forEach((value) => {
-      const normalized = String(value ?? "").trim();
-      if (normalized) {
-        uniqueDetails.add(normalized);
-      }
-    });
-
-    return Array.from(uniqueDetails);
-  };
-
-  const maxTrackedTokens = useMemo(() => {
-    /* Relative bar uses the busiest observed account as 100% to avoid implying provider quota availability. */
-    return Math.max(0, ...(props.cliproxyAccounts?.accounts ?? []).map((account) => account.usage.tokenCount));
-  }, [props.cliproxyAccounts]);
-
-  const formatUsageNumber = (value: number): string => {
-    /* Keep token and request counts compact and locale-aware for quick scanning on mobile. */
-    return new Intl.NumberFormat("en-US").format(Math.max(0, Math.trunc(value)));
-  };
-
-  const formatUsageDate = (value: string | null): string => {
-    /* Empty timestamps should read as no activity yet instead of rendering Invalid Date. */
-    if (!value) {
-      return "еще нет";
-    }
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.getTime()) ? "еще нет" : parsed.toLocaleString();
-  };
-
-  const getUsageActivityPercent = (account: CliproxyAccountState["accounts"][number]): number => {
-    /* This bar shows observed activity relative to the busiest connected account, not remaining provider quota. */
-    if (maxTrackedTokens <= 0) {
-      return 0;
-    }
-    return Math.max(0, Math.min(100, Math.round((account.usage.tokenCount / maxTrackedTokens) * 100)));
-  };
 
   return (
     <section className="providers-shell">
@@ -261,142 +211,17 @@ export const ProvidersTab = (props: Props) => {
         </>
       ) : null}
 
-      <div className="providers-auth-card">
-        {/* CLIProxy account onboarding now lives here so provider management stays in one place. */}
-        <div className="settings-header-row">
-          <strong>CLIProxy accounts</strong>
-          <button className="btn outline" onClick={props.onReloadCliproxy} disabled={props.isCliproxyLoading} type="button">
-            {props.isCliproxyLoading ? "Loading..." : "Reload accounts"}
-          </button>
-        </div>
-
-        <div className="project-create-note">
-          Здесь отображаются аккаунты, уже подключенные внутри CLIProxy, и отсюда же запускается новая авторизация.
-        </div>
-
-        {!props.cliproxyAccounts?.usageTrackingEnabled ? (
-          <div className="project-create-note">
-            CLIProxy: наблюдаемая статистика usage выключена, поэтому активность по аккаунтам пока не собирается.
-          </div>
-        ) : null}
-
-        <div className="providers-list">
-          {props.cliproxyAccounts?.accounts.map((account) => (
-            <div key={`cliproxy-account:${account.id}`} className="providers-item-card">
-              <div className="providers-item-head">
-                <span className="providers-item-name">{account.providerLabel}</span>
-                <span className="providers-badge connected">{account.status ?? "connected"}</span>
-              </div>
-              {/* Render each human-readable identity/detail only once even if CLIProxy duplicates it across fields. */}
-              {getCliproxyAccountDetails(account).map((detail) => (
-                <div key={`${account.id}:${detail}`} className="project-create-note">
-                  {detail}
-                </div>
-              ))}
-
-              {/* Observed activity is sourced from CLIProxy usage stats and intentionally labeled as usage, not quota. */}
-              <div className="project-create-note">Запросы: {formatUsageNumber(account.usage.requestCount)}</div>
-              <div className="project-create-note">Токены: {formatUsageNumber(account.usage.tokenCount)}</div>
-              <div className="project-create-note">Ошибки: {formatUsageNumber(account.usage.failedRequestCount)}</div>
-              <div className="project-create-note">Последняя активность: {formatUsageDate(account.usage.lastUsedAt)}</div>
-              {account.usage.models.length > 0 ? (
-                <div className="project-create-note">Модели: {account.usage.models.join(", ")}</div>
-              ) : null}
-              {props.cliproxyAccounts?.usageTrackingEnabled ? (
-                <>
-                  <div className="project-create-note">
-                    Относительная активность: {getUsageActivityPercent(account)}% от самого активного аккаунта
-                  </div>
-                  <progress max={100} value={getUsageActivityPercent(account)} />
-                </>
-              ) : null}
-            </div>
-          ))}
-
-          {!props.cliproxyAccounts || props.cliproxyAccounts.accounts.length === 0 ? (
-            <div className="providers-empty">Пока нет подключенных CLIProxy аккаунтов.</div>
-          ) : null}
-        </div>
-
-        <div className="providers-list">
-          {(props.cliproxyAccounts?.providers ?? []).map((provider) => (
-            <div key={`cliproxy-provider:${provider.id}`} className="providers-item-card">
-              <div className="providers-item-head">
-                <span className="providers-item-name">{provider.label}</span>
-                <span className={`providers-badge ${provider.connected ? "connected" : "disconnected"}`}>
-                  {provider.connected ? "Connected" : "Disconnected"}
-                </span>
-              </div>
-              <button
-                className="btn outline"
-                type="button"
-                disabled={props.isCliproxySubmitting}
-                onClick={() => props.onStartCliproxyAuth(provider.id)}
-              >
-                Подключить / обновить
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {props.cliproxyOAuthStart ? (
-          <>
-            {/* Completion accepts pasted callback URL or raw code/state for provider-specific OAuth flows. */}
-            <div className="project-create-note">Provider: {props.cliproxyOAuthStart.provider}</div>
-            <div className="project-create-note">{props.cliproxyOAuthStart.instructions}</div>
-            <a className="btn outline" href={props.cliproxyOAuthStart.url} target="_blank" rel="noreferrer">
-              Открыть авторизацию
-            </a>
-
-            <input
-              id={PROVIDERS_TAB_FIELD_IDS.cliproxyCallbackUrl}
-              name={PROVIDERS_TAB_FIELD_IDS.cliproxyCallbackUrl}
-              aria-label="CLIProxy callback URL"
-              className="input settings-input-compact"
-              placeholder="Вставьте callback URL целиком"
-              value={callbackUrlDraft}
-              onChange={(event) => setCallbackUrlDraft(event.target.value)}
-            />
-            <input
-              id={PROVIDERS_TAB_FIELD_IDS.cliproxyCode}
-              name={PROVIDERS_TAB_FIELD_IDS.cliproxyCode}
-              aria-label="CLIProxy OAuth code"
-              className="input settings-input-compact"
-              placeholder="Или отдельно code"
-              value={codeDraft}
-              onChange={(event) => setCodeDraft(event.target.value)}
-            />
-            <input
-              id={PROVIDERS_TAB_FIELD_IDS.cliproxyState}
-              name={PROVIDERS_TAB_FIELD_IDS.cliproxyState}
-              aria-label="CLIProxy OAuth state"
-              className="input settings-input-compact"
-              placeholder="state"
-              value={stateDraft}
-              onChange={(event) => setStateDraft(event.target.value)}
-            />
-
-            <button
-              className="btn primary"
-              type="button"
-              disabled={props.isCliproxySubmitting || !selectedCliproxyProvider}
-              onClick={() => {
-                if (!selectedCliproxyProvider) {
-                  return;
-                }
-                props.onCompleteCliproxyAuth({
-                  provider: selectedCliproxyProvider,
-                  callbackUrl: callbackUrlDraft.trim() || undefined,
-                  code: codeDraft.trim() || undefined,
-                  state: stateDraft.trim() || undefined
-                });
-              }}
-            >
-              {props.isCliproxySubmitting ? "Submitting..." : "Завершить подключение"}
-            </button>
-          </>
-        ) : null}
-      </div>
+      <CliproxyAccountsSection
+        accounts={props.cliproxyAccounts}
+        oauthStart={props.cliproxyOAuthStart}
+        isLoading={props.isCliproxyLoading}
+        isSubmitting={props.isCliproxySubmitting}
+        onReload={props.onReloadCliproxy}
+        onStartAuth={props.onStartCliproxyAuth}
+        onCompleteAuth={props.onCompleteCliproxyAuth}
+        onActivateAccount={props.onActivateCliproxyAccount}
+        onDeleteAccount={props.onDeleteCliproxyAccount}
+      />
 
       <div className="providers-auth-card">
         {/* Proxy runtime controls stay available here after removing the dedicated CLIProxy tab. */}

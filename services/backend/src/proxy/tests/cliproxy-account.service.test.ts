@@ -16,6 +16,11 @@ describe("CliproxyAccountService", () => {
           name: "codex-user@example.com",
           authIndex: "codex-1",
           provider: "codex",
+          path: "/root/.cli-proxy-api/codex-user@example.com.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
           email: "codex-user@example.com",
           account: "workspace-1",
           status: "ready",
@@ -27,6 +32,11 @@ describe("CliproxyAccountService", () => {
           name: "claude-user@example.com",
           authIndex: "claude-1",
           provider: "claude",
+          path: "/root/.cli-proxy-api/claude-user@example.com.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: true,
+          unavailable: false,
           email: "claude-user@example.com",
           account: "team-prod",
           label: "Claude Prod",
@@ -67,8 +77,12 @@ describe("CliproxyAccountService", () => {
       startOAuth: jest.fn(),
       completeOAuth: jest.fn()
     };
+    const runtime = {
+      setDisabled: jest.fn(),
+      deleteFile: jest.fn()
+    };
 
-    const service = new CliproxyAccountService(api as never);
+    const service = new CliproxyAccountService(api as never, runtime as never);
     const state = await service.getState();
 
     expect(state.providers.find((item: { id: string }) => item.id === "codex")?.connected).toBe(true);
@@ -84,6 +98,9 @@ describe("CliproxyAccountService", () => {
         email: "claude-user@example.com",
         account: "team-prod",
         label: "Claude Prod",
+        disabled: true,
+        unavailable: false,
+        canManage: true,
         status: "ready",
         statusMessage: "ok",
         usage: {
@@ -102,6 +119,9 @@ describe("CliproxyAccountService", () => {
         email: "codex-user@example.com",
         account: "workspace-1",
         label: null,
+        disabled: false,
+        unavailable: false,
+        canManage: true,
         status: "ready",
         statusMessage: "ok",
         usage: {
@@ -123,8 +143,12 @@ describe("CliproxyAccountService", () => {
       startOAuth: jest.fn(),
       completeOAuth: jest.fn().mockResolvedValue(undefined)
     };
+    const runtime = {
+      setDisabled: jest.fn(),
+      deleteFile: jest.fn()
+    };
 
-    const service = new CliproxyAccountService(api as never);
+    const service = new CliproxyAccountService(api as never, runtime as never);
 
     await service.completeOAuth({
       provider: "codex",
@@ -147,8 +171,12 @@ describe("CliproxyAccountService", () => {
       startOAuth: jest.fn(),
       completeOAuth: jest.fn().mockResolvedValue(undefined)
     };
+    const runtime = {
+      setDisabled: jest.fn(),
+      deleteFile: jest.fn()
+    };
 
-    const service = new CliproxyAccountService(api as never);
+    const service = new CliproxyAccountService(api as never, runtime as never);
 
     await expect(
       service.completeOAuth({
@@ -156,5 +184,195 @@ describe("CliproxyAccountService", () => {
         callbackUrl: "http://localhost:1455/auth/callback?foo=bar"
       })
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  test("activates selected account and disables provider siblings", async () => {
+    /* Manual account switch should pin one enabled auth file per provider. */
+    const api = {
+      getAuthFiles: jest.fn().mockResolvedValue([
+        {
+          id: "codex-a",
+          name: "codex-a",
+          authIndex: "codex-1",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-a.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
+          email: "a@example.com",
+          account: null,
+          label: null,
+          status: "active",
+          statusMessage: ""
+        },
+        {
+          id: "codex-b",
+          name: "codex-b",
+          authIndex: "codex-2",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-b.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: true,
+          unavailable: false,
+          email: "b@example.com",
+          account: null,
+          label: null,
+          status: "ready",
+          statusMessage: ""
+        },
+        {
+          id: "claude-a",
+          name: "claude-a",
+          authIndex: "claude-1",
+          provider: "claude",
+          path: "/root/.cli-proxy-api/claude-a.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
+          email: null,
+          account: null,
+          label: null,
+          status: "ready",
+          statusMessage: ""
+        }
+      ])
+    };
+    const runtime = {
+      setDisabled: jest.fn().mockResolvedValue(undefined),
+      deleteFile: jest.fn()
+    };
+
+    const service = new CliproxyAccountService(api as never, runtime as never);
+    await service.activateAccount({ accountId: "codex-b" });
+
+    expect(runtime.setDisabled).toHaveBeenCalledTimes(2);
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(1, {
+      filePath: "/root/.cli-proxy-api/codex-b.json",
+      disabled: false
+    });
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(2, {
+      filePath: "/root/.cli-proxy-api/codex-a.json",
+      disabled: true
+    });
+  });
+
+  test("rolls back account activation mutations when sibling update fails", async () => {
+    /* Partial runtime failure should restore already-mutated auth files to their original disabled flags. */
+    const api = {
+      getAuthFiles: jest.fn().mockResolvedValue([
+        {
+          id: "codex-a",
+          name: "codex-a",
+          authIndex: "codex-1",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-a.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
+          email: "a@example.com",
+          account: null,
+          label: null,
+          status: "active",
+          statusMessage: ""
+        },
+        {
+          id: "codex-b",
+          name: "codex-b",
+          authIndex: "codex-2",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-b.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: true,
+          unavailable: false,
+          email: "b@example.com",
+          account: null,
+          label: null,
+          status: "ready",
+          statusMessage: ""
+        }
+      ])
+    };
+    const runtime = {
+      setDisabled: jest
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error("disable failed"))
+        .mockResolvedValueOnce(undefined),
+      deleteFile: jest.fn()
+    };
+
+    const service = new CliproxyAccountService(api as never, runtime as never);
+
+    await expect(service.activateAccount({ accountId: "codex-b" })).rejects.toThrow("disable failed");
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(1, {
+      filePath: "/root/.cli-proxy-api/codex-b.json",
+      disabled: false
+    });
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(2, {
+      filePath: "/root/.cli-proxy-api/codex-a.json",
+      disabled: true
+    });
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(3, {
+      filePath: "/root/.cli-proxy-api/codex-b.json",
+      disabled: true
+    });
+  });
+
+  test("deletes selected account and re-enables remaining sibling when needed", async () => {
+    /* Removing the active auth file should not leave the provider with only disabled leftovers. */
+    const api = {
+      getAuthFiles: jest.fn().mockResolvedValue([
+        {
+          id: "codex-a",
+          name: "codex-a",
+          authIndex: "codex-1",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-a.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
+          email: null,
+          account: null,
+          label: null,
+          status: "active",
+          statusMessage: ""
+        },
+        {
+          id: "codex-b",
+          name: "codex-b",
+          authIndex: "codex-2",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-b.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: true,
+          unavailable: false,
+          email: null,
+          account: null,
+          label: null,
+          status: "ready",
+          statusMessage: ""
+        }
+      ])
+    };
+    const runtime = {
+      setDisabled: jest.fn().mockResolvedValue(undefined),
+      deleteFile: jest.fn().mockResolvedValue(undefined)
+    };
+
+    const service = new CliproxyAccountService(api as never, runtime as never);
+    await service.deleteAccount({ accountId: "codex-a" });
+
+    expect(runtime.setDisabled).toHaveBeenCalledWith({
+      filePath: "/root/.cli-proxy-api/codex-b.json",
+      disabled: false
+    });
+    expect(runtime.deleteFile).toHaveBeenCalledWith({ filePath: "/root/.cli-proxy-api/codex-a.json" });
   });
 });

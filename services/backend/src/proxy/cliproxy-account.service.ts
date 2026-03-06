@@ -8,8 +8,9 @@
  * - CliproxyAccountService - Builds statuses and proxies OAuth start/callback calls.
  */
 
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 
+import { CliproxyAuthRuntimeService } from "./cliproxy-auth-runtime.service";
 import { CliproxyAuthFile, CliproxyManagementClient, CliproxyProviderId, CliproxyUsageDetail } from "./cliproxy-management.client";
 
 const PROVIDER_DEFINITIONS: Array<{ id: CliproxyProviderId; label: string }> = [
@@ -44,6 +45,9 @@ type CliproxyConnectedAccount = {
   email: string | null;
   account: string | null;
   label: string | null;
+  disabled: boolean;
+  unavailable: boolean;
+  canManage: boolean;
   status: string | null;
   statusMessage: string | null;
   usage: {
@@ -75,7 +79,12 @@ export type CliproxyOAuthCompleteInput = {
 
 @Injectable()
 export class CliproxyAccountService {
-  public constructor(private readonly api: CliproxyManagementClient) {}
+  private readonly logger = new Logger(CliproxyAccountService.name);
+
+  public constructor(
+    private readonly api: CliproxyManagementClient,
+    private readonly runtime: CliproxyAuthRuntimeService
+  ) {}
 
   public async getState(): Promise<CliproxyAccountState> {
     /* State merges oauth auth-files, static API-key config, and observed usage into one provider view. */
@@ -142,6 +151,86 @@ export class CliproxyAccountService {
     });
   }
 
+  public async activateAccount(input: { accountId: string }): Promise<void> {
+    /* Manual switch keeps only one enabled auth file per provider so operators can pin traffic explicitly. */
+    const authFiles = await this.api.getAuthFiles();
+    const target = this.requireManageableAuthFile(authFiles, input.accountId);
+    const targetProvider = this.resolveProviderFromAuthFile(target);
+    if (!targetProvider) {
+      throw new BadRequestException(`Unsupported auth file provider for account '${input.accountId}'`);
+    }
+
+    const siblings = authFiles.filter((entry) => {
+      return this.resolveProviderFromAuthFile(entry) === targetProvider && this.isManageableAuthFile(entry);
+    });
+
+    const updates = [target, ...siblings.filter((entry) => entry.id !== target.id)].sort((left, right) => {
+      /* Enable the chosen account first so one runtime failure cannot leave provider with zero active entries. */
+      if (left.id === target.id) {
+        return -1;
+      }
+      if (right.id === target.id) {
+        return 1;
+      }
+      return left.name.localeCompare(right.name);
+    });
+
+    const originalDisabledByPath = new Map(
+      updates.map((entry) => [this.requireFilePath(entry), entry.disabled] as const)
+    );
+    const appliedPaths: string[] = [];
+
+    try {
+      for (const entry of updates) {
+        const filePath = this.requireFilePath(entry);
+        await this.runtime.setDisabled({ filePath, disabled: entry.id !== target.id });
+        appliedPaths.push(filePath);
+      }
+    } catch (error) {
+      /* Best-effort rollback restores already-mutated entries to their observed pre-activation state. */
+      for (const filePath of appliedPaths.reverse()) {
+        try {
+          await this.runtime.setDisabled({
+            filePath,
+            disabled: originalDisabledByPath.get(filePath) ?? false
+          });
+        } catch (rollbackError) {
+          const rollbackDetails = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          this.logger.error(
+            `Failed to rollback CLIProxy account activation for target='${target.id}' path='${filePath}': ${rollbackDetails}`
+          );
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  public async deleteAccount(input: { accountId: string }): Promise<void> {
+    /* Deletion removes the auth file entirely and re-enables one sibling if the provider would become empty/disabled. */
+    const authFiles = await this.api.getAuthFiles();
+    const target = this.requireManageableAuthFile(authFiles, input.accountId);
+    const targetProvider = this.resolveProviderFromAuthFile(target);
+    if (!targetProvider) {
+      throw new BadRequestException(`Unsupported auth file provider for account '${input.accountId}'`);
+    }
+
+    const remaining = authFiles.filter((entry) => {
+      return entry.id !== target.id && this.resolveProviderFromAuthFile(entry) === targetProvider && this.isManageableAuthFile(entry);
+    });
+
+    const fallbackEntry = remaining
+      .slice()
+      .sort((left, right) => left.name.localeCompare(right.name))[0];
+
+    /* Re-enable one deterministic sibling before deletion so provider never ends up with only disabled leftovers. */
+    if (fallbackEntry && remaining.every((entry) => entry.disabled)) {
+      await this.runtime.setDisabled({ filePath: this.requireFilePath(fallbackEntry), disabled: false });
+    }
+
+    await this.runtime.deleteFile({ filePath: this.requireFilePath(target) });
+  }
+
   private parseCallbackUrl(value: string): { code?: string; state?: string; error?: string } {
     /* Browser callback URL can carry values in query or hash fragment depending on provider flow. */
     let url: URL;
@@ -204,6 +293,9 @@ export class CliproxyAccountService {
           email: entry.email,
           account: entry.account,
           label: entry.label,
+          disabled: entry.disabled,
+          unavailable: entry.unavailable,
+          canManage: this.isManageableAuthFile(entry),
           status: entry.status,
           statusMessage: entry.statusMessage,
           usage: this.buildUsageSummary(entry, usageDetails)
@@ -268,6 +360,31 @@ export class CliproxyAccountService {
       PROVIDER_FILE_MARKERS[provider.id].some((marker) => loweredName.includes(marker))
     );
     return match?.id ?? null;
+  }
+
+  private requireManageableAuthFile(authFiles: CliproxyAuthFile[], accountId: string): CliproxyAuthFile {
+    /* Manual operations are limited to persisted OAuth auth files known to CLIProxy management API. */
+    const target = authFiles.find((entry) => entry.id === accountId);
+    if (!target) {
+      throw new BadRequestException(`Unknown account: ${accountId}`);
+    }
+    if (!this.isManageableAuthFile(target)) {
+      throw new BadRequestException(`Account '${accountId}' cannot be managed from Mini App`);
+    }
+    return target;
+  }
+
+  private isManageableAuthFile(entry: CliproxyAuthFile): boolean {
+    /* Only persisted file-backed auth entries can be toggled or deleted safely. */
+    return !entry.runtimeOnly && entry.source === "file" && typeof entry.path === "string" && entry.path.length > 0;
+  }
+
+  private requireFilePath(entry: CliproxyAuthFile): string {
+    /* Runtime mutation path must be explicit to avoid editing the wrong auth entry. */
+    if (!entry.path) {
+      throw new BadRequestException(`Auth file path missing for account '${entry.id}'`);
+    }
+    return entry.path;
   }
 
   private normalizeProvider(provider: string | null): CliproxyProviderId | null {
