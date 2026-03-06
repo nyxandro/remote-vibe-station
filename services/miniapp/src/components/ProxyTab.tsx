@@ -97,7 +97,7 @@ export const ProxyTab = (props: Props) => {
           </span>
         </div>
 
-        {props.cliproxyConnected ? (
+        <div className="settings-actions-grid">
           <button
             className="btn ghost"
             type="button"
@@ -106,21 +106,28 @@ export const ProxyTab = (props: Props) => {
           >
             Disconnect
           </button>
-        ) : (
-          <div className="providers-method-grid">
-            {props.cliproxyMethods.map((method, index) => (
-              <button
-                key={`cliproxy-method:${index}`}
-                className="btn outline"
-                type="button"
-                disabled={props.isProviderSubmitting}
-                onClick={() => props.onStartCliproxyConnect(index)}
-              >
-                {method.label}
-              </button>
-            ))}
-          </div>
-        )}
+        </div>
+
+        <div className="project-create-note">
+          Подключить новый аккаунт CLIProxy (переподключение поверх текущего):
+        </div>
+
+        <div className="providers-method-grid">
+          {props.cliproxyMethods.map((method, index) => (
+            <button
+              key={`cliproxy-method:${index}`}
+              className="btn outline"
+              type="button"
+              disabled={props.isProviderSubmitting}
+              onClick={() => props.onStartCliproxyConnect(index)}
+            >
+              {method.label}
+            </button>
+          ))}
+          {props.cliproxyMethods.length === 0 ? (
+            <div className="providers-empty">Для CLIProxy не пришли методы авторизации. Нажмите Reload.</div>
+          ) : null}
+        </div>
       </div>
 
       {props.cliproxyOAuthState && isCliproxyApiFlow ? (

@@ -82,4 +82,53 @@ describe("ProxyTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply runtime now" }));
     expect(onApply).toHaveBeenCalledTimes(1);
   });
+
+  it("allows starting new CLIProxy auth even when already connected", () => {
+    /* Connected state must still allow adding/replacing account without hidden controls. */
+    const onStartCliproxyConnect = vi.fn();
+
+    render(
+      <ProxyTab
+        snapshot={{
+          mode: "vless",
+          vlessProxyUrl: "http://vless-proxy:8080",
+          noProxy: "localhost,127.0.0.1,backend",
+          updatedAt: "2026-03-06T11:00:00.000Z",
+          envPreview: {
+            HTTP_PROXY: "http://vless-proxy:8080",
+            HTTPS_PROXY: "http://vless-proxy:8080",
+            ALL_PROXY: "http://vless-proxy:8080",
+            NO_PROXY: "localhost,127.0.0.1,backend"
+          },
+          runtimeFiles: {
+            runtimeConfigDir: "/runtime-config",
+            proxyEnvPath: "/runtime-config/infra/vless/proxy.env",
+            overridePath: "/runtime-config/docker-compose.vless.yml",
+            recommendedApplyCommand:
+              "docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d"
+          }
+        }}
+        isLoading={false}
+        isSaving={false}
+        isApplying={false}
+        applyResult={null}
+        cliproxyConnected={true}
+        cliproxyMethods={[{ type: "oauth", label: "ChatGPT" }]}
+        cliproxyOAuthState={null}
+        isProviderSubmitting={false}
+        onReload={vi.fn()}
+        onSave={vi.fn()}
+        onApply={vi.fn()}
+        onStartCliproxyConnect={onStartCliproxyConnect}
+        onSubmitCliproxyApiKey={vi.fn()}
+        onSubmitCliproxyOAuthCode={vi.fn()}
+        onCompleteCliproxyOAuthAuto={vi.fn()}
+        onDisconnectCliproxy={vi.fn()}
+        onChangeCliproxyCodeDraft={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "ChatGPT" }));
+    expect(onStartCliproxyConnect).toHaveBeenCalledWith(0);
+  });
 });
