@@ -55,7 +55,6 @@ services:
       context: ./services/opencode
       dockerfile: Dockerfile
     environment:
-      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID:-cliproxy}
       - CLIPROXY_PROVIDER_NAME=${CLIPROXY_PROVIDER_NAME:-CLIProxy}

@@ -105,7 +105,6 @@ services:
     # OpenCode server mode
     command: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
     environment:
-      - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID:-cliproxy}
       - CLIPROXY_PROVIDER_NAME=${CLIPROXY_PROVIDER_NAME:-CLIProxy}
