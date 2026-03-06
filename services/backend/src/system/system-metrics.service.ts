@@ -6,7 +6,7 @@
  * - SystemMetricsService - Collects CPU/RAM/disk/network metrics.
  */
 
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { readFile, statfs } from "node:fs/promises";
 import * as os from "node:os";
 
@@ -63,6 +63,7 @@ export class SystemMetricsService {
 
   public constructor(
     @Inject(ConfigToken) private readonly config: AppConfig,
+    @Optional()
     deps?: Partial<CollectorDeps>
   ) {
     /* Keep IO dependencies overridable so collector can be unit-tested without touching host state. */
