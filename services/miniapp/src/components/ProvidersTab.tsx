@@ -1,13 +1,13 @@
 /**
- * @fileoverview Providers management tab with connect/disconnect and auth flows.
+ * @fileoverview Providers management tab with direct provider auth plus CLIProxy onboarding/runtime.
  *
  * Exports:
- * - ProvidersTab (L51) - Renders provider status, mode summary, and onboarding forms.
+ * - ProvidersTab (L60) - Renders provider status, connect flows, CLIProxy accounts, and proxy runtime controls.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { ProviderAuthMethod } from "../types";
+import { CliproxyAccountState, CliproxyOAuthStartPayload, ProviderAuthMethod, ProxyApplyResult, ProxySettingsInput, ProxySettingsMode, ProxySettingsSnapshot } from "../types";
 import { ProviderOAuthState } from "../hooks/use-provider-auth";
 
 const CLIPROXY_PROVIDER_ID = "cliproxy";
@@ -23,6 +23,15 @@ type Props = {
   isLoading: boolean;
   isSubmitting: boolean;
   oauthState: ProviderOAuthState | null;
+  cliproxyAccounts: CliproxyAccountState | null;
+  cliproxyOAuthStart: CliproxyOAuthStartPayload | null;
+  isCliproxyLoading: boolean;
+  isCliproxySubmitting: boolean;
+  proxySnapshot: ProxySettingsSnapshot | null;
+  isProxyLoading: boolean;
+  isProxySaving: boolean;
+  isProxyApplying: boolean;
+  proxyApplyResult: ProxyApplyResult | null;
   onRefresh: () => void;
   onStartConnect: (input: { providerID: string; methodIndex: number }) => void;
   onSubmitApiKey: (input: { providerID: string; key: string }) => void;
@@ -30,6 +39,18 @@ type Props = {
   onCompleteOAuthAuto: () => void;
   onDisconnect: (providerID: string) => void;
   onChangeOAuthCodeDraft?: (value: string) => void;
+  onReloadCliproxy: () => void;
+  onStartCliproxyAuth: (provider: CliproxyAccountState["providers"][number]["id"]) => void;
+  onCompleteCliproxyAuth: (input: {
+    provider: CliproxyAccountState["providers"][number]["id"];
+    callbackUrl?: string;
+    code?: string;
+    state?: string;
+    error?: string;
+  }) => void;
+  onReloadProxy: () => void;
+  onSaveProxy: (input: ProxySettingsInput) => void;
+  onApplyProxy: () => void;
 };
 
 export const ProvidersTab = (props: Props) => {
@@ -37,6 +58,12 @@ export const ProvidersTab = (props: Props) => {
   const [apiKeyDraft, setApiKeyDraft] = useState<string>("");
   const [localCodeDraft, setLocalCodeDraft] = useState<string>(props.oauthState?.codeDraft ?? "");
   const [providerSearch, setProviderSearch] = useState<string>("");
+  const [proxyMode, setProxyMode] = useState<ProxySettingsMode>("direct");
+  const [vlessProxyUrl, setVlessProxyUrl] = useState<string>("");
+  const [noProxy, setNoProxy] = useState<string>("localhost,127.0.0.1,backend,opencode,cliproxy");
+  const [callbackUrlDraft, setCallbackUrlDraft] = useState<string>("");
+  const [codeDraft, setCodeDraft] = useState<string>("");
+  const [stateDraft, setStateDraft] = useState<string>("");
 
   const providerMap = useMemo(() => {
     /* Keep O(1) lookup for provider labels in connect modal and oauth forms. */
@@ -44,12 +71,12 @@ export const ProvidersTab = (props: Props) => {
   }, [props.providers]);
 
   const connectedProviders = useMemo(() => {
-    /* Keep account-proxy provider in dedicated CLI/Proxy tab to avoid tab overlap. */
+    /* Keep generic provider cards separate from CLIProxy-managed accounts shown below. */
     return props.providers.filter((provider) => provider.connected && provider.id !== CLIPROXY_PROVIDER_ID);
   }, [props.providers]);
 
   const connectableProviders = useMemo(() => {
-    /* Exclude CLIProxy from generic providers onboarding, it has its own tab now. */
+    /* CLIProxy onboarding is rendered in its own section inside this tab, not in the generic picker. */
     return props.providers.filter((provider) => !provider.connected && provider.id !== CLIPROXY_PROVIDER_ID);
   }, [props.providers]);
 
@@ -68,6 +95,35 @@ export const ProvidersTab = (props: Props) => {
   }, [connectableProviders, providerSearch]);
 
   const isApiFlow = props.oauthState?.instructions === "api";
+  const isProxySaveDisabled =
+    props.isProxySaving || (proxyMode === "vless" && vlessProxyUrl.trim().length === 0);
+
+  useEffect(() => {
+    /* Mirror persisted proxy runtime profile into local draft controls after every reload. */
+    if (!props.proxySnapshot) {
+      return;
+    }
+    setProxyMode(props.proxySnapshot.mode);
+    setVlessProxyUrl(props.proxySnapshot.vlessProxyUrl ?? "");
+    setNoProxy(props.proxySnapshot.noProxy);
+  }, [props.proxySnapshot]);
+
+  useEffect(() => {
+    /* New CLIProxy auth flow must clear stale callback/code values from previous provider attempts. */
+    setCallbackUrlDraft("");
+    setCodeDraft("");
+    setStateDraft(props.cliproxyOAuthStart?.state ?? "");
+  }, [props.cliproxyOAuthStart]);
+
+  const selectedCliproxyProvider = props.cliproxyOAuthStart?.provider;
+  const cliproxyUpdatedAtLabel = useMemo(() => {
+    /* Keep runtime metadata readable even when backend has not loaded snapshot yet. */
+    if (!props.proxySnapshot) {
+      return "(unknown date)";
+    }
+    const parsed = new Date(props.proxySnapshot.updatedAt);
+    return Number.isNaN(parsed.getTime()) ? "(unknown date)" : parsed.toLocaleString();
+  }, [props.proxySnapshot]);
 
   return (
     <section className="providers-shell">
@@ -159,6 +215,201 @@ export const ProvidersTab = (props: Props) => {
           </div>
         </>
       ) : null}
+
+      <div className="providers-auth-card">
+        {/* CLIProxy account onboarding now lives here so provider management stays in one place. */}
+        <div className="settings-header-row">
+          <strong>CLIProxy accounts</strong>
+          <button className="btn outline" onClick={props.onReloadCliproxy} disabled={props.isCliproxyLoading} type="button">
+            {props.isCliproxyLoading ? "Loading..." : "Reload accounts"}
+          </button>
+        </div>
+
+        <div className="project-create-note">
+          Здесь отображаются аккаунты, уже подключенные внутри CLIProxy, и отсюда же запускается новая авторизация.
+        </div>
+
+        <div className="providers-list">
+          {props.cliproxyAccounts?.accounts.map((account) => (
+            <div key={`cliproxy-account:${account.id}`} className="providers-item-card">
+              <div className="providers-item-head">
+                <span className="providers-item-name">{account.providerLabel}</span>
+                <span className="providers-badge connected">{account.status ?? "connected"}</span>
+              </div>
+              <div className="project-create-note">{account.email ?? account.name}</div>
+              {account.account ? <div className="project-create-note">{account.account}</div> : null}
+              {account.label ? <div className="project-create-note">{account.label}</div> : null}
+              {account.statusMessage ? <div className="project-create-note">{account.statusMessage}</div> : null}
+            </div>
+          ))}
+
+          {!props.cliproxyAccounts || props.cliproxyAccounts.accounts.length === 0 ? (
+            <div className="providers-empty">Пока нет подключенных CLIProxy аккаунтов.</div>
+          ) : null}
+        </div>
+
+        <div className="providers-list">
+          {(props.cliproxyAccounts?.providers ?? []).map((provider) => (
+            <div key={`cliproxy-provider:${provider.id}`} className="providers-item-card">
+              <div className="providers-item-head">
+                <span className="providers-item-name">{provider.label}</span>
+                <span className={`providers-badge ${provider.connected ? "connected" : "disconnected"}`}>
+                  {provider.connected ? "Connected" : "Disconnected"}
+                </span>
+              </div>
+              <button
+                className="btn outline"
+                type="button"
+                disabled={props.isCliproxySubmitting}
+                onClick={() => props.onStartCliproxyAuth(provider.id)}
+              >
+                Подключить / обновить
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {props.cliproxyOAuthStart ? (
+          <>
+            {/* Completion accepts pasted callback URL or raw code/state for provider-specific OAuth flows. */}
+            <div className="project-create-note">Provider: {props.cliproxyOAuthStart.provider}</div>
+            <div className="project-create-note">{props.cliproxyOAuthStart.instructions}</div>
+            <a className="btn outline" href={props.cliproxyOAuthStart.url} target="_blank" rel="noreferrer">
+              Открыть авторизацию
+            </a>
+
+            <input
+              className="input settings-input-compact"
+              placeholder="Вставьте callback URL целиком"
+              value={callbackUrlDraft}
+              onChange={(event) => setCallbackUrlDraft(event.target.value)}
+            />
+            <input
+              className="input settings-input-compact"
+              placeholder="Или отдельно code"
+              value={codeDraft}
+              onChange={(event) => setCodeDraft(event.target.value)}
+            />
+            <input
+              className="input settings-input-compact"
+              placeholder="state"
+              value={stateDraft}
+              onChange={(event) => setStateDraft(event.target.value)}
+            />
+
+            <button
+              className="btn primary"
+              type="button"
+              disabled={props.isCliproxySubmitting || !selectedCliproxyProvider}
+              onClick={() => {
+                if (!selectedCliproxyProvider) {
+                  return;
+                }
+                props.onCompleteCliproxyAuth({
+                  provider: selectedCliproxyProvider,
+                  callbackUrl: callbackUrlDraft.trim() || undefined,
+                  code: codeDraft.trim() || undefined,
+                  state: stateDraft.trim() || undefined
+                });
+              }}
+            >
+              {props.isCliproxySubmitting ? "Submitting..." : "Завершить подключение"}
+            </button>
+          </>
+        ) : null}
+      </div>
+
+      <div className="providers-auth-card">
+        {/* Proxy runtime controls stay available here after removing the dedicated CLIProxy tab. */}
+        <div className="settings-header-row">
+          <strong>CLIProxy runtime</strong>
+          <button className="btn outline" onClick={props.onReloadProxy} disabled={props.isProxyLoading} type="button">
+            {props.isProxyLoading ? "Loading..." : "Reload runtime"}
+          </button>
+        </div>
+
+        <label className="project-create-note" htmlFor="proxy-mode-select">
+          Outbound mode
+        </label>
+        <select
+          id="proxy-mode-select"
+          aria-label="Outbound mode"
+          className="input settings-input-compact"
+          value={proxyMode}
+          onChange={(event) => setProxyMode(event.target.value as ProxySettingsMode)}
+        >
+          <option value="direct">direct</option>
+          <option value="vless">vless</option>
+        </select>
+
+        {proxyMode === "vless" ? (
+          <>
+            <label className="project-create-note" htmlFor="vless-proxy-url-input">
+              VLESS proxy URL
+            </label>
+            <input
+              id="vless-proxy-url-input"
+              aria-label="VLESS proxy URL"
+              className="input settings-input-compact"
+              placeholder="http://vless-proxy:8080"
+              value={vlessProxyUrl}
+              onChange={(event) => setVlessProxyUrl(event.target.value)}
+            />
+          </>
+        ) : null}
+
+        <label className="project-create-note" htmlFor="no-proxy-input">
+          NO_PROXY
+        </label>
+        <input
+          id="no-proxy-input"
+          aria-label="NO_PROXY"
+          className="input settings-input-compact"
+          value={noProxy}
+          onChange={(event) => setNoProxy(event.target.value)}
+        />
+
+        <div className="settings-actions-grid">
+          <button
+            className="btn primary"
+            onClick={() =>
+              props.onSaveProxy({
+                mode: proxyMode,
+                vlessProxyUrl: proxyMode === "vless" ? vlessProxyUrl.trim() : null,
+                noProxy: noProxy.trim()
+              })
+            }
+            disabled={isProxySaveDisabled}
+            type="button"
+          >
+            {props.isProxySaving ? "Saving..." : "Save proxy settings"}
+          </button>
+          <button className="btn outline" onClick={props.onApplyProxy} disabled={props.isProxyApplying} type="button">
+            {props.isProxyApplying ? "Applying..." : "Apply runtime now"}
+          </button>
+        </div>
+
+        {props.proxySnapshot ? (
+          <>
+            <div className="project-create-note">Updated: {cliproxyUpdatedAtLabel}</div>
+            <div className="project-create-note">HTTP_PROXY: {props.proxySnapshot.envPreview.HTTP_PROXY ?? "(disabled)"}</div>
+            <div className="project-create-note">HTTPS_PROXY: {props.proxySnapshot.envPreview.HTTPS_PROXY ?? "(disabled)"}</div>
+            <div className="project-create-note">ALL_PROXY: {props.proxySnapshot.envPreview.ALL_PROXY ?? "(disabled)"}</div>
+            <div className="project-create-note">NO_PROXY: {props.proxySnapshot.envPreview.NO_PROXY ?? "(disabled)"}</div>
+            <div className="project-create-note">Runtime dir: {props.proxySnapshot.runtimeFiles.runtimeConfigDir ?? "(not mounted in backend container)"}</div>
+            {props.proxySnapshot.runtimeFiles.proxyEnvPath ? (
+              <div className="project-create-note">Generated proxy.env: {props.proxySnapshot.runtimeFiles.proxyEnvPath}</div>
+            ) : null}
+            {props.proxySnapshot.runtimeFiles.overridePath ? (
+              <div className="project-create-note">Generated override: {props.proxySnapshot.runtimeFiles.overridePath}</div>
+            ) : null}
+            {props.proxySnapshot.runtimeFiles.recommendedApplyCommand ? (
+              <div className="project-create-note">Apply command: {props.proxySnapshot.runtimeFiles.recommendedApplyCommand}</div>
+            ) : null}
+            {props.proxyApplyResult ? <div className="project-create-note">Last apply: ok</div> : null}
+          </>
+        ) : null}
+      </div>
 
       {props.oauthState && isApiFlow ? (
         <div className="providers-auth-card">

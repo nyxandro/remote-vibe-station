@@ -8,6 +8,46 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProvidersTab } from "../ProvidersTab";
+import { CliproxyAccountState, ProxySettingsSnapshot } from "../../types";
+
+const cliproxyAccounts: CliproxyAccountState = {
+  providers: [
+    { id: "codex", label: "Codex", connected: true },
+    { id: "anthropic", label: "Claude", connected: false }
+  ],
+  accounts: [
+    {
+      id: "codex-user@example.com",
+      provider: "codex",
+      providerLabel: "Codex",
+      name: "codex-user@example.com",
+      email: "codex-user@example.com",
+      account: "workspace-1",
+      label: null,
+      status: "ready",
+      statusMessage: "ok"
+    }
+  ]
+};
+
+const proxySnapshot: ProxySettingsSnapshot = {
+  mode: "direct",
+  vlessProxyUrl: null,
+  noProxy: "localhost,127.0.0.1,backend,opencode,cliproxy",
+  updatedAt: "2026-03-06T10:00:00.000Z",
+  envPreview: {
+    HTTP_PROXY: null,
+    HTTPS_PROXY: null,
+    ALL_PROXY: null,
+    NO_PROXY: "localhost,127.0.0.1,backend,opencode,cliproxy"
+  },
+  runtimeFiles: {
+    runtimeConfigDir: "/runtime",
+    proxyEnvPath: "/runtime/proxy.env",
+    overridePath: "/runtime/docker-compose.override.yml",
+    recommendedApplyCommand: "docker compose up -d"
+  }
+};
 
 describe("ProvidersTab", () => {
   afterEach(() => {
@@ -43,6 +83,21 @@ describe("ProvidersTab", () => {
         onSubmitOAuthCode={vi.fn()}
         onCompleteOAuthAuto={vi.fn()}
         onDisconnect={vi.fn()}
+        cliproxyAccounts={null}
+        cliproxyOAuthStart={null}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={null}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={vi.fn()}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
       />
     );
 
@@ -82,6 +137,21 @@ describe("ProvidersTab", () => {
         onSubmitOAuthCode={vi.fn()}
         onCompleteOAuthAuto={vi.fn()}
         onDisconnect={vi.fn()}
+        cliproxyAccounts={null}
+        cliproxyOAuthStart={null}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={null}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={vi.fn()}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
       />
     );
 
@@ -117,6 +187,21 @@ describe("ProvidersTab", () => {
         onSubmitOAuthCode={vi.fn()}
         onCompleteOAuthAuto={vi.fn()}
         onDisconnect={vi.fn()}
+        cliproxyAccounts={null}
+        cliproxyOAuthStart={null}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={null}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={vi.fn()}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
       />
     );
 
@@ -159,6 +244,21 @@ describe("ProvidersTab", () => {
         onSubmitOAuthCode={vi.fn()}
         onCompleteOAuthAuto={vi.fn()}
         onDisconnect={vi.fn()}
+        cliproxyAccounts={null}
+        cliproxyOAuthStart={null}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={null}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={vi.fn()}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
       />
     );
 
@@ -168,5 +268,55 @@ describe("ProvidersTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Подключить по API ключу" }));
 
     expect(onSubmitApiKey).toHaveBeenCalledWith({ providerID: "openai", key: "sk-live" });
+  });
+
+  it("renders CLIProxy account section under add-provider button and shows connected identities", () => {
+    /* CLIProxy accounts should be managed from Providers tab and expose concrete connected account ids. */
+    const onStartCliproxyAuth = vi.fn();
+
+    render(
+      <ProvidersTab
+        selected={{
+          model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+          thinking: "high",
+          agent: "build"
+        }}
+        providers={[]}
+        authMethods={{}}
+        isLoading={false}
+        isSubmitting={false}
+        oauthState={null}
+        onRefresh={vi.fn()}
+        onStartConnect={vi.fn()}
+        onSubmitApiKey={vi.fn()}
+        onSubmitOAuthCode={vi.fn()}
+        onCompleteOAuthAuto={vi.fn()}
+        onDisconnect={vi.fn()}
+        cliproxyAccounts={cliproxyAccounts}
+        cliproxyOAuthStart={null}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={proxySnapshot}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={onStartCliproxyAuth}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
+      />
+    );
+
+    const addProviderButton = screen.getByRole("button", { name: "Добавить провайдера" });
+    expect(addProviderButton).toBeTruthy();
+    expect(screen.getByText("CLIProxy accounts")).toBeTruthy();
+    expect(screen.getByText("codex-user@example.com")).toBeTruthy();
+    expect(screen.getByText("workspace-1")).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
+    expect(onStartCliproxyAuth).toHaveBeenCalledWith("codex");
   });
 });

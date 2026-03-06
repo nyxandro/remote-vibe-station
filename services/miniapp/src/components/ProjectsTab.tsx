@@ -157,7 +157,7 @@ export const ProjectsTab = (props: Props) => {
           const isActive = project.id === props.activeId;
           const showStream = isActive && props.telegramStreamEnabled;
           const health = deriveProjectContainerHealth(props.statusMap[project.id]);
-          const healthClass = health ? `project-health project-health-${health.level}` : null;
+          const healthClass = health ? `project-health project-health-${health.level}` : undefined;
           const gitSummary = props.gitSummaryMap[project.id] ?? null;
           const isDeployed = project.status === "running";
 

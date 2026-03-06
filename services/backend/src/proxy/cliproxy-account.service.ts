@@ -10,7 +10,7 @@
 
 import { BadRequestException, Injectable } from "@nestjs/common";
 
-import { CliproxyManagementClient, CliproxyProviderId } from "./cliproxy-management.client";
+import { CliproxyAuthFile, CliproxyManagementClient, CliproxyProviderId } from "./cliproxy-management.client";
 
 const PROVIDER_DEFINITIONS: Array<{ id: CliproxyProviderId; label: string }> = [
   { id: "codex", label: "Codex" },
@@ -36,9 +36,21 @@ type ProviderState = {
   connected: boolean;
 };
 
+type CliproxyConnectedAccount = {
+  id: string;
+  provider: CliproxyProviderId;
+  providerLabel: string;
+  name: string;
+  email: string | null;
+  account: string | null;
+  label: string | null;
+  status: string | null;
+  statusMessage: string | null;
+};
+
 export type CliproxyAccountState = {
   providers: ProviderState[];
-  authFiles: string[];
+  accounts: CliproxyConnectedAccount[];
 };
 
 export type CliproxyOAuthStartInput = {
@@ -60,7 +72,8 @@ export class CliproxyAccountService {
   public async getState(): Promise<CliproxyAccountState> {
     /* State merges oauth auth-files and static API-key config fields into one provider list. */
     const [authFiles, config] = await Promise.all([this.api.getAuthFiles(), this.api.getConfig()]);
-    const loweredAuthFiles = authFiles.map((item) => item.toLowerCase());
+    const loweredAuthFiles = authFiles.map((item) => item.name.toLowerCase());
+    const accounts = this.buildConnectedAccounts(authFiles);
 
     const providers = PROVIDER_DEFINITIONS.map((provider) => {
       const hasOauthFile = PROVIDER_FILE_MARKERS[provider.id].some((marker) =>
@@ -76,7 +89,7 @@ export class CliproxyAccountService {
 
     return {
       providers,
-      authFiles
+      accounts
     };
   }
 
@@ -157,6 +170,74 @@ export class CliproxyAccountService {
       const value = config[field];
       return typeof value === "string" && value.trim().length > 0;
     });
+  }
+
+  private buildConnectedAccounts(authFiles: CliproxyAuthFile[]): CliproxyConnectedAccount[] {
+    /* Structured auth-file entries should expose human-readable account identity in UI. */
+    return authFiles
+      .map((entry) => {
+        const provider = this.resolveProviderFromAuthFile(entry);
+        if (!provider) {
+          return null;
+        }
+
+        const providerLabel = PROVIDER_DEFINITIONS.find((item) => item.id === provider)?.label ?? provider;
+        return {
+          id: entry.id,
+          provider,
+          providerLabel,
+          name: entry.name,
+          email: entry.email,
+          account: entry.account,
+          label: entry.label,
+          status: entry.status,
+          statusMessage: entry.statusMessage
+        };
+      })
+      .filter((entry): entry is CliproxyConnectedAccount => entry !== null)
+      .sort((left, right) => left.providerLabel.localeCompare(right.providerLabel) || left.name.localeCompare(right.name));
+  }
+
+  private resolveProviderFromAuthFile(entry: CliproxyAuthFile): CliproxyProviderId | null {
+    /* Prefer explicit provider from runtime auth manager, then fall back to filename markers. */
+    const explicitProvider = this.normalizeProvider(entry.provider);
+    if (explicitProvider) {
+      return explicitProvider;
+    }
+
+    const loweredName = entry.name.toLowerCase();
+    const match = PROVIDER_DEFINITIONS.find((provider) =>
+      PROVIDER_FILE_MARKERS[provider.id].some((marker) => loweredName.includes(marker))
+    );
+    return match?.id ?? null;
+  }
+
+  private normalizeProvider(provider: string | null): CliproxyProviderId | null {
+    /* Management API uses external names like `claude`; map them into local provider ids. */
+    const normalized = String(provider ?? "").trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    if (normalized === "claude" || normalized === "anthropic") {
+      return "anthropic";
+    }
+    if (normalized === "codex" || normalized === "openai") {
+      return "codex";
+    }
+    if (normalized === "antigravity") {
+      return "antigravity";
+    }
+    if (normalized === "kimi") {
+      return "kimi";
+    }
+    if (normalized === "qwen") {
+      return "qwen";
+    }
+    if (normalized === "iflow") {
+      return "iflow";
+    }
+    return null;
   }
 
   private assertProvider(provider: string): asserts provider is CliproxyProviderId {

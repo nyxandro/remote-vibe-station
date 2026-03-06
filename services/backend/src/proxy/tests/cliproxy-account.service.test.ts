@@ -7,10 +7,31 @@ import { BadRequestException } from "@nestjs/common";
 import { CliproxyAccountService } from "../cliproxy-account.service";
 
 describe("CliproxyAccountService", () => {
-  test("builds provider statuses from auth files and api-key config", async () => {
-    /* Account status should reflect both oauth auth-files and api-key config entries. */
+  test("builds provider statuses and normalized connected accounts from auth files", async () => {
+    /* Account state should surface both provider connectivity and concrete account identities. */
     const api = {
-      getAuthFiles: jest.fn().mockResolvedValue(["codex-abc.json", "anthropic-main.json"]),
+      getAuthFiles: jest.fn().mockResolvedValue([
+        {
+          id: "codex-user@example.com",
+          name: "codex-user@example.com",
+          provider: "codex",
+          email: "codex-user@example.com",
+          account: "workspace-1",
+          status: "ready",
+          statusMessage: "ok",
+          label: null
+        },
+        {
+          id: "claude-user@example.com",
+          name: "claude-user@example.com",
+          provider: "claude",
+          email: "claude-user@example.com",
+          account: "team-prod",
+          label: "Claude Prod",
+          status: "ready",
+          statusMessage: "ok"
+        }
+      ]),
       getConfig: jest.fn().mockResolvedValue({
         "codex-api-key": "sk-codex",
         "claude-api-key": null,
@@ -27,7 +48,30 @@ describe("CliproxyAccountService", () => {
     expect(state.providers.find((item: { id: string }) => item.id === "codex")?.connected).toBe(true);
     expect(state.providers.find((item: { id: string }) => item.id === "anthropic")?.connected).toBe(true);
     expect(state.providers.find((item: { id: string }) => item.id === "qwen")?.connected).toBe(false);
-    expect(state.authFiles).toEqual(["codex-abc.json", "anthropic-main.json"]);
+    expect(state.accounts).toEqual([
+      {
+        id: "claude-user@example.com",
+        provider: "anthropic",
+        providerLabel: "Claude",
+        name: "claude-user@example.com",
+        email: "claude-user@example.com",
+        account: "team-prod",
+        label: "Claude Prod",
+        status: "ready",
+        statusMessage: "ok"
+      },
+      {
+        id: "codex-user@example.com",
+        provider: "codex",
+        providerLabel: "Codex",
+        name: "codex-user@example.com",
+        email: "codex-user@example.com",
+        account: "workspace-1",
+        label: null,
+        status: "ready",
+        statusMessage: "ok"
+      }
+    ]);
   });
 
   test("extracts callback params from full URL for oauth completion", async () => {

@@ -218,7 +218,17 @@ export type CliproxyProviderState = {
 
 export type CliproxyAccountState = {
   providers: CliproxyProviderState[];
-  authFiles: string[];
+  accounts: Array<{
+    id: string;
+    provider: CliproxyProviderState["id"];
+    providerLabel: string;
+    name: string;
+    email: string | null;
+    account: string | null;
+    label: string | null;
+    status: string | null;
+    statusMessage: string | null;
+  }>;
 };
 
 export type CliproxyOAuthStartPayload = {

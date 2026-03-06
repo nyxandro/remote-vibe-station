@@ -5,12 +5,7 @@
  * - highlightToHtml (L27) - Converts code into themed HTML using Shiki.
  */
 
-import {
-  createHighlighter,
-  type BundledLanguage,
-  type Highlighter,
-  type ThemeRegistration
-} from "shiki";
+import { createHighlighter, type BundledLanguage, type Highlighter } from "shiki";
 
 /*
  * We lazily create a single highlighter instance.
@@ -18,7 +13,7 @@ import {
  */
 let cached: Highlighter | null = null;
 
-const THEME: ThemeRegistration = "vitesse-dark";
+const THEME = "vitesse-dark";
 
 const extToLang: Record<string, BundledLanguage> = {
   js: "javascript",

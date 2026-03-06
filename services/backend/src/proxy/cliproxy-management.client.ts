@@ -31,6 +31,28 @@ type OAuthStartResponse = {
   url?: string;
 };
 
+type AuthFileListEntry = {
+  id?: string;
+  name?: string;
+  provider?: string;
+  label?: string;
+  status?: string;
+  status_message?: string;
+  email?: string;
+  account?: string;
+};
+
+export type CliproxyAuthFile = {
+  id: string;
+  name: string;
+  provider: string | null;
+  label: string | null;
+  status: string | null;
+  statusMessage: string | null;
+  email: string | null;
+  account: string | null;
+};
+
 type CallbackInput = {
   provider: CliproxyProviderId;
   state: string;
@@ -42,15 +64,23 @@ type CallbackInput = {
 export class CliproxyManagementClient {
   public constructor(@Inject(ConfigToken) private readonly config: AppConfig) {}
 
-  public async getAuthFiles(): Promise<string[]> {
+  public async getAuthFiles(): Promise<CliproxyAuthFile[]> {
     /* Auth file list is the primary source of connected OAuth accounts. */
-    const response = await this.request<{ files?: string[] }>("/v0/management/auth-files", {
+    const response = await this.request<{ files?: Array<string | AuthFileListEntry> }>("/v0/management/auth-files", {
       method: "GET"
     });
     if (!response || typeof response !== "object") {
       return [];
     }
-    return Array.isArray(response.files) ? response.files.filter((item): item is string => typeof item === "string") : [];
+
+    if (!Array.isArray(response.files)) {
+      return [];
+    }
+
+    /* Older runtimes may still return plain filenames; newer builds return structured account records. */
+    return response.files
+      .map((item) => this.normalizeAuthFile(item))
+      .filter((item): item is CliproxyAuthFile => item !== null);
   }
 
   public async getConfig(): Promise<Record<string, unknown>> {
@@ -125,5 +155,47 @@ export class CliproxyManagementClient {
         `CLIProxy management returned invalid JSON at '${path}': ${details}; body: ${body}`
       );
     }
+  }
+
+  private normalizeAuthFile(item: string | AuthFileListEntry): CliproxyAuthFile | null {
+    /* Normalize both legacy filename entries and newer structured auth manager payloads. */
+    if (typeof item === "string") {
+      const normalized = item.trim();
+      if (!normalized) {
+        return null;
+      }
+      return {
+        id: normalized,
+        name: normalized,
+        provider: null,
+        label: null,
+        status: null,
+        statusMessage: null,
+        email: null,
+        account: null
+      };
+    }
+
+    if (!item || typeof item !== "object") {
+      return null;
+    }
+
+    const id = String(item.id ?? item.name ?? "").trim();
+    const name = String(item.name ?? item.id ?? "").trim();
+    if (!id || !name) {
+      return null;
+    }
+
+    return {
+      id,
+      name,
+      provider: typeof item.provider === "string" && item.provider.trim() ? item.provider.trim() : null,
+      label: typeof item.label === "string" && item.label.trim() ? item.label.trim() : null,
+      status: typeof item.status === "string" && item.status.trim() ? item.status.trim() : null,
+      statusMessage:
+        typeof item.status_message === "string" && item.status_message.trim() ? item.status_message.trim() : null,
+      email: typeof item.email === "string" && item.email.trim() ? item.email.trim() : null,
+      account: typeof item.account === "string" && item.account.trim() ? item.account.trim() : null
+    };
   }
 }

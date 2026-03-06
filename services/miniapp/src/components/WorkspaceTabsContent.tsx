@@ -10,7 +10,6 @@ import { FilesTab } from "./FilesTab";
 import { GitHubTab, GitOverview } from "./GitHubTab";
 import { ProjectsTab } from "./ProjectsTab";
 import { ProvidersTab } from "./ProvidersTab";
-import { ProxyTab } from "./ProxyTab";
 import { SettingsTab } from "./SettingsTab";
 import { TerminalTab } from "./TerminalTab";
 import { TabKey } from "./WorkspaceHeader";
@@ -102,6 +101,7 @@ type Props = {
     supportedModels: GroqTranscriptionModel[];
     isLoading: boolean;
     isSaving: boolean;
+    saveResult: "idle" | "success" | "error";
   };
   onVoiceControlApiKeyChange?: (value: string) => void;
   onVoiceControlModelChange?: (value: GroqTranscriptionModel | null) => void;
@@ -118,7 +118,7 @@ type Props = {
   };
   onReloadServerMetrics?: () => void;
   onUpdateOpenCodeVersion: () => void;
-  iconForEntry: (kind: "file" | "dir", name: string) => JSX.Element;
+  iconForEntry: (name: string, kind: "file" | "dir") => JSX.Element;
   onGitRefresh: () => void;
   onGitCheckout: (branch: string) => void;
   onGitCommit: (message: string) => void;
@@ -264,28 +264,21 @@ export const WorkspaceTabsContent = (props: Props) => {
         onCompleteOAuthAuto={props.providersState.onCompleteOAuthAuto}
         onDisconnect={props.providersState.onDisconnect}
         onChangeOAuthCodeDraft={props.providersState.onChangeOAuthCodeDraft}
-      />
-    );
-  }
-
-  if (props.activeTab === "proxy") {
-    return (
-      <ProxyTab
-        snapshot={props.proxyState.snapshot}
-        isLoading={props.proxyState.isLoading}
-        isSaving={props.proxyState.isSaving}
-        isApplying={props.proxyState.isApplying}
-        applyResult={props.proxyState.applyResult}
         cliproxyAccounts={props.proxyState.cliproxyAccounts}
         cliproxyOAuthStart={props.proxyState.cliproxyOAuthStart}
         isCliproxyLoading={props.proxyState.isCliproxyLoading}
         isCliproxySubmitting={props.proxyState.isCliproxySubmitting}
-        onReload={props.proxyState.onReload}
-        onSave={props.proxyState.onSave}
-        onApply={props.proxyState.onApply}
+        proxySnapshot={props.proxyState.snapshot}
+        isProxyLoading={props.proxyState.isLoading}
+        isProxySaving={props.proxyState.isSaving}
+        isProxyApplying={props.proxyState.isApplying}
+        proxyApplyResult={props.proxyState.applyResult}
         onReloadCliproxy={props.proxyState.onReloadCliproxy}
         onStartCliproxyAuth={props.proxyState.onStartCliproxyAuth}
         onCompleteCliproxyAuth={props.proxyState.onCompleteCliproxyAuth}
+        onReloadProxy={props.proxyState.onReload}
+        onSaveProxy={props.proxyState.onSave}
+        onApplyProxy={props.proxyState.onApply}
       />
     );
   }

@@ -464,6 +464,14 @@ export const App = () => {
   }, [activeId, activeTab, loadGitOverview]);
 
   useEffect(() => {
+    /* Entering Files must always refresh the current folder so tree state never depends on stale cache. */
+    if (activeTab !== "files" || !activeId) {
+      return;
+    }
+    void loadFiles(activeId, filePath);
+  }, [activeId, activeTab]);
+
+  useEffect(() => {
     if (activeTab === "settings") {
       void loadSettingsOverview(activeId);
       void loadOpenCodeVersionStatus();
@@ -487,12 +495,14 @@ export const App = () => {
   ]);
 
   useEffect(() => {
-    /* Load provider overview only for direct provider management tab. */
+    /* Providers tab now aggregates direct provider auth plus CLIProxy account/runtime management. */
     if (activeTab !== "providers") {
       return;
     }
     void loadProviderOverview();
-  }, [activeTab, loadProviderOverview]);
+    void loadProxySettings();
+    void loadCliproxyAccounts();
+  }, [activeTab, loadCliproxyAccounts, loadProviderOverview, loadProxySettings]);
 
   useEffect(() => {
     /* Refresh server diagnostics only when Settings screen is visible. */
@@ -501,15 +511,6 @@ export const App = () => {
     }
     void loadServerMetrics();
   }, [activeTab, loadServerMetrics]);
-
-  useEffect(() => {
-    /* Dedicated CLI/Proxy tab lazily loads persisted proxy profile from backend. */
-    if (activeTab !== "proxy") {
-      return;
-    }
-    void loadProxySettings();
-    void loadCliproxyAccounts();
-  }, [activeTab, loadCliproxyAccounts, loadProxySettings]);
 
   const withActiveProject = (run: (projectId: string) => void): void => {
     if (activeId) {
@@ -633,7 +634,7 @@ export const App = () => {
             isLoading: isServerMetricsLoading
           }}
           onReloadServerMetrics={() => void loadServerMetrics()}
-          iconForEntry={iconForFileEntry}
+          iconForEntry={(name, kind) => iconForFileEntry(name, kind)}
           onGitRefresh={() => withActiveProject((id) => void loadGitOverview(id))}
           onGitCheckout={(branch) => withActiveProject((id) => void checkoutBranch(id, branch))}
           onGitCommit={(message) => withActiveProject((id) => void commitAll(id, message))}

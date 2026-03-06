@@ -21,7 +21,7 @@ describe("FilesTab", () => {
       <FilesTab
         activeId="demo"
         filePath=""
-        fileList={{ path: "", entries: [] }}
+        fileList={{ rootPath: "/workspace/demo", path: "", entries: [] }}
         filePreview={null}
         filePreviewHtml=""
         iconForEntry={() => <span />}
@@ -41,7 +41,7 @@ describe("FilesTab", () => {
       <FilesTab
         activeId="demo"
         filePath="src/components"
-        fileList={{ path: "src/components", entries: [] }}
+        fileList={{ rootPath: "/workspace/demo", path: "src/components", entries: [] }}
         filePreview={null}
         filePreviewHtml=""
         iconForEntry={() => <span />}

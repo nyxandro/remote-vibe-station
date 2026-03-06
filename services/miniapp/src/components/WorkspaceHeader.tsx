@@ -11,13 +11,13 @@ import {
   FileText,
   Folder,
   Github,
+  LucideIcon,
   Plug,
   Radio,
   RadioTower,
   Settings,
   Terminal
 } from "lucide-react";
-import { ComponentType } from "react";
 
 import { ProjectRecord } from "../types";
 
@@ -25,7 +25,6 @@ export type TabKey =
   | "projects"
   | "files"
   | "providers"
-  | "proxy"
   | "github"
   | "terminal"
   | "containers"
@@ -42,11 +41,10 @@ type Props = {
   onStopStream: () => void;
 };
 
-const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: ComponentType<{ size?: number }> }> = [
+const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: LucideIcon }> = [
   { key: "projects", title: "Projects", icon: Folder },
   { key: "files", title: "Files", icon: FileText },
   { key: "providers", title: "Providers", icon: Plug },
-  { key: "proxy", title: "CLI/Proxy", icon: Plug },
   { key: "github", title: "GitHub", icon: Github },
   { key: "terminal", title: "Terminal", icon: Terminal },
   { key: "containers", title: "Containers", icon: Box },
@@ -71,7 +69,6 @@ export const WorkspaceHeader = (props: Props) => {
           const disabled =
             tab.key !== "projects" &&
             tab.key !== "providers" &&
-            tab.key !== "proxy" &&
             tab.key !== "settings" &&
             !props.canUseProjectTabs;
 

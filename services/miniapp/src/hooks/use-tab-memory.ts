@@ -21,6 +21,9 @@ const WORKSPACE_FALLBACK_TAB: Exclude<TabKey, "projects"> = "files";
 
 const normalizeLegacyTab = (value: string | null): string | null => {
   /* Keep hook ready for future key migrations while preserving current tab names. */
+  if (value === "proxy") {
+    return "providers";
+  }
   return value;
 };
 
@@ -29,7 +32,6 @@ const isTabKey = (value: string | null): value is TabKey => {
     value === "projects" ||
     value === "files" ||
     value === "providers" ||
-    value === "proxy" ||
     value === "github" ||
     value === "terminal" ||
     value === "containers" ||
@@ -41,7 +43,6 @@ const isWorkspaceTab = (value: string | null): value is Exclude<TabKey, "project
   return (
     value === "files" ||
     value === "providers" ||
-    value === "proxy" ||
     value === "github" ||
     value === "terminal" ||
     value === "containers" ||

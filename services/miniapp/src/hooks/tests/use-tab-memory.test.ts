@@ -33,13 +33,14 @@ describe("tab memory", () => {
     });
   });
 
-  it("stores proxy tab independently from providers", () => {
-    /* Proxy section should persist as separate workspace tab without rewriting provider tab state. */
-    persistTabSelection("proxy");
+  it("maps legacy proxy tab persistence to providers", () => {
+    /* Old stored proxy tab should transparently reopen the consolidated Providers screen. */
+    localStorage.setItem("tvoc.miniapp.activeTab", "proxy");
+    localStorage.setItem("tvoc.miniapp.lastWorkspaceTab", "proxy");
 
     expect(readTabPersistenceState()).toEqual({
-      activeTab: "proxy",
-      lastWorkspaceTab: "proxy"
+      activeTab: "providers",
+      lastWorkspaceTab: "providers"
     });
   });
 
