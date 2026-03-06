@@ -71,6 +71,49 @@ describe("SettingsTab", () => {
     expect(screen.queryByText("6. Plugins")).toBeNull();
   });
 
+  it("allows managing global command files without active project", () => {
+    /* Commands are global OpenCode assets and must stay available without project selection. */
+    const onOpenFile = vi.fn();
+    const onCreateFile = vi.fn();
+
+    render(
+      <SettingsTab
+        activeId={null}
+        themeMode="light"
+        overview={{
+          globalRule: { exists: true, absolutePath: "/x/AGENTS.md" },
+          projectRule: null,
+          projectEnv: null,
+          projectEnvFiles: [],
+          config: { exists: true, absolutePath: "/x/opencode.json" },
+          agents: [],
+          commands: [{ name: "deploy.md", relativePath: "deploy.md" }]
+        }}
+        activeFile={null}
+        onChangeTheme={vi.fn()}
+        onRefreshProjects={vi.fn()}
+        onSyncProjects={vi.fn()}
+        onRestartOpenCode={vi.fn()}
+        onLoadOverview={vi.fn()}
+        onOpenFile={onOpenFile}
+        onCreateFile={onCreateFile}
+        onSaveActiveFile={vi.fn()}
+        onDeleteActiveProject={vi.fn()}
+        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
+        onSaveProjectRuntimeSettings={vi.fn()}
+        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
+      />
+    );
+
+    fireEvent.click(screen.getByText("4. Commands"));
+    fireEvent.click(screen.getByRole("button", { name: "deploy.md" }));
+    expect(onOpenFile).toHaveBeenCalledWith("command", "deploy.md");
+
+    fireEvent.change(screen.getAllByPlaceholderText("filename.ext")[1], { target: { value: "triage.md" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Create" })[1]);
+    expect(onCreateFile).toHaveBeenCalledWith("command", "triage.md");
+  });
+
   it("shows project env controls when a project is selected", () => {
     /* Project-scoped env editor should only appear with activeId context. */
     const onOpenFile = vi.fn();

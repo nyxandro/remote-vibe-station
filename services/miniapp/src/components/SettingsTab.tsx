@@ -353,7 +353,7 @@ export const SettingsTab = (props: Props) => {
         title: "4. Commands",
         kind: "command",
         items: props.overview?.commands ?? [],
-        emptyText: "Commands are empty. You can create a new project command file."
+        emptyText: "Global commands folder is empty. Create a new .md file."
       })}
 
       <details className="settings-accordion-item">

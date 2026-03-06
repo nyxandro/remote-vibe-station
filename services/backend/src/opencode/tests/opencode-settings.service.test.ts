@@ -121,4 +121,63 @@ describe("OpenCodeSettingsService", () => {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  test("lists global agents and commands from OpenCode config root", () => {
+    /* Agents and commands should both live in global OpenCode config, not in project folders. */
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-settings-"));
+
+    try {
+      const projectRoot = path.join(tmpRoot, "demo");
+      const configRoot = path.join(tmpRoot, "opencode-config");
+      fs.mkdirSync(projectRoot, { recursive: true });
+
+      writeText(path.join(configRoot, "agents", "reviewer.md"), "# reviewer\n");
+      writeText(path.join(configRoot, "commands", "deploy.md"), "# deploy\n");
+      writeText(path.join(projectRoot, ".opencode", "commands", "local-only.md"), "# local\n");
+
+      const config = {
+        projectsRoot: tmpRoot,
+        opencodeConfigDir: configRoot
+      };
+      const projects = {
+        getProjectRootPath: () => projectRoot
+      };
+
+      const service = new OpenCodeSettingsService(config as any, projects as any);
+      const overview = service.getOverview("demo");
+
+      expect(overview.agents).toEqual([{ name: "reviewer.md", relativePath: "reviewer.md" }]);
+      expect(overview.commands).toEqual([{ name: "deploy.md", relativePath: "deploy.md" }]);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("creates and reads global command files without active project", () => {
+    /* Global command management must work even when no project is selected in Mini App. */
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-settings-"));
+
+    try {
+      const configRoot = path.join(tmpRoot, "opencode-config");
+      const config = {
+        projectsRoot: tmpRoot,
+        opencodeConfigDir: configRoot
+      };
+      const projects = {
+        getProjectRootPath: () => path.join(tmpRoot, "demo")
+      };
+
+      const service = new OpenCodeSettingsService(config as any, projects as any);
+      const created = service.createFile("command", null, "triage.md");
+      expect(created.absolutePath).toBe(path.join(configRoot, "commands", "triage.md"));
+
+      service.saveFile("command", null, "# triage\n", "triage.md");
+      const loaded = service.readFile("command", null, "triage.md");
+      expect(loaded.exists).toBe(true);
+      expect(loaded.absolutePath).toBe(path.join(configRoot, "commands", "triage.md"));
+      expect(loaded.content).toBe("# triage\n");
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });

@@ -48,8 +48,8 @@ const ROOT_AGENTS_FILE = "AGENTS.md";
 const PROJECT_ENV_FILE = ".env";
 const OPENCODE_CONFIG_FILE = "opencode.json";
 const AGENTS_DIR = "agents";
+const COMMANDS_DIR = "commands";
 const PROJECT_OPENCODE_DIR = ".opencode";
-const PROJECT_COMMANDS_DIR = "commands";
 const DEFAULT_CONTAINER_CONFIG_DIR = "/root/.config/opencode";
 const MAX_PROJECT_ENV_BYTES = 256 * 1024;
 
@@ -88,9 +88,7 @@ export class OpenCodeSettingsService {
         : [],
       config: { exists: fs.existsSync(configPath), absolutePath: configPath },
       agents: this.listFiles(path.join(this.getOpenCodeConfigRoot(), AGENTS_DIR)),
-      commands: projectRoot
-        ? this.listFiles(path.join(projectRoot, PROJECT_OPENCODE_DIR, PROJECT_COMMANDS_DIR))
-        : []
+      commands: this.listFiles(this.getCommandsDir())
     };
   }
 
@@ -214,10 +212,7 @@ export class OpenCodeSettingsService {
       return this.buildTarget(this.getAgentsDir(), this.requireRelativePath(input.relativePath));
     }
     if (input.kind === "command") {
-      return this.buildTarget(
-        this.getProjectCommandsDir(this.requireProjectRoot(input.projectId)),
-        this.requireRelativePath(input.relativePath)
-      );
+      return this.buildTarget(this.getCommandsDir(), this.requireRelativePath(input.relativePath));
     }
     throw new Error(`Unsupported settings kind: ${input.kind}`);
   }
@@ -310,10 +305,12 @@ export class OpenCodeSettingsService {
   }
 
   private getAgentsDir(): string {
+    /* Custom agents are global OpenCode assets shared across all projects. */
     return path.join(this.getOpenCodeConfigRoot(), AGENTS_DIR);
   }
 
-  private getProjectCommandsDir(projectRoot: string): string {
-    return path.join(projectRoot, PROJECT_OPENCODE_DIR, PROJECT_COMMANDS_DIR);
+  private getCommandsDir(): string {
+    /* Custom commands are global OpenCode assets shared across all projects. */
+    return path.join(this.getOpenCodeConfigRoot(), COMMANDS_DIR);
   }
 }
