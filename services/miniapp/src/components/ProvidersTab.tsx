@@ -125,6 +125,20 @@ export const ProvidersTab = (props: Props) => {
     return Number.isNaN(parsed.getTime()) ? "(unknown date)" : parsed.toLocaleString();
   }, [props.proxySnapshot]);
 
+  const getCliproxyAccountDetails = (account: CliproxyAccountState["accounts"][number]): string[] => {
+    /* CLIProxy may repeat the same identity in email/account/label/status fields, so collapse duplicates for readable cards. */
+    const uniqueDetails = new Set<string>();
+
+    [account.email ?? account.name, account.account, account.label, account.statusMessage].forEach((value) => {
+      const normalized = String(value ?? "").trim();
+      if (normalized) {
+        uniqueDetails.add(normalized);
+      }
+    });
+
+    return Array.from(uniqueDetails);
+  };
+
   return (
     <section className="providers-shell">
       <div className="settings-header-row">
@@ -236,10 +250,12 @@ export const ProvidersTab = (props: Props) => {
                 <span className="providers-item-name">{account.providerLabel}</span>
                 <span className="providers-badge connected">{account.status ?? "connected"}</span>
               </div>
-              <div className="project-create-note">{account.email ?? account.name}</div>
-              {account.account ? <div className="project-create-note">{account.account}</div> : null}
-              {account.label ? <div className="project-create-note">{account.label}</div> : null}
-              {account.statusMessage ? <div className="project-create-note">{account.statusMessage}</div> : null}
+              {/* Render each human-readable identity/detail only once even if CLIProxy duplicates it across fields. */}
+              {getCliproxyAccountDetails(account).map((detail) => (
+                <div key={`${account.id}:${detail}`} className="project-create-note">
+                  {detail}
+                </div>
+              ))}
             </div>
           ))}
 

@@ -319,4 +319,60 @@ describe("ProvidersTab", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
     expect(onStartCliproxyAuth).toHaveBeenCalledWith("codex");
   });
+
+  it("deduplicates repeated CLIProxy account details", () => {
+    /* CLIProxy may mirror the same identity into email, account and label, but UI should show one line per unique value. */
+    render(
+      <ProvidersTab
+        selected={{
+          model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+          thinking: "high",
+          agent: "build"
+        }}
+        providers={[]}
+        authMethods={{}}
+        isLoading={false}
+        isSubmitting={false}
+        oauthState={null}
+        onRefresh={vi.fn()}
+        onStartConnect={vi.fn()}
+        onSubmitApiKey={vi.fn()}
+        onSubmitOAuthCode={vi.fn()}
+        onCompleteOAuthAuto={vi.fn()}
+        onDisconnect={vi.fn()}
+        cliproxyAccounts={{
+          providers: [{ id: "codex", label: "Codex", connected: true }],
+          accounts: [
+            {
+              id: "za.nyxa@gmail.com",
+              provider: "codex",
+              providerLabel: "Codex",
+              name: "za.nyxa@gmail.com",
+              email: "za.nyxa@gmail.com",
+              account: "za.nyxa@gmail.com",
+              label: "za.nyxa@gmail.com",
+              status: "active",
+              statusMessage: "za.nyxa@gmail.com"
+            }
+          ]
+        }}
+        cliproxyOAuthStart={null}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={proxySnapshot}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={vi.fn()}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText("za.nyxa@gmail.com")).toHaveLength(1);
+  });
 });
