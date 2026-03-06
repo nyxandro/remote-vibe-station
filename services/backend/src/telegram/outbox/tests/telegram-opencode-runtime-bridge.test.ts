@@ -26,7 +26,6 @@ const makeBridge = () => {
   } as any;
 
   const outbox = {
-    enqueueProgressDraft: jest.fn(),
     enqueueProgressReplace: jest.fn(),
     enqueueThinkingControl: jest.fn(),
     enqueueStreamNotification: jest.fn()
@@ -187,8 +186,8 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     expect(firstCall.progressKey).toEqual(secondCall.progressKey);
   });
 
-  it("streams assistant text parts via stable draft key", () => {
-    /* Incremental assistant text should be routed to Telegram draft streaming, not only final message. */
+  it("streams assistant text parts via stable replace key", () => {
+    /* Incremental assistant text should update one live Telegram message in chat history. */
     const { bridge, outbox } = makeBridge();
 
     (bridge as any).handlePartUpdated({
@@ -209,15 +208,15 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressDraft).toHaveBeenCalledTimes(2);
-    expect(outbox.enqueueProgressDraft.mock.calls[0][0]).toEqual(
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
+    expect(outbox.enqueueProgressReplace.mock.calls[0][0]).toEqual(
       expect.objectContaining({
         adminId: 10,
         progressKey: "assistant:10:session-text",
         text: "Привет"
       })
     );
-    expect(outbox.enqueueProgressDraft.mock.calls[1][0]).toEqual(
+    expect(outbox.enqueueProgressReplace.mock.calls[1][0]).toEqual(
       expect.objectContaining({
         adminId: 10,
         progressKey: "assistant:10:session-text",

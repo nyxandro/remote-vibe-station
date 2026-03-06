@@ -20,6 +20,7 @@ import { splitTelegramTextWithFooter } from "./telegram-split-with-footer";
 
 type AssistantDelivery = {
   text: string;
+  sessionId?: string | null;
   contextLimit?: number | null;
   providerID: string;
   modelID: string;
@@ -158,6 +159,33 @@ export class TelegramOutboxService {
     this.enqueueThinkingControl({ adminId: input.adminId, action: "stop" });
 
     const chunks = splitTelegramTextWithFooter(body, footer);
+    const streamProgressKey = input.delivery.sessionId ? `assistant:${input.adminId}:${input.delivery.sessionId}` : null;
+
+    if (binding.streamEnabled && streamProgressKey && chunks.length > 0) {
+      /* Reuse the live streamed message as the first final chunk to avoid duplicates. */
+      this.outbox.enqueue({
+        adminId: input.adminId,
+        chatId: binding.chatId,
+        text: renderTelegramHtmlFromMarkdown(chunks[0]),
+        parseMode: "HTML",
+        disableNotification: chunks.length > 1,
+        mode: "replace",
+        progressKey: streamProgressKey
+      });
+
+      chunks.slice(1).forEach((chunk, index) => {
+        const isFinalChunk = index === chunks.length - 2;
+        this.outbox.enqueue({
+          adminId: input.adminId,
+          chatId: binding.chatId,
+          text: renderTelegramHtmlFromMarkdown(chunk),
+          parseMode: "HTML",
+          disableNotification: !isFinalChunk
+        });
+      });
+      return;
+    }
+
     chunks.forEach((chunk, index) => {
       /* Keep intermediate chunks silent, notify only on the final chunk. */
       const isFinalChunk = index === chunks.length - 1;

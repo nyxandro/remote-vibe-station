@@ -41,6 +41,7 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
         adminId,
         delivery: {
           text: String(data?.text ?? ""),
+          sessionId: typeof data?.sessionId === "string" ? data.sessionId : null,
           contextLimit: typeof data?.contextLimit === "number" ? data.contextLimit : null,
           providerID: String(data?.providerID ?? ""),
           modelID: String(data?.modelID ?? ""),

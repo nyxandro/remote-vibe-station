@@ -228,10 +228,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    this.outbox.enqueueProgressDraft({
+    this.outbox.enqueueProgressReplace({
       adminId,
       progressKey: `assistant:${adminId}:${sessionID}`,
-      text: normalizedText
+      text: normalizedText,
+      disableNotification: true
     });
     this.textDraftLastValueBySession.set(sessionID, normalizedText);
   }
