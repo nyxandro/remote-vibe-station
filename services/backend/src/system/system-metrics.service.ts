@@ -12,6 +12,8 @@ import * as os from "node:os";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
 
+export const SystemMetricsDepsToken = Symbol("SYSTEM_METRICS_DEPS");
+
 const NETWORK_LOOPBACK_INTERFACE = "lo";
 const PROC_NET_DEV_PATH = "/proc/net/dev";
 const BYTES_IN_KIBIBYTE = 1024;
@@ -63,6 +65,7 @@ export class SystemMetricsService {
 
   public constructor(
     @Inject(ConfigToken) private readonly config: AppConfig,
+    @Inject(SystemMetricsDepsToken)
     @Optional()
     deps?: Partial<CollectorDeps>
   ) {
