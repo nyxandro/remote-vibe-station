@@ -46,4 +46,33 @@ describe("formatTelegramFooter", () => {
 
     expect(footer).toContain("| default | plan");
   });
+
+  it("infers context percentage for gpt-5.2 when explicit limit is absent", () => {
+    /* CLIProxy model catalogs do not expose context limits, so footer must infer known GPT limits. */
+    const footer = formatTelegramFooter({
+      contextUsedTokens: 13997,
+      contextLimitTokens: null,
+      providerID: "cliproxy",
+      modelID: "gpt-5.2",
+      thinking: null,
+      agent: "build"
+    });
+
+    expect(footer).toContain("| 3% | cliproxy/gpt-5.2 |");
+    expect(footer.includes("?%")).toBe(false);
+  });
+
+  it("infers context percentage for gpt-5.4 using expanded context window", () => {
+    /* GPT-5.4 has a larger context window and should not reuse the 400k fallback. */
+    const footer = formatTelegramFooter({
+      contextUsedTokens: 525000,
+      contextLimitTokens: null,
+      providerID: "cliproxy",
+      modelID: "gpt-5.4",
+      thinking: "high",
+      agent: "build"
+    });
+
+    expect(footer).toContain("| 50% | cliproxy/gpt-5.4 |");
+  });
 });
