@@ -244,6 +244,27 @@ export class TelegramOutboxService {
     });
   }
 
+  public enqueueProgressDraft(input: {
+    adminId: number;
+    progressKey: string;
+    text: string;
+  }): void {
+    /* Stream partial assistant text through Telegram drafts with one stable key per response. */
+    const binding = this.streamStore.get(input.adminId);
+    if (!binding || !binding.streamEnabled) {
+      return;
+    }
+
+    this.outbox.enqueue({
+      adminId: input.adminId,
+      chatId: binding.chatId,
+      text: input.text,
+      disableNotification: true,
+      mode: "draft",
+      progressKey: input.progressKey
+    });
+  }
+
   public enqueueThinkingControl(input: { adminId: number; action: "start" | "stop" }): void {
     /* Send explicit control command to bot-side indicator manager. */
     const binding = this.streamStore.get(input.adminId);

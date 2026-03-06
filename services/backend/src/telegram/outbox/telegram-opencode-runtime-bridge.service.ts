@@ -22,6 +22,7 @@ type OpenCodeBusEvent = {
 
 const BASH_PROGRESS_MAX_CHARS = 2600;
 const BASH_PROGRESS_MIN_INTERVAL_MS = 1000;
+const TEXT_DRAFT_MAX_CHARS = 3900;
 const BASH_NOISE_PROBE_COMMAND = /^(node|npm|pnpm|yarn|bun|python|python3)\s+(-v|--version)$/i;
 const QUESTION_CALLBACK_PREFIX = "q";
 const PERMISSION_CALLBACK_PREFIX = "perm";
@@ -55,6 +56,7 @@ const isNoisyRuntimeProbeCommand = (command: string): boolean => {
 export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressEmittedAtMs = new Map<string, number>();
   private readonly bashProgressKeyByPart = new Map<string, string>();
+  private readonly textDraftLastValueBySession = new Map<string, string>();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private botUsernamePromise: Promise<string | null> | null = null;
 
@@ -142,6 +144,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       this.setThinking(route.adminId, sessionID, false);
     }
 
+    if (partType === "text") {
+      this.handleTextPartUpdated(route.adminId, sessionID, part);
+      return;
+    }
+
     if (partType !== "tool") {
       return;
     }
@@ -207,6 +214,37 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     void this.emitFileOperations(part, route);
   }
 
+  private handleTextPartUpdated(adminId: number, sessionID: string, part: any): void {
+    /* Stream the latest assistant text snapshot as a Telegram draft while generation is active. */
+    const textRaw = String(part.text ?? "");
+    const text = textRaw.trim();
+    if (!text) {
+      return;
+    }
+
+    const normalizedText = this.normalizeDraftText(text);
+    const previous = this.textDraftLastValueBySession.get(sessionID);
+    if (previous === normalizedText) {
+      return;
+    }
+
+    this.outbox.enqueueProgressDraft({
+      adminId,
+      progressKey: `assistant:${adminId}:${sessionID}`,
+      text: normalizedText
+    });
+    this.textDraftLastValueBySession.set(sessionID, normalizedText);
+  }
+
+  private normalizeDraftText(text: string): string {
+    /* Keep draft preview within Telegram text limits while preserving the newest output tail. */
+    if (text.length <= TEXT_DRAFT_MAX_CHARS) {
+      return text;
+    }
+
+    return `...\n${text.slice(text.length - (TEXT_DRAFT_MAX_CHARS - 4))}`;
+  }
+
   private resolveBashProgressKey(input: {
     adminId: number;
     sessionID: string;
@@ -258,6 +296,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     const statusType = String((properties.status as any)?.type ?? "");
     if (statusType === "idle") {
       this.setThinking(route.adminId, sessionID, false);
+      this.textDraftLastValueBySession.delete(sessionID);
     }
   }
 
@@ -274,6 +313,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     this.setThinking(route.adminId, sessionID, false);
+    this.textDraftLastValueBySession.delete(sessionID);
   }
 
   private setThinking(adminId: number, sessionID: string, active: boolean): void {

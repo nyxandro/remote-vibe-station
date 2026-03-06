@@ -79,7 +79,7 @@ export class TelegramOutboxStore {
     parseMode?: "HTML";
     disableNotification?: boolean;
     nowMs?: number;
-    mode?: "send" | "replace";
+    mode?: "send" | "replace" | "draft";
     progressKey?: string;
     control?: {
       kind: "thinking";
@@ -93,6 +93,32 @@ export class TelegramOutboxStore {
     const nowMs = input.nowMs ?? Date.now();
     const now = new Date(nowMs).toISOString();
     const file = this.readAll();
+
+    /* Coalesce pending draft snapshots so Telegram stream follows the newest text only. */
+    if (input.mode === "draft" && input.progressKey) {
+      const existing = file.items.find(
+        (item) =>
+          item.status === "pending" &&
+          item.adminId === input.adminId &&
+          item.chatId === input.chatId &&
+          item.mode === "draft" &&
+          item.progressKey === input.progressKey
+      );
+
+      if (existing) {
+        existing.text = input.text;
+        existing.parseMode = input.parseMode;
+        existing.disableNotification = input.disableNotification;
+        existing.control = input.control;
+        existing.replyMarkup = input.replyMarkup;
+        existing.inFlightBy = undefined;
+        existing.inFlightUntil = undefined;
+        existing.nextAttemptAt = now;
+        this.writeAll(file);
+        return existing;
+      }
+    }
+
     const item: TelegramOutboxItem = {
       id: crypto.randomUUID(),
       adminId: input.adminId,

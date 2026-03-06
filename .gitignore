@@ -5,3 +5,4 @@ infra/traefik/acme.json
 node_modules/
 dist/
 services/**/dist/
+*.tsbuildinfo

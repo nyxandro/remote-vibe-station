@@ -35,7 +35,7 @@ export type TelegramOutboxItem = {
   text: string;
   parseMode?: "HTML";
   disableNotification?: boolean;
-  mode?: "send" | "replace";
+  mode?: "send" | "replace" | "draft";
   progressKey?: string;
   control?: {
     kind: "thinking";
@@ -73,7 +73,7 @@ export type OutboxPullItem = {
   text: string;
   parseMode?: "HTML";
   disableNotification?: boolean;
-  mode?: "send" | "replace";
+  mode?: "send" | "replace" | "draft";
   progressKey?: string;
   control?: {
     kind: "thinking";

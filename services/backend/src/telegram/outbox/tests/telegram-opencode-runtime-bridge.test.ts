@@ -26,6 +26,7 @@ const makeBridge = () => {
   } as any;
 
   const outbox = {
+    enqueueProgressDraft: jest.fn(),
     enqueueProgressReplace: jest.fn(),
     enqueueThinkingControl: jest.fn(),
     enqueueStreamNotification: jest.fn()
@@ -184,6 +185,45 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     const firstCall = outbox.enqueueProgressReplace.mock.calls[0][0];
     const secondCall = outbox.enqueueProgressReplace.mock.calls[1][0];
     expect(firstCall.progressKey).toEqual(secondCall.progressKey);
+  });
+
+  it("streams assistant text parts via stable draft key", () => {
+    /* Incremental assistant text should be routed to Telegram draft streaming, not only final message. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "text-1",
+        sessionID: "session-text",
+        text: "Привет"
+      }
+    });
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "text-2",
+        sessionID: "session-text",
+        text: "Привет, мир"
+      }
+    });
+
+    expect(outbox.enqueueProgressDraft).toHaveBeenCalledTimes(2);
+    expect(outbox.enqueueProgressDraft.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        adminId: 10,
+        progressKey: "assistant:10:session-text",
+        text: "Привет"
+      })
+    );
+    expect(outbox.enqueueProgressDraft.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        adminId: 10,
+        progressKey: "assistant:10:session-text",
+        text: "Привет, мир"
+      })
+    );
   });
 
   it("sends permission approval request as Telegram inline keyboard", () => {

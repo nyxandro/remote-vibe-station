@@ -81,6 +81,35 @@ describe("TelegramOutboxStore", () => {
     expect(Date.parse(stored.nextAttemptAt)).toBeGreaterThan(t0);
   });
 
+  it("coalesces pending draft updates by progressKey", () => {
+    /* Live draft streaming only needs the freshest pending snapshot, not every intermediate chunk. */
+    const store = new TelegramOutboxStore();
+    const t0 = Date.parse("2026-02-05T00:00:00.000Z");
+
+    const first = store.enqueue({
+      adminId: 4,
+      chatId: 40,
+      text: "one",
+      mode: "draft",
+      progressKey: "assistant:4:session-1",
+      nowMs: t0
+    });
+    const second = store.enqueue({
+      adminId: 4,
+      chatId: 40,
+      text: "two",
+      mode: "draft",
+      progressKey: "assistant:4:session-1",
+      nowMs: t0 + 1
+    });
+
+    const json = readFileJson();
+    expect(json.items).toHaveLength(1);
+    expect(json.items[0].id).toBe(first.id);
+    expect(json.items[0].text).toBe("two");
+    expect(second.id).toBe(first.id);
+  });
+
   it("prunes delivered history and old dead letters", () => {
     /* Prepare a large-ish file directly to test retention without expensive enqueue loops. */
     if (!fs.existsSync(TEST_DATA_DIR)) {

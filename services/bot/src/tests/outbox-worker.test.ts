@@ -1,9 +1,9 @@
 /**
- * @fileoverview Tests for OutboxWorker progress message replacement behavior.
+ * @fileoverview Tests for OutboxWorker replace and draft streaming behavior.
  *
  * Exports/constructs:
  * - makeWorker (L20) - Builds worker with mocked config/bot.
- * - describe("OutboxWorker replace delivery", L35) - Covers edit fallback and error path.
+ * - describe("OutboxWorker replace delivery", L35) - Covers edit and draft fallback paths.
  */
 
 import { OutboxWorker } from "../outbox-worker";
@@ -11,6 +11,7 @@ import { OutboxWorker } from "../outbox-worker";
 type TelegramMock = {
   sendMessage: jest.Mock;
   editMessageText: jest.Mock;
+  callApi: jest.Mock;
 };
 
 const makeWorker = (telegram: TelegramMock): OutboxWorker => {
@@ -34,10 +35,20 @@ const makeReplaceItem = () => ({
   progressKey: "bash:1:ses:call"
 });
 
+const makeDraftItem = () => ({
+  id: "draft-1",
+  chatId: 100,
+  text: "partial answer",
+  disableNotification: true,
+  mode: "draft" as const,
+  progressKey: "assistant:1:ses"
+});
+
 describe("OutboxWorker replace delivery", () => {
   it("sends replace-progress without reply keyboard by default", async () => {
     /* Progress messages must stay editable, so they should not include reply keyboard markup. */
     const telegram: TelegramMock = {
+      callApi: jest.fn(),
       editMessageText: jest.fn(async () => true),
       sendMessage: jest.fn(async () => ({ message_id: 701 }))
     };
@@ -57,6 +68,7 @@ describe("OutboxWorker replace delivery", () => {
   it("falls back to sendMessage when Telegram rejects edit", async () => {
     /* Simulate Telegram 'message can't be edited' on update attempt. */
     const telegram: TelegramMock = {
+      callApi: jest.fn(),
       editMessageText: jest.fn(async () => {
         throw new Error("400: Bad Request: message can't be edited");
       }),
@@ -84,6 +96,7 @@ describe("OutboxWorker replace delivery", () => {
   it("returns failure for edit errors unrelated to editability", async () => {
     /* Non-recoverable edit failures should not be swallowed. */
     const telegram: TelegramMock = {
+      callApi: jest.fn(),
       editMessageText: jest.fn(async () => {
         throw new Error("400: Bad Request: chat not found");
       }),
@@ -104,5 +117,50 @@ describe("OutboxWorker replace delivery", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain("chat not found");
     expect(telegram.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("uses sendMessageDraft for live text streaming", async () => {
+    /* Draft streaming should use Telegram native partial-message API instead of edit loops. */
+    const telegram: TelegramMock = {
+      callApi: jest.fn(async () => true),
+      editMessageText: jest.fn(),
+      sendMessage: jest.fn()
+    };
+    const worker = makeWorker(telegram);
+
+    const result = await (worker as any).deliver(makeDraftItem());
+
+    expect(result).toEqual({ id: "draft-1", ok: true });
+    expect(telegram.callApi).toHaveBeenCalledWith(
+      "sendMessageDraft",
+      expect.objectContaining({
+        chat_id: 100,
+        draft_id: expect.any(Number),
+        text: "partial answer"
+      })
+    );
+    expect(telegram.editMessageText).not.toHaveBeenCalled();
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("falls back to replace delivery when sendMessageDraft is unsupported", async () => {
+    /* Older Telegram API wrappers or incompatible runtimes must degrade to editable progress message. */
+    const telegram: TelegramMock = {
+      callApi: jest.fn(async () => {
+        throw new Error("404: Bad Request: method sendMessageDraft not found");
+      }),
+      editMessageText: jest.fn(),
+      sendMessage: jest.fn(async () => ({ message_id: 808 }))
+    };
+    const worker = makeWorker(telegram);
+
+    const firstResult = await (worker as any).deliver(makeDraftItem());
+    const secondResult = await (worker as any).deliver({ ...makeDraftItem(), text: "partial answer 2" });
+
+    expect(firstResult).toEqual({ id: "draft-1", ok: true, telegramMessageId: 808 });
+    expect(secondResult).toEqual({ id: "draft-1", ok: true, telegramMessageId: 808 });
+    expect(telegram.callApi).toHaveBeenCalledTimes(1);
+    expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
+    expect(telegram.editMessageText).toHaveBeenCalledTimes(1);
   });
 });

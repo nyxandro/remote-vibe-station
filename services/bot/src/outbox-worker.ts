@@ -23,7 +23,7 @@ type PullResponse = {
     text: string;
     parseMode?: "HTML";
     disableNotification?: boolean;
-    mode?: "send" | "replace";
+    mode?: "send" | "replace" | "draft";
     progressKey?: string;
     control?: {
       kind: "thinking";
@@ -44,8 +44,11 @@ type ReportResult = {
 };
 
 const WORKER_HEADER = "x-bot-worker-id";
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 300;
 const PULL_LIMIT = 10;
+const TELEGRAM_DRAFT_UNSUPPORTED = /sendMessageDraft|method .*not found|unsupported/i;
+const TELEGRAM_DRAFT_MAX_CHARS = 3900;
+const TELEGRAM_DRAFT_ID_MAX = 2147483646;
 
 const isMessageCantBeEditedError = (error: unknown): boolean => {
   /* Telegram returns this text when edit target is not editable anymore. */
@@ -67,6 +70,7 @@ export class OutboxWorker {
       updatedAtMs: number;
     }
   >();
+  private draftDeliverySupported = true;
   private readonly modeProjectByChatId = new Map<number, string>();
 
   public constructor(
@@ -259,7 +263,7 @@ export class OutboxWorker {
     text: string;
     parseMode?: "HTML";
     disableNotification?: boolean;
-    mode?: "send" | "replace";
+    mode?: "send" | "replace" | "draft";
     progressKey?: string;
     control?: {
       kind: "thinking";
@@ -286,53 +290,25 @@ export class OutboxWorker {
 
       let sentMessageId: number;
 
+      if (item.mode === "draft" && item.progressKey) {
+        return await this.deliverDraft({
+          id: item.id,
+          chatId: item.chatId,
+          text: item.text,
+          progressKey: item.progressKey
+        });
+      }
+
       if (item.mode === "replace" && item.progressKey) {
-        /* Reuse same message via editMessageText for live progress. */
-        const existing = this.progressMessageByKey.get(item.progressKey);
-        if (existing && existing.chatId === item.chatId) {
-          const sameText = existing.text === item.text;
-          const sameMarkup = this.isSameReplyMarkup(existing.replyMarkup, item.replyMarkup);
-          if (!sameText || !sameMarkup) {
-            try {
-              /* Primary path: keep updating the same Telegram message in-place. */
-              await this.bot.telegram.editMessageText(item.chatId, existing.messageId, undefined, item.text, {
-                parse_mode: item.parseMode,
-                reply_markup: item.replyMarkup ? { inline_keyboard: item.replyMarkup.inlineKeyboard } : undefined
-              });
-            } catch (error) {
-              /* Recover from stale/non-editable targets by sending a fresh progress message. */
-              if (!isMessageCantBeEditedError(error)) {
-                throw error;
-              }
-
-              const sent = await this.bot.telegram.sendMessage(item.chatId, item.text, {
-                parse_mode: item.parseMode,
-                disable_notification: item.disableNotification,
-                reply_markup: this.buildReplaceReplyMarkup(item.replyMarkup)
-              });
-              existing.messageId = sent.message_id;
-            }
-
-            existing.text = item.text;
-            existing.replyMarkup = item.replyMarkup;
-            existing.updatedAtMs = Date.now();
-          }
-          sentMessageId = existing.messageId;
-        } else {
-          const sent = await this.bot.telegram.sendMessage(item.chatId, item.text, {
-            parse_mode: item.parseMode,
-            disable_notification: item.disableNotification,
-            reply_markup: this.buildReplaceReplyMarkup(item.replyMarkup)
-          });
-          sentMessageId = sent.message_id;
-          this.progressMessageByKey.set(item.progressKey, {
-            chatId: item.chatId,
-            messageId: sent.message_id,
-            text: item.text,
-            replyMarkup: item.replyMarkup,
-            updatedAtMs: Date.now()
-          });
-        }
+        /* Replace mode preserves one live progress message in chat history. */
+        sentMessageId = await this.deliverReplace({
+          chatId: item.chatId,
+          text: item.text,
+          parseMode: item.parseMode,
+          disableNotification: item.disableNotification,
+          progressKey: item.progressKey,
+          replyMarkup: item.replyMarkup
+        });
       } else {
         const sent = await this.bot.telegram.sendMessage(item.chatId, item.text, {
           parse_mode: item.parseMode,
@@ -358,5 +334,125 @@ export class OutboxWorker {
       const retryAfterSec = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
       return { id: item.id, ok: false, error: message, retryAfterSec };
     }
+  }
+
+  private async deliverReplace(item: {
+    chatId: number;
+    text: string;
+    parseMode?: "HTML";
+    disableNotification?: boolean;
+    progressKey: string;
+    replyMarkup?: {
+      inlineKeyboard: Array<Array<{ text: string; callback_data: string }>>;
+    };
+  }): Promise<number> {
+    /* Replace mode reuses a single editable progress message whenever possible. */
+    const existing = this.progressMessageByKey.get(item.progressKey);
+    if (existing && existing.chatId === item.chatId) {
+      const sameText = existing.text === item.text;
+      const sameMarkup = this.isSameReplyMarkup(existing.replyMarkup, item.replyMarkup);
+      if (!sameText || !sameMarkup) {
+        try {
+          /* Primary path: keep updating the same Telegram message in-place. */
+          await this.bot.telegram.editMessageText(item.chatId, existing.messageId, undefined, item.text, {
+            parse_mode: item.parseMode,
+            reply_markup: item.replyMarkup ? { inline_keyboard: item.replyMarkup.inlineKeyboard } : undefined
+          });
+        } catch (error) {
+          /* Recover from stale/non-editable targets by sending a fresh progress message. */
+          if (!isMessageCantBeEditedError(error)) {
+            throw error;
+          }
+
+          const sent = await this.bot.telegram.sendMessage(item.chatId, item.text, {
+            parse_mode: item.parseMode,
+            disable_notification: item.disableNotification,
+            reply_markup: this.buildReplaceReplyMarkup(item.replyMarkup)
+          });
+          existing.messageId = sent.message_id;
+        }
+
+        existing.text = item.text;
+        existing.replyMarkup = item.replyMarkup;
+        existing.updatedAtMs = Date.now();
+      }
+      return existing.messageId;
+    }
+
+    const sent = await this.bot.telegram.sendMessage(item.chatId, item.text, {
+      parse_mode: item.parseMode,
+      disable_notification: item.disableNotification,
+      reply_markup: this.buildReplaceReplyMarkup(item.replyMarkup)
+    });
+    this.progressMessageByKey.set(item.progressKey, {
+      chatId: item.chatId,
+      messageId: sent.message_id,
+      text: item.text,
+      replyMarkup: item.replyMarkup,
+      updatedAtMs: Date.now()
+    });
+    return sent.message_id;
+  }
+
+  private async deliverDraft(item: {
+    id: string;
+    chatId: number;
+    text: string;
+    progressKey: string;
+  }): Promise<ReportResult> {
+    /* Draft mode uses Telegram native streaming previews and falls back when unsupported. */
+    if (!this.draftDeliverySupported || typeof this.bot.telegram.callApi !== "function") {
+      this.draftDeliverySupported = false;
+      const telegramMessageId = await this.deliverReplace({
+        chatId: item.chatId,
+        text: this.normalizeDraftText(item.text),
+        disableNotification: true,
+        progressKey: item.progressKey
+      });
+      return { id: item.id, ok: true, telegramMessageId };
+    }
+
+    try {
+      await (this.bot.telegram.callApi as any)("sendMessageDraft", {
+        chat_id: item.chatId,
+        draft_id: this.resolveDraftId(item.progressKey),
+        text: this.normalizeDraftText(item.text)
+      });
+      return { id: item.id, ok: true };
+    } catch (error) {
+      if (!this.isDraftUnsupportedError(error)) {
+        throw error;
+      }
+
+      this.draftDeliverySupported = false;
+      const telegramMessageId = await this.deliverReplace({
+        chatId: item.chatId,
+        text: this.normalizeDraftText(item.text),
+        disableNotification: true,
+        progressKey: item.progressKey
+      });
+      return { id: item.id, ok: true, telegramMessageId };
+    }
+  }
+
+  private resolveDraftId(progressKey: string): number {
+    /* Keep one stable positive draft id per logical stream key. */
+    const hash = crypto.createHash("sha256").update(progressKey).digest();
+    return (hash.readUInt32BE(0) % TELEGRAM_DRAFT_ID_MAX) + 1;
+  }
+
+  private normalizeDraftText(text: string): string {
+    /* Keep live draft preview inside Telegram limits while preserving the newest tail. */
+    if (text.length <= TELEGRAM_DRAFT_MAX_CHARS) {
+      return text;
+    }
+
+    return `...\n${text.slice(text.length - (TELEGRAM_DRAFT_MAX_CHARS - 4))}`;
+  }
+
+  private isDraftUnsupportedError(error: unknown): boolean {
+    /* Disable draft path permanently when Telegram runtime does not support the new method. */
+    const message = error instanceof Error ? error.message : "";
+    return typeof message === "string" && TELEGRAM_DRAFT_UNSUPPORTED.test(message);
   }
 }
