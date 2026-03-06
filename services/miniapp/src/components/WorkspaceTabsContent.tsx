@@ -22,6 +22,7 @@ import {
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
   OpenCodeVersionStatus,
+  ProviderAuthMethod,
   ProviderOverview,
   ProxyApplyResult,
   ProxySettingsInput,
@@ -148,9 +149,26 @@ type Props = {
     isSaving: boolean;
     isApplying: boolean;
     applyResult: ProxyApplyResult | null;
+    cliproxyConnected: boolean;
+    cliproxyMethods: ProviderAuthMethod[];
+    cliproxyOAuthState: {
+      providerID: string;
+      methodIndex: number;
+      method: "auto" | "code";
+      url: string;
+      instructions: string;
+      codeDraft: string;
+    } | null;
+    isProviderSubmitting: boolean;
     onReload: () => void;
     onSave: (input: ProxySettingsInput) => void;
     onApply: () => void;
+    onStartCliproxyConnect: (methodIndex: number) => void;
+    onSubmitCliproxyApiKey: (key: string) => void;
+    onSubmitCliproxyOAuthCode: () => void;
+    onCompleteCliproxyOAuthAuto: () => void;
+    onDisconnectCliproxy: () => void;
+    onChangeCliproxyCodeDraft: (value: string) => void;
   };
 };
 
@@ -260,9 +278,19 @@ export const WorkspaceTabsContent = (props: Props) => {
         isSaving={props.proxyState.isSaving}
         isApplying={props.proxyState.isApplying}
         applyResult={props.proxyState.applyResult}
+        cliproxyConnected={props.proxyState.cliproxyConnected}
+        cliproxyMethods={props.proxyState.cliproxyMethods}
+        cliproxyOAuthState={props.proxyState.cliproxyOAuthState}
+        isProviderSubmitting={props.proxyState.isProviderSubmitting}
         onReload={props.proxyState.onReload}
         onSave={props.proxyState.onSave}
         onApply={props.proxyState.onApply}
+        onStartCliproxyConnect={props.proxyState.onStartCliproxyConnect}
+        onSubmitCliproxyApiKey={props.proxyState.onSubmitCliproxyApiKey}
+        onSubmitCliproxyOAuthCode={props.proxyState.onSubmitCliproxyOAuthCode}
+        onCompleteCliproxyOAuthAuto={props.proxyState.onCompleteCliproxyOAuthAuto}
+        onDisconnectCliproxy={props.proxyState.onDisconnectCliproxy}
+        onChangeCliproxyCodeDraft={props.proxyState.onChangeCliproxyCodeDraft}
       />
     );
   }

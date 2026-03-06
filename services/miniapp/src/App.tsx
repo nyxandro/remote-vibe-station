@@ -477,8 +477,8 @@ export const App = () => {
   ]);
 
   useEffect(() => {
-    /* Load providers overview only when user opens dedicated Providers tab. */
-    if (activeTab !== "providers") {
+    /* Providers/CLIProxy account blocks share one providers overview payload. */
+    if (activeTab !== "providers" && activeTab !== "proxy") {
       return;
     }
     void loadProviderOverview();
@@ -649,9 +649,25 @@ export const App = () => {
             isSaving: isProxySettingsSaving,
             isApplying: isProxySettingsApplying,
             applyResult: proxyApplyResult,
+            cliproxyConnected: Boolean(
+              providerOverview?.providers?.find((provider) => provider.id === "cliproxy")?.connected
+            ),
+            cliproxyMethods: providerOverview?.authMethods?.cliproxy ?? [],
+            cliproxyOAuthState:
+              providerOAuthState?.providerID === "cliproxy" ? providerOAuthState : null,
+            isProviderSubmitting: isProviderSubmitting,
             onReload: () => void loadProxySettings(),
             onSave: (input) => void saveProxySettings(input),
-            onApply: () => void applyProxySettings()
+            onApply: () => void applyProxySettings(),
+            onStartCliproxyConnect: (methodIndex) =>
+              void startProviderConnect({ providerID: "cliproxy", methodIndex }),
+            onSubmitCliproxyApiKey: (key) =>
+              void submitProviderApiKey({ providerID: "cliproxy", key }),
+            onSubmitCliproxyOAuthCode: () => void submitProviderOAuthCode(),
+            onCompleteCliproxyOAuthAuto: () => void completeProviderOAuthAuto(),
+            onDisconnectCliproxy: () => void disconnectProvider("cliproxy"),
+            onChangeCliproxyCodeDraft: (value) =>
+              setProviderOAuthState((prev) => (prev ? { ...prev, codeDraft: value } : prev))
           }}
         />
       </section>

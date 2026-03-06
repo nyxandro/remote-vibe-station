@@ -10,6 +10,8 @@ import { useMemo, useState } from "react";
 import { ProviderAuthMethod } from "../types";
 import { ProviderOAuthState } from "../hooks/use-provider-auth";
 
+const CLIPROXY_PROVIDER_ID = "cliproxy";
+
 type Props = {
   selected: {
     model: { providerID: string; modelID: string };
@@ -42,13 +44,13 @@ export const ProvidersTab = (props: Props) => {
   }, [props.providers]);
 
   const connectedProviders = useMemo(() => {
-    /* Main list intentionally shows only connected providers to reduce visual noise. */
-    return props.providers.filter((provider) => provider.connected);
+    /* Keep account-proxy provider in dedicated CLI/Proxy tab to avoid tab overlap. */
+    return props.providers.filter((provider) => provider.connected && provider.id !== CLIPROXY_PROVIDER_ID);
   }, [props.providers]);
 
   const connectableProviders = useMemo(() => {
-    /* Add-provider picker is limited to disconnected providers only. */
-    return props.providers.filter((provider) => !provider.connected);
+    /* Exclude CLIProxy from generic providers onboarding, it has its own tab now. */
+    return props.providers.filter((provider) => !provider.connected && provider.id !== CLIPROXY_PROVIDER_ID);
   }, [props.providers]);
 
   const filteredConnectableProviders = useMemo(() => {

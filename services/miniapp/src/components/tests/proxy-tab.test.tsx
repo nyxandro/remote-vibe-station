@@ -19,6 +19,7 @@ describe("ProxyTab", () => {
     /* CLI/Proxy tab should not replace Providers tab and should persist proxy profile updates. */
     const onSave = vi.fn();
     const onApply = vi.fn();
+    const onStartCliproxyConnect = vi.fn();
 
     render(
       <ProxyTab
@@ -45,14 +46,26 @@ describe("ProxyTab", () => {
         isSaving={false}
         isApplying={false}
         applyResult={null}
+        cliproxyConnected={false}
+        cliproxyMethods={[{ type: "oauth", label: "ChatGPT" }]}
+        cliproxyOAuthState={null}
+        isProviderSubmitting={false}
         onReload={vi.fn()}
         onSave={onSave}
         onApply={onApply}
+        onStartCliproxyConnect={onStartCliproxyConnect}
+        onSubmitCliproxyApiKey={vi.fn()}
+        onSubmitCliproxyOAuthCode={vi.fn()}
+        onCompleteCliproxyOAuthAuto={vi.fn()}
+        onDisconnectCliproxy={vi.fn()}
+        onChangeCliproxyCodeDraft={vi.fn()}
       />
     );
 
-    expect(screen.getByText("Используйте вкладку Providers для подключения моделей напрямую (без CLIProxy)."))
-      .toBeTruthy();
+    expect(screen.getByText("CLIProxy аккаунты подключаются здесь.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "ChatGPT" }));
+    expect(onStartCliproxyConnect).toHaveBeenCalledWith(0);
 
     fireEvent.change(screen.getByLabelText("Outbound mode"), { target: { value: "vless" } });
     fireEvent.change(screen.getByLabelText("VLESS proxy URL"), {

@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 
-import { ProxyApplyResult, ProxySettingsInput, ProxySettingsMode, ProxySettingsSnapshot } from "../types";
+import { ProxyApplyResult, ProxySettingsInput, ProxySettingsMode, ProxySettingsSnapshot, ProviderAuthMethod } from "../types";
 
 type Props = {
   snapshot: ProxySettingsSnapshot | null;
@@ -15,15 +15,33 @@ type Props = {
   isSaving: boolean;
   isApplying: boolean;
   applyResult: ProxyApplyResult | null;
+  cliproxyConnected: boolean;
+  cliproxyMethods: ProviderAuthMethod[];
+  cliproxyOAuthState: {
+    providerID: string;
+    methodIndex: number;
+    method: "auto" | "code";
+    url: string;
+    instructions: string;
+    codeDraft: string;
+  } | null;
+  isProviderSubmitting: boolean;
   onReload: () => void;
   onSave: (input: ProxySettingsInput) => void;
   onApply: () => void;
+  onStartCliproxyConnect: (methodIndex: number) => void;
+  onSubmitCliproxyApiKey: (key: string) => void;
+  onSubmitCliproxyOAuthCode: () => void;
+  onCompleteCliproxyOAuthAuto: () => void;
+  onDisconnectCliproxy: () => void;
+  onChangeCliproxyCodeDraft: (value: string) => void;
 };
 
 export const ProxyTab = (props: Props) => {
   const [mode, setMode] = useState<ProxySettingsMode>("direct");
   const [vlessProxyUrl, setVlessProxyUrl] = useState<string>("");
   const [noProxy, setNoProxy] = useState<string>("localhost,127.0.0.1,backend,opencode,cliproxy");
+  const [cliproxyApiKeyDraft, setCliproxyApiKeyDraft] = useState<string>("");
 
   useEffect(() => {
     /* Mirror persisted backend profile into local form draft when payload changes. */
@@ -54,6 +72,8 @@ export const ProxyTab = (props: Props) => {
     return Number.isNaN(parsed.getTime()) ? "(unknown date)" : parsed.toLocaleString();
   })();
 
+  const isCliproxyApiFlow = props.cliproxyOAuthState?.instructions === "api";
+
   return (
     <section className="providers-shell">
       <div className="settings-header-row">
@@ -64,9 +84,105 @@ export const ProxyTab = (props: Props) => {
       </div>
 
       <div className="providers-selected-card">
-        <div>Этот раздел выделен отдельно от провайдеров моделей.</div>
-        <div>Используйте вкладку Providers для подключения моделей напрямую (без CLIProxy).</div>
+        <div>CLIProxy аккаунты подключаются здесь.</div>
+        <div>Вкладка Providers остается для прямых провайдеров моделей (без CLIProxy).</div>
       </div>
+
+      <div className="providers-item-card">
+        {/* Keep dedicated CLIProxy account status and onboarding actions in this tab only. */}
+        <div className="providers-item-head">
+          <span className="providers-item-name">CLIProxy</span>
+          <span className={`providers-badge ${props.cliproxyConnected ? "connected" : "disconnected"}`}>
+            {props.cliproxyConnected ? "Connected" : "Disconnected"}
+          </span>
+        </div>
+
+        {props.cliproxyConnected ? (
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={props.onDisconnectCliproxy}
+            disabled={props.isProviderSubmitting}
+          >
+            Disconnect
+          </button>
+        ) : (
+          <div className="providers-method-grid">
+            {props.cliproxyMethods.map((method, index) => (
+              <button
+                key={`cliproxy-method:${index}`}
+                className="btn outline"
+                type="button"
+                disabled={props.isProviderSubmitting}
+                onClick={() => props.onStartCliproxyConnect(index)}
+              >
+                {method.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {props.cliproxyOAuthState && isCliproxyApiFlow ? (
+        <div className="providers-auth-card">
+          {/* API flow keeps key entry scoped to CLIProxy provider only. */}
+          <div className="project-create-note">API key для CLIProxy</div>
+          <input
+            className="input settings-input-compact"
+            placeholder="Введите API ключ"
+            type="password"
+            autoComplete="new-password"
+            value={cliproxyApiKeyDraft}
+            onChange={(event) => setCliproxyApiKeyDraft(event.target.value)}
+          />
+          <button
+            className="btn primary"
+            type="button"
+            disabled={props.isProviderSubmitting}
+            onClick={() => props.onSubmitCliproxyApiKey(cliproxyApiKeyDraft)}
+          >
+            Подключить CLIProxy по API ключу
+          </button>
+        </div>
+      ) : null}
+
+      {props.cliproxyOAuthState && !isCliproxyApiFlow ? (
+        <div className="providers-auth-card">
+          {/* OAuth flow mirrors existing provider UX but remains within CLI/Proxy tab. */}
+          <div className="project-create-note">{props.cliproxyOAuthState.instructions}</div>
+          <a className="btn outline" href={props.cliproxyOAuthState.url} target="_blank" rel="noreferrer">
+            Открыть авторизацию CLIProxy
+          </a>
+
+          {props.cliproxyOAuthState.method === "auto" ? (
+            <button
+              className="btn primary"
+              type="button"
+              disabled={props.isProviderSubmitting}
+              onClick={props.onCompleteCliproxyOAuthAuto}
+            >
+              Проверить подключение
+            </button>
+          ) : (
+            <>
+              <input
+                className="input settings-input-compact"
+                placeholder="Введите OAuth code"
+                value={props.cliproxyOAuthState.codeDraft}
+                onChange={(event) => props.onChangeCliproxyCodeDraft(event.target.value)}
+              />
+              <button
+                className="btn primary"
+                type="button"
+                disabled={props.isProviderSubmitting}
+                onClick={props.onSubmitCliproxyOAuthCode}
+              >
+                Завершить OAuth
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div className="placeholder">
         Runtime-параметры CLIProxy/VLESS управляются через runtime compose/env конфиги на сервере.
