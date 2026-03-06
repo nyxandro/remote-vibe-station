@@ -44,7 +44,7 @@ const DEFAULT_PORT = 3001;
 const COMMAND_SYNC_INTERVAL_MS = 60_000;
 const OPENCODE_WEB_AUTH_STORAGE_FILE = "/app/data/opencode-web-auth.json";
 const OPENCODE_WEB_AUTH_LINK_TTL_MS = 5 * 60 * 1000;
-const OPENCODE_WEB_AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const OPENCODE_WEB_AUTH_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const OPENCODE_WEB_AUTH_COOKIE_NAME = "opencode_sid";
 
 const resolvePort = (value: string | undefined): number => {
@@ -125,7 +125,6 @@ const bootstrap = async (): Promise<void> => {
     app,
     service: webAuth,
     cookieName: OPENCODE_WEB_AUTH_COOKIE_NAME,
-    cookieMaxAgeMs: OPENCODE_WEB_AUTH_SESSION_TTL_MS,
     cookieDomain: opencodeCookieDomain
   });
 

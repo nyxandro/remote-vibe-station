@@ -19,7 +19,6 @@ export type OpenCodeWebAuthHttpOptions = {
   app: Express;
   service: OpenCodeWebAuthService;
   cookieName: string;
-  cookieMaxAgeMs: number;
   cookieDomain?: string;
 };
 
@@ -50,7 +49,6 @@ export const registerOpenCodeWebAuthHttp = (options: OpenCodeWebAuthHttpOptions)
         response,
         cookieName: options.cookieName,
         cookieValue: session.sessionId,
-        cookieMaxAgeMs: options.cookieMaxAgeMs,
         cookieDomain: options.cookieDomain
       });
 
@@ -131,15 +129,13 @@ const setAuthCookie = (input: {
   response: Response;
   cookieName: string;
   cookieValue: string;
-  cookieMaxAgeMs: number;
   cookieDomain?: string;
 }): void => {
-  /* Keep browser cookie secure and non-readable from JavaScript. */
+  /* Keep browser cookie secure, unreadable from JavaScript, and scoped to browser session only. */
   input.response.cookie(input.cookieName, input.cookieValue, {
     httpOnly: true,
     secure: true,
     sameSite: "strict",
-    maxAge: input.cookieMaxAgeMs,
     domain: input.cookieDomain,
     path: "/"
   });

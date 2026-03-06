@@ -18,7 +18,6 @@ describe("registerOpenCodeWebAuthHttp", () => {
         verifySession: jest.fn()
       } as unknown as OpenCodeWebAuthService,
       cookieName: "opencode_sid",
-      cookieMaxAgeMs: 30 * 24 * 60 * 60 * 1000,
       cookieDomain: "code.example.com"
     });
 
@@ -38,6 +37,7 @@ describe("registerOpenCodeWebAuthHttp", () => {
       expect(cookie).toContain("Secure");
       expect(cookie).toContain("SameSite=Strict");
       expect(cookie).toContain("Domain=code.example.com");
+      expect(cookie).not.toContain("Max-Age");
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -53,7 +53,6 @@ describe("registerOpenCodeWebAuthHttp", () => {
         verifySession: jest.fn(async () => ({ adminId: 42 }))
       } as unknown as OpenCodeWebAuthService,
       cookieName: "opencode_sid",
-      cookieMaxAgeMs: 30 * 24 * 60 * 60 * 1000,
       cookieDomain: "code.example.com"
     });
 

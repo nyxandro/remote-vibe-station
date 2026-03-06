@@ -39,7 +39,7 @@ export const registerOpenCodeAccessCommand = (input: RegisterOpenCodeAccessComma
         "🔐 <b>Ссылка для входа во внешний OpenCode:</b>\n" +
           `<a href="${escapedUrl}">Открыть OpenCode</a>\n` +
           `<code>${escapedUrl}</code>\n\n` +
-          `Ссылка одноразовая и живет ${linkTtl}. После входа устройство запомнится на ${sessionTtl}.`,
+          `Ссылка одноразовая и живет ${linkTtl}. После входа срок браузерной сессии — ${sessionTtl}; она завершается после выхода из браузера.`,
         {
           parse_mode: "HTML",
           link_preview_options: {

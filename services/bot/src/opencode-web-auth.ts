@@ -6,6 +6,7 @@
  * - IssueMagicLinkInput (L41) - Input for short-lived Telegram-issued link generation.
  * - ExchangeMagicLinkInput (L45) - Input for link exchange into device session.
  * - VerifySessionInput (L50) - Input for cookie session validation.
+ * - ACTIVE_SESSION_GRACE_MS (L67) - Post-expiry grace while an active browser keeps sending traffic.
  * - OpenCodeWebAuthService (L67) - Persistent auth state service (tokens + sessions).
  */
 
@@ -31,6 +32,7 @@ type WebAuthSessionRecord = {
   adminId: number;
   fingerprintHash: string;
   expiresAt: number;
+  lastSeenAt: number;
 };
 
 type WebAuthState = {
@@ -68,6 +70,8 @@ const EMPTY_STATE: WebAuthState = {
   tokens: [],
   sessions: []
 };
+
+export const ACTIVE_SESSION_GRACE_MS = 5 * 60 * 1000;
 
 export class OpenCodeWebAuthService {
   private readonly storageFilePath: string;
@@ -142,7 +146,8 @@ export class OpenCodeWebAuthService {
         sessionHash,
         adminId: tokenRecord.adminId,
         fingerprintHash,
-        expiresAt: nowMs + this.sessionTtlMs
+        expiresAt: nowMs + this.sessionTtlMs,
+        lastSeenAt: nowMs
       });
 
       return {
@@ -159,21 +164,25 @@ export class OpenCodeWebAuthService {
     const fingerprintHash = this.hashValue(input.fingerprint);
 
     return this.withLockedState(async (state) => {
+      this.pruneExpiredState(state, nowMs);
       const session = state.sessions.find(
         (item) =>
           item.sessionHash === sessionHash &&
           item.fingerprintHash === fingerprintHash &&
-          nowMs < item.expiresAt
+          this.isSessionAlive(item, nowMs)
       );
 
       if (!session) {
         return null;
       }
 
+      /* Refresh activity timestamp so an active tab is not cut off mid-work after 24h. */
+      session.lastSeenAt = nowMs;
+
       return {
         adminId: session.adminId
       };
-    }, false);
+    });
   }
 
   private async withLockedState<T>(
@@ -242,8 +251,17 @@ export class OpenCodeWebAuthService {
 
   private pruneExpiredState(state: WebAuthState, nowMs: number): void {
     /* Remove expired sessions and expired/used tokens to keep storage bounded. */
-    state.sessions = state.sessions.filter((item) => nowMs < item.expiresAt);
+    state.sessions = state.sessions.filter((item) => this.isSessionAlive(item, nowMs));
     state.tokens = state.tokens.filter((item) => nowMs < item.expiresAt && typeof item.usedAt === "undefined");
+  }
+
+  private isSessionAlive(session: WebAuthSessionRecord, nowMs: number): boolean {
+    /* Keep session valid until hard TTL, then only during short active-request grace. */
+    if (nowMs < session.expiresAt) {
+      return true;
+    }
+
+    return nowMs - session.lastSeenAt <= ACTIVE_SESSION_GRACE_MS;
   }
 
   private hashValue(value: string): string {

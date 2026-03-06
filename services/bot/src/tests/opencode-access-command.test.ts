@@ -42,7 +42,7 @@ describe("registerOpenCodeAccessCommand", () => {
     const webAuth = {
       issueMagicLink: jest.fn(async () => "magic-token"),
       getLinkTtlMs: jest.fn(() => 5 * 60 * 1000),
-      getSessionTtlMs: jest.fn(() => 30 * 24 * 60 * 60 * 1000)
+        getSessionTtlMs: jest.fn(() => 24 * 60 * 60 * 1000)
     } as unknown as OpenCodeWebAuthService;
     const mock = createBotMock();
 
@@ -73,6 +73,10 @@ describe("registerOpenCodeAccessCommand", () => {
       expect.stringContaining("https://code.example.com/opencode-auth/exchange?token=magic-token"),
       expect.anything()
     );
+    expect(reply).toHaveBeenCalledWith(
+      expect.stringContaining("После входа срок браузерной сессии — 1 день"),
+      expect.anything()
+    );
   });
 
   it("denies command for non-admin account", async () => {
@@ -80,7 +84,7 @@ describe("registerOpenCodeAccessCommand", () => {
     const webAuth = {
       issueMagicLink: jest.fn(async () => "magic-token"),
       getLinkTtlMs: jest.fn(() => 5 * 60 * 1000),
-      getSessionTtlMs: jest.fn(() => 30 * 24 * 60 * 60 * 1000)
+        getSessionTtlMs: jest.fn(() => 24 * 60 * 60 * 1000)
     } as unknown as OpenCodeWebAuthService;
     const mock = createBotMock();
 
