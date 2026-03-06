@@ -30,6 +30,10 @@ export type AppConfig = {
   opencodeServerUrl: string;
   opencodeServerPassword?: string;
   opencodeServerUsername?: string;
+  /** Optional CLIProxy management base URL for account onboarding APIs. */
+  cliproxyManagementUrl?: string;
+  /** Shared secret for CLIProxy management API header authentication. */
+  cliproxyManagementPassword?: string;
   /** GitHub App ID used to mint short-lived installation tokens. */
   githubAppId?: string;
   /** GitHub App slug used to build installation URL. */

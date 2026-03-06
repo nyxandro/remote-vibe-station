@@ -14,6 +14,9 @@
  * - SystemMetricsSnapshot - CPU/RAM/disk/network snapshot for Settings diagnostics.
  * - ProxySettingsSnapshot - CLI/Proxy profile and env preview payload.
  * - ProxyApplyResult - Result of runtime apply action from CLI/Proxy tab.
+ * - CliproxyProviderState - One provider status inside CLIProxy account section.
+ * - CliproxyAccountState - Full CLIProxy account state payload.
+ * - CliproxyOAuthStartPayload - OAuth start response with browser URL and state.
  * - OpenCodeVersionStatus (L124) - Current/latest OpenCode version metadata.
  * - OpenCodeVersionUpdateResult (L131) - Result payload for OpenCode update operation.
  * - DiffPreviewResponse (L159) - Token-based diff preview payload.
@@ -205,6 +208,24 @@ export type ProxyApplyResult = {
   command: string;
   stdout: string;
   stderr: string;
+};
+
+export type CliproxyProviderState = {
+  id: "codex" | "anthropic" | "antigravity" | "kimi" | "qwen" | "iflow";
+  label: string;
+  connected: boolean;
+};
+
+export type CliproxyAccountState = {
+  providers: CliproxyProviderState[];
+  authFiles: string[];
+};
+
+export type CliproxyOAuthStartPayload = {
+  provider: CliproxyProviderState["id"];
+  state: string;
+  url: string;
+  instructions: string;
 };
 
 export type OpenCodeVersionStatus = {

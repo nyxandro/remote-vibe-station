@@ -1,0 +1,129 @@
+/**
+ * @fileoverview Thin HTTP client for CLIProxy management API.
+ *
+ * Exports:
+ * - CliproxyProviderId - Supported OAuth provider identifiers.
+ * - CliproxyManagementClient - Calls management endpoints with secret header.
+ */
+
+import { BadGatewayException, Inject, Injectable } from "@nestjs/common";
+
+import { AppConfig, ConfigToken } from "../config/config.types";
+
+const MANAGEMENT_TIMEOUT_MS = 20_000;
+const MANAGEMENT_KEY_HEADER = "X-Management-Key";
+const DEFAULT_MANAGEMENT_URL = "http://cliproxy:8317";
+
+const PROVIDER_ENDPOINTS = {
+  codex: "codex-auth-url",
+  anthropic: "anthropic-auth-url",
+  antigravity: "antigravity-auth-url",
+  kimi: "kimi-auth-url",
+  qwen: "qwen-auth-url",
+  iflow: "iflow-auth-url"
+} as const;
+
+export type CliproxyProviderId = keyof typeof PROVIDER_ENDPOINTS;
+
+type OAuthStartResponse = {
+  status?: string;
+  state?: string;
+  url?: string;
+};
+
+type CallbackInput = {
+  provider: CliproxyProviderId;
+  state: string;
+  code?: string;
+  error?: string;
+};
+
+@Injectable()
+export class CliproxyManagementClient {
+  public constructor(@Inject(ConfigToken) private readonly config: AppConfig) {}
+
+  public async getAuthFiles(): Promise<string[]> {
+    /* Auth file list is the primary source of connected OAuth accounts. */
+    const response = await this.request<{ files?: string[] }>("/v0/management/auth-files", {
+      method: "GET"
+    });
+    if (!response || typeof response !== "object") {
+      return [];
+    }
+    return Array.isArray(response.files) ? response.files.filter((item): item is string => typeof item === "string") : [];
+  }
+
+  public async getConfig(): Promise<Record<string, unknown>> {
+    /* Config payload contains API-key based account fields for several providers. */
+    const response = await this.request<Record<string, unknown>>("/v0/management/config", {
+      method: "GET"
+    });
+    return response && typeof response === "object" ? response : {};
+  }
+
+  public async startOAuth(provider: CliproxyProviderId): Promise<{ provider: CliproxyProviderId; state: string; url: string }> {
+    /* Dedicated auth-url endpoints initialize provider OAuth/device flow in CLIProxy. */
+    const endpoint = PROVIDER_ENDPOINTS[provider];
+    const payload = await this.request<OAuthStartResponse>(`/v0/management/${endpoint}`, {
+      method: "GET"
+    });
+
+    const state = payload && typeof payload.state === "string" ? payload.state.trim() : "";
+    const url = payload && typeof payload.url === "string" ? payload.url.trim() : "";
+    if (!state || !url) {
+      throw new BadGatewayException(`CLIProxy returned invalid OAuth payload for provider '${provider}'`);
+    }
+
+    return { provider, state, url };
+  }
+
+  public async completeOAuth(input: CallbackInput): Promise<void> {
+    /* OAuth callback endpoint exchanges provider code/error using tracked state. */
+    await this.request<Record<string, unknown>>("/v0/management/oauth-callback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  }
+
+  private async request<T>(path: string, init: RequestInit): Promise<T> {
+    /* Management API is private; every call must include secret header and timeout. */
+    const managementPassword = this.config.cliproxyManagementPassword;
+    if (!managementPassword) {
+      throw new BadGatewayException("CLIPROXY_MANAGEMENT_PASSWORD is not configured");
+    }
+
+    const baseUrl = this.config.cliproxyManagementUrl ?? DEFAULT_MANAGEMENT_URL;
+    const url = `${baseUrl}${path}`;
+    const headers = new Headers(init.headers);
+    headers.set(MANAGEMENT_KEY_HEADER, managementPassword);
+
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      signal: AbortSignal.timeout(MANAGEMENT_TIMEOUT_MS)
+    });
+
+    const body = await response.text();
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `CLIProxy management request failed (${response.status}) at '${path}': ${body || "empty response"}`
+      );
+    }
+
+    if (!body) {
+      /* Some management endpoints intentionally return empty body on success. */
+      return null as unknown as T;
+    }
+
+    /* Parse failures should include endpoint context and raw payload for debugging. */
+    try {
+      return JSON.parse(body) as T;
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      throw new BadGatewayException(
+        `CLIProxy management returned invalid JSON at '${path}': ${details}; body: ${body}`
+      );
+    }
+  }
+}

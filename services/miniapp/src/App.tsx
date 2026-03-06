@@ -28,6 +28,7 @@ import { useProjectGit } from "./hooks/use-project-git";
 import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useProjectRuntime } from "./hooks/use-project-runtime";
+import { useCliproxyAccounts } from "./hooks/use-cliproxy-accounts";
 import { useProxySettings } from "./hooks/use-proxy-settings";
 import { useServerMetrics } from "./hooks/use-server-metrics";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
@@ -131,6 +132,15 @@ export const App = () => {
     saveSettings: saveProxySettings,
     applySettings: applyProxySettings
   } = useProxySettings(setError);
+  const {
+    state: cliproxyAccounts,
+    isLoading: isCliproxyAccountsLoading,
+    isSubmitting: isCliproxyAccountsSubmitting,
+    oauthStart: cliproxyOAuthStart,
+    loadState: loadCliproxyAccounts,
+    startOAuth: startCliproxyOAuth,
+    completeOAuth: completeCliproxyOAuth
+  } = useCliproxyAccounts(setError);
 
   const loadProjects = async (): Promise<void> => {
     try {
@@ -477,8 +487,8 @@ export const App = () => {
   ]);
 
   useEffect(() => {
-    /* Providers/CLIProxy account blocks share one providers overview payload. */
-    if (activeTab !== "providers" && activeTab !== "proxy") {
+    /* Load provider overview only for direct provider management tab. */
+    if (activeTab !== "providers") {
       return;
     }
     void loadProviderOverview();
@@ -498,7 +508,8 @@ export const App = () => {
       return;
     }
     void loadProxySettings();
-  }, [activeTab, loadProxySettings]);
+    void loadCliproxyAccounts();
+  }, [activeTab, loadCliproxyAccounts, loadProxySettings]);
 
   const withActiveProject = (run: (projectId: string) => void): void => {
     if (activeId) {
@@ -649,25 +660,16 @@ export const App = () => {
             isSaving: isProxySettingsSaving,
             isApplying: isProxySettingsApplying,
             applyResult: proxyApplyResult,
-            cliproxyConnected: Boolean(
-              providerOverview?.providers?.find((provider) => provider.id === "cliproxy")?.connected
-            ),
-            cliproxyMethods: providerOverview?.authMethods?.cliproxy ?? [],
-            cliproxyOAuthState:
-              providerOAuthState?.providerID === "cliproxy" ? providerOAuthState : null,
-            isProviderSubmitting: isProviderSubmitting,
+            cliproxyAccounts,
+            cliproxyOAuthStart,
+            isCliproxyLoading: isCliproxyAccountsLoading,
+            isCliproxySubmitting: isCliproxyAccountsSubmitting,
             onReload: () => void loadProxySettings(),
             onSave: (input) => void saveProxySettings(input),
             onApply: () => void applyProxySettings(),
-            onStartCliproxyConnect: (methodIndex) =>
-              void startProviderConnect({ providerID: "cliproxy", methodIndex }),
-            onSubmitCliproxyApiKey: (key) =>
-              void submitProviderApiKey({ providerID: "cliproxy", key }),
-            onSubmitCliproxyOAuthCode: () => void submitProviderOAuthCode(),
-            onCompleteCliproxyOAuthAuto: () => void completeProviderOAuthAuto(),
-            onDisconnectCliproxy: () => void disconnectProvider("cliproxy"),
-            onChangeCliproxyCodeDraft: (value) =>
-              setProviderOAuthState((prev) => (prev ? { ...prev, codeDraft: value } : prev))
+            onReloadCliproxy: () => void loadCliproxyAccounts(),
+            onStartCliproxyAuth: (provider) => void startCliproxyOAuth(provider),
+            onCompleteCliproxyAuth: (input) => void completeCliproxyOAuth(input)
           }}
         />
       </section>

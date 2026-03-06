@@ -208,6 +208,7 @@ EOF
 # Runtime-generated CLIProxyAPI config.
 request-log: false
 request-retry: 2
+port: 8317
 auth-dir: "~/.cli-proxy-api"
 api-keys:
   - ${CLIPROXY_API_KEY}
