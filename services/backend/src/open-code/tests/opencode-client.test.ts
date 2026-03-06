@@ -117,6 +117,74 @@ describe("OpenCodeClient command APIs", () => {
     expect(body.agent).toBe("plan");
   });
 
+  it("sends multipart prompt with local image attachment", async () => {
+    /* Telegram image prompts must reach OpenCode as text+file parts in one message call. */
+    const fetchMock = jest
+      .spyOn(global, "fetch" as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ id: "session-2" })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            info: {
+              id: "msg-2",
+              sessionID: "session-2",
+              providerID: "opencode",
+              modelID: "big-pickle",
+              mode: "primary",
+              agent: "plan",
+              cost: 0,
+              tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
+            },
+            parts: [{ type: "text", text: "ok" }]
+          })
+      } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await client.sendPromptParts(
+      [
+        { type: "text", text: "Что на изображении?" },
+        {
+          type: "file",
+          mime: "image/png",
+          url: "file:///tmp/telegram/shot.png",
+          filename: "shot.png"
+        }
+      ],
+      {
+        directory: "/srv/projects/demo",
+        model: { providerID: "opencode", modelID: "big-pickle", variant: "high" },
+        agent: "plan"
+      }
+    );
+
+    const requestInit = fetchMock.mock.calls[1][1] as RequestInit;
+    const body = JSON.parse(String(requestInit.body));
+    expect(body.parts).toEqual([
+      { type: "text", text: "Что на изображении?" },
+      {
+        type: "file",
+        mime: "image/png",
+        url: "file:///tmp/telegram/shot.png",
+        filename: "shot.png"
+      }
+    ]);
+  });
+
+  it("fails fast for empty multipart prompt", async () => {
+    /* Empty multipart payload should not create or reuse a session accidentally. */
+    const fetchMock = jest.spyOn(global, "fetch" as any);
+    const client = new OpenCodeClient(baseConfig);
+
+    await expect(client.sendPromptParts([], { directory: "/srv/projects/demo" })).rejects.toThrow(
+      "parts must contain at least one item"
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("surfaces provider rate-limit details with retry seconds", async () => {
     /* HTTP 429 from OpenCode should include actionable retry hint for Telegram user. */
     jest

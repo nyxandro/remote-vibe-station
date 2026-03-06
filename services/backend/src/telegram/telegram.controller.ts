@@ -18,6 +18,7 @@ import { ProjectsService } from "../projects/projects.service";
 import { AdminHeaderGuard } from "../security/admin-header.guard";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { TelegramDiffPreviewStore } from "./diff-preview/telegram-diff-preview.store";
+import { TelegramPromptQueueService } from "./prompt-queue/telegram-prompt-queue.service";
 import { TelegramCommandCatalogService } from "./telegram-command-catalog.service";
 import { TelegramPreferencesService } from "./preferences/telegram-preferences.service";
 import { TelegramStreamStore } from "./telegram-stream.store";
@@ -38,7 +39,8 @@ export class TelegramController {
     private readonly opencode: OpenCodeClient,
     private readonly sessionRouting: OpenCodeSessionRoutingStore,
     private readonly diffPreviews: TelegramDiffPreviewStore,
-    private readonly runtime: OpenCodeRuntimeService
+    private readonly runtime: OpenCodeRuntimeService,
+    private readonly promptQueue: TelegramPromptQueueService
   ) {}
 
   @UseGuards(AdminHeaderGuard)
@@ -104,6 +106,70 @@ export class TelegramController {
     }
 
     return this.preferences.getSettings(adminId);
+  }
+
+  @UseGuards(AdminHeaderGuard)
+  @Post("prompt/enqueue")
+  public async enqueuePrompt(
+    @Body()
+    body: {
+      chatId?: number;
+      text?: string;
+      messageId?: number;
+      attachments?: Array<{
+        kind?: string;
+        telegramFileId?: string;
+        fileName?: string | null;
+        mimeType?: string | null;
+        fileSizeBytes?: number | null;
+        mediaGroupId?: string | null;
+      }>;
+    },
+    @Req() req: Request
+  ) {
+    /* Accept text chunks and image attachments for debounced Telegram-to-OpenCode queueing. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    const text = typeof body?.text === "string" ? body.text.trim() : "";
+    const chatId = typeof body?.chatId === "number" ? body.chatId : null;
+    const attachmentsRaw = Array.isArray(body?.attachments) ? body.attachments : [];
+    const attachments = attachmentsRaw
+      .filter((item) => typeof item?.telegramFileId === "string" && (item?.kind === "photo" || item?.kind === "document"))
+      .map((item) => ({
+        kind: item.kind as "photo" | "document",
+        telegramFileId: String(item.telegramFileId).trim(),
+        fileName: typeof item.fileName === "string" ? item.fileName : null,
+        mimeType: typeof item.mimeType === "string" ? item.mimeType : null,
+        fileSizeBytes: typeof item.fileSizeBytes === "number" ? item.fileSizeBytes : null,
+        mediaGroupId: typeof item.mediaGroupId === "string" ? item.mediaGroupId : null
+      }))
+      .filter((item) => item.telegramFileId.length > 0);
+
+    if (!text && attachments.length === 0) {
+      throw new BadRequestException("Prompt text or attachment is required");
+    }
+    if (chatId === null) {
+      throw new BadRequestException("chatId is required");
+    }
+
+    try {
+      return {
+        ok: true,
+        ...(await this.promptQueue.enqueueIncomingPrompt({
+          adminId,
+          chatId,
+          text: text || undefined,
+          messageId: typeof body?.messageId === "number" ? body.messageId : undefined,
+          attachments
+        }))
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
   }
 
   @UseGuards(AdminHeaderGuard)

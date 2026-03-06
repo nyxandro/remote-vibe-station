@@ -63,6 +63,15 @@ const buildController = () => {
       updateAvailable: true
     })
   };
+  const promptQueue = {
+    enqueueIncomingPrompt: jest.fn().mockResolvedValue({
+      queueDepth: 0,
+      flushAt: "2026-03-07T12:00:00.000Z",
+      position: 1,
+      buffered: true,
+      merged: false
+    })
+  };
 
   const controller = new TelegramController(
     store as never,
@@ -75,10 +84,11 @@ const buildController = () => {
     opencode as never,
     sessionRouting as never,
     diffPreviews as never,
-    runtime as never
+    runtime as never,
+    promptQueue as never
   );
 
-  return { controller, commandCatalog, preferences, projects, gitSummary, opencode, sessionRouting, runtime };
+  return { controller, commandCatalog, preferences, projects, gitSummary, opencode, sessionRouting, runtime, promptQueue };
 };
 
 describe("TelegramController.listCommands", () => {
@@ -158,6 +168,67 @@ describe("TelegramController.getStartupSummary", () => {
     const { controller } = buildController();
 
     await expect(controller.getStartupSummary({} as Request)).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe("TelegramController.enqueuePrompt", () => {
+  test("queues normalized Telegram prompt payload", async () => {
+    /* Bot should receive a lightweight ack while backend assembles and queues the logical prompt. */
+    const { controller, promptQueue } = buildController();
+
+    const result = await controller.enqueuePrompt(
+      {
+        chatId: 77,
+        text: "Посмотри на скрин",
+        messageId: 15,
+        attachments: [
+          {
+            kind: "photo",
+            telegramFileId: "photo-1",
+            fileName: null,
+            mimeType: "image/jpeg",
+            fileSizeBytes: 123,
+            mediaGroupId: "group-1"
+          }
+        ]
+      },
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(promptQueue.enqueueIncomingPrompt).toHaveBeenCalledWith({
+      adminId: 649624756,
+      chatId: 77,
+      text: "Посмотри на скрин",
+      messageId: 15,
+      attachments: [
+        {
+          kind: "photo",
+          telegramFileId: "photo-1",
+          fileName: null,
+          mimeType: "image/jpeg",
+          fileSizeBytes: 123,
+          mediaGroupId: "group-1"
+        }
+      ]
+    });
+    expect(result).toEqual({
+      ok: true,
+      queueDepth: 0,
+      flushAt: "2026-03-07T12:00:00.000Z",
+      position: 1,
+      buffered: true,
+      merged: false
+    });
+  });
+
+  test("fails fast when payload has neither text nor attachments", async () => {
+    /* Empty transport updates should be rejected before queue state is mutated. */
+    const { controller, promptQueue } = buildController();
+
+    await expect(
+      controller.enqueuePrompt({ chatId: 77 }, { authAdminId: 649624756 } as unknown as Request)
+    ).rejects.toThrow(BadRequestException);
+    expect(promptQueue.enqueueIncomingPrompt).not.toHaveBeenCalled();
   });
 });
 

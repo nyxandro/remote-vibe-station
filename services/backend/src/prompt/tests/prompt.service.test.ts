@@ -17,6 +17,7 @@ const buildService = (): PromptService => {
   const opencode = {
     getDefaultModel: jest.fn(),
     sendPrompt: jest.fn(),
+    sendPromptParts: jest.fn(),
     executeCommand: jest.fn(),
     listCommands: jest.fn(),
     getModelContextLimit: jest.fn(),

@@ -21,6 +21,7 @@ import { TelegramDiffPreviewStore } from "../diff-preview/telegram-diff-preview.
 import { TelegramController } from "../telegram.controller";
 import { TelegramCommandCatalogService } from "../telegram-command-catalog.service";
 import { TelegramOutboxStore } from "../outbox/telegram-outbox.store";
+import { TelegramPromptQueueService } from "../prompt-queue/telegram-prompt-queue.service";
 import { TelegramPreferencesService } from "../preferences/telegram-preferences.service";
 import { TelegramStreamStore } from "../telegram-stream.store";
 
@@ -80,7 +81,8 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
         { provide: OpenCodeRuntimeService, useValue: { checkVersionStatus: jest.fn() } },
         { provide: OpenCodeSessionRoutingStore, useValue: {} },
         { provide: TelegramDiffPreviewStore, useValue: {} },
-        { provide: TelegramOutboxStore, useValue: {} }
+        { provide: TelegramOutboxStore, useValue: {} },
+        { provide: TelegramPromptQueueService, useValue: {} }
       ]
     }).compile();
 

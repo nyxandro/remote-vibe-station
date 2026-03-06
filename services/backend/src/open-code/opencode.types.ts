@@ -9,13 +9,14 @@
  * Exports:
  * - OpenCodeAssistantTokens (L18) - Token usage structure.
  * - OpenCodeAssistantInfo (L31) - Assistant message metadata (model/mode/agent/tokens).
- * - OpenCodePart (L58) - Discriminated union of relevant parts.
- * - OpenCodeMessageResponse (L99) - Response payload for POST /session/:id/message.
- * - OpenCodeCommand (L104) - Slash command metadata from GET /command.
- * - OpenCodeExecutionModel (L109) - Request model with optional thinking variant.
- * - OpenCodeProviderSummary (L115) - Provider metadata for Telegram pickers.
- * - OpenCodeProviderModel (L122) - Model metadata with variants.
- * - OpenCodeAgent (L128) - Agent metadata for Telegram picker.
+ * - OpenCodePart (L58) - Discriminated union of relevant response parts.
+ * - OpenCodePromptInputPart (L92) - Request part union for text and file attachments.
+ * - OpenCodeMessageResponse (L109) - Response payload for POST /session/:id/message.
+ * - OpenCodeCommand (L114) - Slash command metadata from GET /command.
+ * - OpenCodeExecutionModel (L119) - Request model with optional thinking variant.
+ * - OpenCodeProviderSummary (L125) - Provider metadata for Telegram pickers.
+ * - OpenCodeProviderModel (L132) - Model metadata with variants.
+ * - OpenCodeAgent (L138) - Agent metadata for Telegram picker.
  */
 
 export type OpenCodeAssistantTokens = {
@@ -88,6 +89,18 @@ export type OpenCodePart =
   | OpenCodeStepStartPart
   | OpenCodeStepFinishPart
   | { type: string; [key: string]: unknown };
+
+export type OpenCodePromptInputPart =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "file";
+      mime: string;
+      url: string;
+      filename: string;
+    };
 
 export type OpenCodeMessageResponse = {
   info: OpenCodeAssistantInfo;

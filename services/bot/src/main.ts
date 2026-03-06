@@ -25,6 +25,11 @@ import { OutboxWorker } from "./outbox-worker";
 import { buildStartSummaryMessage, fetchStartupSummary } from "./start-summary";
 import { ThinkingIndicator } from "./thinking-indicator";
 import {
+  buildTelegramPromptEnqueueBody,
+  extractTelegramImageDocumentInput,
+  extractTelegramPhotoInput
+} from "./telegram-prompt-input";
+import {
   BOT_LOCAL_COMMAND_NAMES,
   TelegramMenuCommand,
   parseSlashCommand
@@ -389,22 +394,22 @@ const bootstrap = async (): Promise<void> => {
   const submitPromptText = async (input: {
     adminId: number;
     chatId: number;
-    text: string;
+    payload: Record<string, unknown>;
     errorLabel: string;
   }): Promise<void> => {
-    /* Reuse common prompt submission flow for text and transcribed voice messages. */
+    /* Reuse common enqueue flow for text, transcribed voice and image prompts. */
     await bindChat(input.adminId, input.chatId);
     await indicator.start(input.chatId);
 
     void (async () => {
       try {
-        const response = await fetch(`${config.backendUrl}/api/prompt`, {
+        const response = await fetch(`${config.backendUrl}/api/telegram/prompt/enqueue`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "x-admin-id": String(input.adminId)
           },
-          body: JSON.stringify({ text: input.text })
+          body: JSON.stringify({ chatId: input.chatId, ...input.payload })
         });
 
         if (!response.ok) {
@@ -414,8 +419,20 @@ const bootstrap = async (): Promise<void> => {
           return;
         }
 
-        await response.json();
+        const payload = (await response.json()) as {
+          ok?: boolean;
+          position?: number;
+          buffered?: boolean;
+          merged?: boolean;
+        };
         await indicator.stop(input.chatId);
+
+        /* Tell the user only when a brand-new logical prompt is queued behind an active turn. */
+        if (payload.buffered && !payload.merged && typeof payload.position === "number" && payload.position > 1) {
+          await bot.telegram.sendMessage(input.chatId, `Сообщение поставлено в очередь: #${payload.position}`, {
+            disable_notification: true
+          });
+        }
       } catch (error) {
         await indicator.stop(input.chatId);
         const message = error instanceof Error ? error.message : String(error);
@@ -479,7 +496,10 @@ const bootstrap = async (): Promise<void> => {
       await submitPromptText({
         adminId,
         chatId,
-        text: transcribedText,
+        payload: buildTelegramPromptEnqueueBody({
+          text: transcribedText,
+          messageId: ctx.message.message_id
+        }),
         errorLabel: "Ошибка запроса"
       });
     } catch (error) {
@@ -498,6 +518,47 @@ const bootstrap = async (): Promise<void> => {
       }
       await ctx.reply(failureMessage);
     }
+  });
+
+  bot.on("photo", async (ctx) => {
+    /* Forward Telegram photos into the same buffered backend queue used for text prompts. */
+    if (!isAdmin(ctx.from?.id)) {
+      await ctx.reply("Access denied");
+      return;
+    }
+
+    const promptBody = extractTelegramPhotoInput(ctx.message);
+    if (!promptBody) {
+      return;
+    }
+
+    await submitPromptText({
+      adminId: ctx.from!.id,
+      chatId: ctx.chat.id,
+      payload: promptBody,
+      errorLabel: "Ошибка запроса"
+    });
+  });
+
+  bot.on("document", async (ctx) => {
+    /* Support image documents while failing fast for unsupported generic file uploads. */
+    if (!isAdmin(ctx.from?.id)) {
+      await ctx.reply("Access denied");
+      return;
+    }
+
+    const promptBody = extractTelegramImageDocumentInput(ctx.message);
+    if (!promptBody) {
+      await ctx.reply("Сейчас в чат агента поддерживаются только изображения: photo или document(image/*).");
+      return;
+    }
+
+    await submitPromptText({
+      adminId: ctx.from!.id,
+      chatId: ctx.chat.id,
+      payload: promptBody,
+      errorLabel: "Ошибка запроса"
+    });
   });
 
   bot.on("text", async (ctx) => {
@@ -587,7 +648,10 @@ const bootstrap = async (): Promise<void> => {
     await submitPromptText({
       adminId,
       chatId,
-      text,
+      payload: buildTelegramPromptEnqueueBody({
+        text,
+        messageId: ctx.message.message_id
+      }),
       errorLabel: "Ошибка запроса"
     });
   });

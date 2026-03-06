@@ -31,6 +31,9 @@ import { TelegramOutboxService } from "./telegram/outbox/telegram-outbox.service
 import { TelegramEventsOutboxBridge } from "./telegram/outbox/telegram-events-outbox-bridge.service";
 import { TelegramOpenCodeRuntimeBridge } from "./telegram/outbox/telegram-opencode-runtime-bridge.service";
 import { TelegramDiffPreviewStore } from "./telegram/diff-preview/telegram-diff-preview.store";
+import { TelegramPromptAttachmentsService } from "./telegram/prompt-queue/telegram-prompt-attachments.service";
+import { TelegramPromptQueueService } from "./telegram/prompt-queue/telegram-prompt-queue.service";
+import { TelegramPromptQueueStore } from "./telegram/prompt-queue/telegram-prompt-queue.store";
 import { PromptController } from "./prompt/prompt.controller";
 import { PromptService } from "./prompt/prompt.service";
 import { ProjectsController } from "./projects/projects.controller";
@@ -113,6 +116,9 @@ import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
     TelegramEventsOutboxBridge,
     TelegramOpenCodeRuntimeBridge,
     TelegramDiffPreviewStore,
+    TelegramPromptQueueStore,
+    TelegramPromptAttachmentsService,
+    TelegramPromptQueueService,
     DockerComposeService,
     TerminalService,
     AdminHeaderGuard,

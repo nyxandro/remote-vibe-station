@@ -23,6 +23,7 @@ import {
   OpenCodeExecutionModel,
   OpenCodeMessageResponse,
   OpenCodePart,
+  OpenCodePromptInputPart,
   OpenCodeProviderModel,
   OpenCodeProviderSummary
 } from "./opencode.types";
@@ -71,9 +72,28 @@ export class OpenCodeClient {
       onSessionResolved?: (sessionID: string) => void;
     }
   ): Promise<PromptResult> {
+    /* Delegate simple text prompts to the general multipart sender. */
+    return this.sendPromptParts([{ type: "text", text: prompt }], input);
+  }
+
+  public async sendPromptParts(
+    parts: OpenCodePromptInputPart[],
+    input: {
+      directory: string;
+      model?: OpenCodeExecutionModel;
+      agent?: string | null;
+      onSessionResolved?: (sessionID: string) => void;
+    }
+  ): Promise<PromptResult> {
+    /* Fail fast before touching session state when caller produced an empty multipart payload. */
+    if (!Array.isArray(parts) || parts.length === 0) {
+      throw new Error("parts must contain at least one item");
+    }
+
     /* Ensure a session exists for the target directory. */
     const sessionId = await this.ensureSession(input.directory);
     input.onSessionResolved?.(sessionId);
+
     /* Use synchronous message endpoint to get parts in one HTTP response. */
     const model = input.model ?? (await this.getDefaultModel());
     const agent = input.agent ?? "build";
@@ -84,7 +104,7 @@ export class OpenCodeClient {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          parts: [{ type: "text", text: prompt }],
+          parts,
           model,
           agent
         })

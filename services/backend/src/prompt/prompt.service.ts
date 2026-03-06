@@ -9,7 +9,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { EventsService } from "../events/events.service";
-import { OpenCodeCommand, OpenCodeExecutionModel } from "../open-code/opencode.types";
+import { OpenCodeCommand, OpenCodeExecutionModel, OpenCodePromptInputPart } from "../open-code/opencode.types";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
 import { summarizeOpenCodeParts } from "../open-code/opencode-telemetry";
@@ -75,44 +75,65 @@ export class PromptService {
       throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
     }
 
-    /* Emit prompt start event. */
+    return this.dispatchPromptParts({
+      adminId,
+      projectSlug: active.slug,
+      directory: active.rootPath,
+      promptTextForTelemetry: text,
+      parts: [{ type: "text", text }]
+    });
+  }
+
+  public async dispatchPromptParts(input: {
+    adminId?: number;
+    projectSlug: string;
+    directory: string;
+    promptTextForTelemetry: string;
+    parts: OpenCodePromptInputPart[];
+  }): Promise<PromptResult> {
+    /* Emit prompt start event before the actual OpenCode request for observability parity. */
     this.events.publish({
       type: "opencode.prompt",
       ts: new Date().toISOString(),
-      data: { text, projectSlug: active.slug, directory: active.rootPath, adminId: adminId ?? null }
+      data: {
+        text: input.promptTextForTelemetry,
+        projectSlug: input.projectSlug,
+        directory: input.directory,
+        adminId: input.adminId ?? null
+      }
     });
 
     /* Resolve per-admin execution preferences (model/thinking/agent). */
     const execution: {
       model: OpenCodeExecutionModel;
       agent: string | null;
-    } = adminId
-      ? await this.preferences.getExecutionSettings(adminId)
+    } = input.adminId
+      ? await this.preferences.getExecutionSettings(input.adminId)
       : {
           model: { ...(await this.opencode.getDefaultModel()) },
           agent: null
         };
 
     /* Ensure runtime SSE subscription for the active project directory. */
-    this.opencodeEvents.ensureDirectory(active.rootPath);
-    await this.opencodeEvents.waitUntilConnected(active.rootPath);
+    this.opencodeEvents.ensureDirectory(input.directory);
+    await this.opencodeEvents.waitUntilConnected(input.directory);
 
     /* Send prompt to OpenCode and gather response. */
-    const result = await this.opencode.sendPrompt(text, {
-      directory: active.rootPath,
+    const result = await this.opencode.sendPromptParts(input.parts, {
+      directory: input.directory,
       model: execution.model,
       agent: execution.agent,
       onSessionResolved: (sessionID) => {
-        if (adminId) {
-          this.sessionRouting.bind(sessionID, { adminId, directory: active.rootPath });
-          this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID });
+        if (input.adminId) {
+          this.sessionRouting.bind(sessionID, { adminId: input.adminId, directory: input.directory });
+          this.opencodeEvents.watchPermissionOnce({ directory: input.directory, sessionID });
         }
       }
     });
 
     return this.publishMessageResult(result, {
-      activeProject: active,
-      adminId,
+      activeProject: { slug: input.projectSlug, rootPath: input.directory },
+      adminId: input.adminId,
       thinking: execution.model.variant ?? null
     });
   }
