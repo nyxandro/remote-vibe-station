@@ -134,6 +134,7 @@ describe("TelegramPromptQueueService", () => {
       {
         id: "att-1",
         localPath: "/tmp/telegram/att-1.png",
+        promptUrl: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.png",
         fileName: "att-1.png",
         mimeType: "image/png",
         fileSizeBytes: 1234
@@ -167,7 +168,7 @@ describe("TelegramPromptQueueService", () => {
           {
             type: "file",
             mime: "image/png",
-            url: "file:///tmp/telegram/att-1.png",
+            url: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.png",
             filename: "att-1.png"
           }
         ]
@@ -182,6 +183,7 @@ describe("TelegramPromptQueueService", () => {
       {
         id: "att-1",
         localPath: "/tmp/telegram/att-1.png",
+        promptUrl: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.png",
         fileName: "att-1.png",
         mimeType: "image/png",
         fileSizeBytes: 1234
@@ -217,7 +219,7 @@ describe("TelegramPromptQueueService", () => {
           {
             type: "file",
             mime: "image/png",
-            url: "file:///tmp/telegram/att-1.png",
+            url: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.png",
             filename: "att-1.png"
           }
         ]
@@ -232,6 +234,7 @@ describe("TelegramPromptQueueService", () => {
       {
         id: "att-1",
         localPath: "/tmp/telegram/att-1.png",
+        promptUrl: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.png",
         fileName: "att-1.png",
         mimeType: "image/png",
         fileSizeBytes: 1234
@@ -239,6 +242,7 @@ describe("TelegramPromptQueueService", () => {
       {
         id: "att-2",
         localPath: "/tmp/telegram/att-2.png",
+        promptUrl: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-2.png",
         fileName: "att-2.png",
         mimeType: "image/png",
         fileSizeBytes: 999
@@ -288,13 +292,13 @@ describe("TelegramPromptQueueService", () => {
           {
             type: "file",
             mime: "image/png",
-            url: "file:///tmp/telegram/att-1.png",
+            url: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.png",
             filename: "att-1.png"
           },
           {
             type: "file",
             mime: "image/png",
-            url: "file:///tmp/telegram/att-2.png",
+            url: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-2.png",
             filename: "att-2.png"
           }
         ]

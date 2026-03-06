@@ -18,6 +18,8 @@ const DATA_DIR = "data";
 const ATTACHMENTS_DIR = "telegram-prompt-attachments";
 const TELEGRAM_API_BASE = "https://api.telegram.org";
 const TELEGRAM_FETCH_TIMEOUT_MS = 15_000;
+const OPENCODE_DATA_MOUNT_PATH = "/opencode-data";
+const OPENCODE_CONTAINER_DATA_PATH = "/root/.local/share/opencode";
 
 type TelegramGetFileResponse = {
   ok?: boolean;
@@ -29,8 +31,8 @@ export class TelegramPromptAttachmentsService {
   private readonly storageDir: string;
 
   public constructor(@Inject(ConfigToken) private readonly config: AppConfig) {
-    /* Persist downloaded files locally so queue dispatch does not depend on expiring Telegram URLs. */
-    this.storageDir = path.join(process.cwd(), DATA_DIR, ATTACHMENTS_DIR);
+    /* Persist downloads into the shared OpenCode volume so the server container can open them via file://. */
+    this.storageDir = this.resolveStorageDir();
   }
 
   public async materializeAttachments(input: {
@@ -60,6 +62,7 @@ export class TelegramPromptAttachmentsService {
       materialized.push({
         id: crypto.randomUUID(),
         localPath: targetPath,
+        promptUrl: `file://${path.join(OPENCODE_CONTAINER_DATA_PATH, ATTACHMENTS_DIR, fileName)}`,
         fileName,
         mimeType: attachment.mimeType ?? this.inferMimeTypeFromName(fileName),
         fileSizeBytes: typeof attachment.fileSizeBytes === "number" ? attachment.fileSizeBytes : arrayBuffer.byteLength
@@ -102,6 +105,19 @@ export class TelegramPromptAttachmentsService {
       fs.mkdirSync(this.storageDir, { recursive: true });
     }
     return this.storageDir;
+  }
+
+  private resolveStorageDir(): string {
+    /* Prefer the shared OpenCode volume mount so file:// URLs resolve inside the OpenCode container. */
+    if (fs.existsSync(OPENCODE_DATA_MOUNT_PATH)) {
+      return path.join(OPENCODE_DATA_MOUNT_PATH, ATTACHMENTS_DIR);
+    }
+
+    if (this.config.opencodeDataDir) {
+      return path.join(this.config.opencodeDataDir, ATTACHMENTS_DIR);
+    }
+
+    return path.join(process.cwd(), DATA_DIR, ATTACHMENTS_DIR);
   }
 
   private async fetchWithTimeout(url: string, timeoutMessage: string): Promise<Response> {

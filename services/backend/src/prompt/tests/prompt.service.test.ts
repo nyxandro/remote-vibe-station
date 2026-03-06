@@ -138,7 +138,14 @@ describe("PromptService", () => {
       projectSlug: "demo",
       directory: "/tmp/demo",
       promptTextForTelemetry: "",
-      parts: [{ type: "file", mime: "image/png", url: "file:///tmp/demo.png", filename: "demo.png" }],
+      parts: [
+        {
+          type: "file",
+          mime: "image/png",
+          url: "file:///root/.local/share/opencode/telegram-prompt-attachments/demo.png",
+          filename: "demo.png"
+        }
+      ],
       allowEmptyResponse: true
     });
 

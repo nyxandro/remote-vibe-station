@@ -36,6 +36,7 @@ export type TelegramPromptBuffer = {
 export type TelegramQueuedAttachment = {
   id: string;
   localPath: string;
+  promptUrl: string;
   fileName: string;
   mimeType: string;
   fileSizeBytes: number | null;

@@ -217,7 +217,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
       parts.push({
         type: "file",
         mime: attachment.mimeType,
-        url: `file://${attachment.localPath}`,
+        url: attachment.promptUrl,
         filename: attachment.fileName
       });
     }
