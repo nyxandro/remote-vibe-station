@@ -28,9 +28,12 @@ ENV_FILE="$TMP_DIR/runtime/.env"
 COMPOSE_FILE="$TMP_DIR/runtime/docker-compose.yml"
 TRAEFIK_FILE="$TMP_DIR/runtime/infra/traefik/traefik.yml"
 CLIPROXY_CONFIG="$TMP_DIR/runtime/infra/cliproxy/config.yaml"
+VLESS_COMPOSE_FILE="$TMP_DIR/runtime/docker-compose.vless.yml"
+VLESS_ENV_FILE="$TMP_DIR/runtime/infra/vless/proxy.env"
+VLESS_XRAY_FILE="$TMP_DIR/runtime/infra/vless/xray.json"
 
 # Ensure all mandatory runtime files are present.
-for required in "$ENV_FILE" "$COMPOSE_FILE" "$TRAEFIK_FILE" "$CLIPROXY_CONFIG"; do
+for required in "$ENV_FILE" "$COMPOSE_FILE" "$TRAEFIK_FILE" "$CLIPROXY_CONFIG" "$VLESS_COMPOSE_FILE" "$VLESS_ENV_FILE" "$VLESS_XRAY_FILE"; do
   if [[ ! -f "$required" ]]; then
     echo "missing generated file: $required" >&2
     exit 1
@@ -57,6 +60,11 @@ if grep -q 'build:' "$COMPOSE_FILE"; then
   echo "runtime compose must not contain build directives" >&2
   exit 1
 fi
+
+# Ensure optional VLESS override is present but isolated from default runtime path.
+grep -q '^\s*vless-proxy:' "$VLESS_COMPOSE_FILE"
+grep -q 'HTTP_PROXY=http://vless-proxy:8080' "$VLESS_ENV_FILE"
+grep -q 'CHANGE_ME_UUID' "$VLESS_XRAY_FILE"
 
 # Ensure generated CLIProxy config is bound to generated API key from env.
 GENERATED_PROXY_KEY="$(grep '^CLIPROXY_API_KEY=' "$ENV_FILE" | cut -d= -f2-)"

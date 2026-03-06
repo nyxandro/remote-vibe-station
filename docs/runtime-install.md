@@ -8,9 +8,11 @@
 - Устанавливает Docker (если отсутствует)
 - Генерирует runtime-директорию с файлами:
   - `docker-compose.yml`
+  - `docker-compose.vless.yml` (опциональный override)
   - `.env`
   - `infra/traefik/*`
   - `infra/cliproxy/config.yaml`
+  - `infra/vless/xray.json` и `infra/vless/proxy.env` (опционально)
 - Генерирует все секреты автоматически:
   - `OPENCODE_SERVER_PASSWORD`
   - `CLIPROXY_MANAGEMENT_PASSWORD`
@@ -27,6 +29,9 @@
 - Настраивает `fail2ban` для `sshd`
 - Опционально авторизует GitHub CLI (`gh`) по токену
 - Поднимает стек через `docker compose`
+
+По умолчанию весь runtime работает **напрямую без прокси**.
+VLESS включается только вручную отдельным override-файлом после настройки.
 
 ## Быстрый запуск
 
@@ -81,3 +86,21 @@ sudo ./scripts/install-runtime.sh \
 - Образы backend/miniapp/bot/opencode должны быть заранее опубликованы в registry.
 - По умолчанию используются `ghcr.io/nyxandro/...:latest`; их можно переопределить флагами `--*-image`.
 - Если OpenCode/CLIProxy management интерфейсы не нужны публично, не публикуйте дополнительные порты в compose.
+
+## Опциональный VLESS после установки
+
+1. Отредактируйте `infra/vless/xray.json` (подставьте реальные VLESS параметры вместо `CHANGE_ME_*`).
+2. При необходимости скорректируйте `infra/vless/proxy.env`.
+3. Запустите стек с override:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d
+```
+
+Чтобы вернуться на прямой доступ без прокси:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml up -d
+```

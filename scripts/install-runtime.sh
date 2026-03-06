@@ -154,6 +154,7 @@ generate_runtime_files() {
   # Materialize complete runtime stack layout in install directory.
   mkdir -p "$INSTALL_DIR/infra/traefik/dynamic"
   mkdir -p "$INSTALL_DIR/infra/cliproxy"
+  mkdir -p "$INSTALL_DIR/infra/vless"
   mkdir -p "$PROJECTS_ROOT"
 
   # ACME state must remain private because it contains certificate account data.
@@ -214,6 +215,9 @@ EOF
 
   # Keep runtime compose template in repository and copy it into install directory.
   cp "$(dirname "${BASH_SOURCE[0]}")/templates/runtime-docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
+  cp "$(dirname "${BASH_SOURCE[0]}")/templates/runtime-docker-compose.vless.yml" "$INSTALL_DIR/docker-compose.vless.yml"
+  cp "$(dirname "${BASH_SOURCE[0]}")/templates/vless-proxy.env" "$INSTALL_DIR/infra/vless/proxy.env"
+  cp "$(dirname "${BASH_SOURCE[0]}")/templates/vless-xray.json" "$INSTALL_DIR/infra/vless/xray.json"
 
   write_file "$INSTALL_DIR/.env" <<EOF
 COMPOSE_PROJECT_NAME=${DEFAULT_COMPOSE_PROJECT}

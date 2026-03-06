@@ -1,0 +1,31 @@
+services:
+  vless-proxy:
+    image: ghcr.io/xtls/xray-core:latest
+    command: ["run", "-c", "/etc/xray/config.json"]
+    volumes:
+      - ./infra/vless/xray.json:/etc/xray/config.json:ro
+    networks:
+      - ai_proxy
+    restart: unless-stopped
+
+  bot:
+    # Route bot external AI calls through VLESS while keeping internal calls direct.
+    env_file:
+      - ./infra/vless/proxy.env
+    depends_on:
+      - vless-proxy
+    networks:
+      - ai_proxy
+
+  cliproxy:
+    # Route CLIProxy external provider traffic through VLESS.
+    env_file:
+      - ./infra/vless/proxy.env
+    depends_on:
+      - vless-proxy
+    networks:
+      - ai_proxy
+
+networks:
+  ai_proxy:
+    driver: bridge
