@@ -73,6 +73,7 @@ services:
       - "traefik.http.routers.bot.entrypoints=websecure"
       - "traefik.http.routers.bot.tls=true"
       - "traefik.http.routers.bot.tls.certresolver=le"
+      - "traefik.docker.network=public"
       - "traefik.http.routers.bot-auth.rule=Host(`${OPENCODE_PUBLIC_DOMAIN}`) && PathPrefix(`/opencode-auth`)"
       - "traefik.http.routers.bot-auth.entrypoints=websecure"
       - "traefik.http.routers.bot-auth.tls=true"
