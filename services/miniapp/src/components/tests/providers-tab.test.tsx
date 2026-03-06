@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProvidersTab } from "../ProvidersTab";
+import { PROVIDERS_TAB_FIELD_IDS } from "../providers-tab-field-ids";
 import { CliproxyAccountState, ProxySettingsSnapshot } from "../../types";
 
 const cliproxyAccounts: CliproxyAccountState = {
@@ -458,5 +459,72 @@ describe("ProvidersTab", () => {
     );
 
     expect(screen.getByText(/наблюдаемая статистика usage выключена/i)).toBeTruthy();
+  });
+
+  it("assigns stable ids and names to Providers form fields", () => {
+    /* Explicit ids/names remove form a11y warnings and keep browser autofill behavior deterministic. */
+    render(
+      <ProvidersTab
+        selected={{
+          model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+          thinking: "high",
+          agent: "build"
+        }}
+        providers={[{ id: "anthropic", name: "Anthropic", connected: false }]}
+        authMethods={{ anthropic: [{ type: "oauth", label: "Claude Pro" }] }}
+        isLoading={false}
+        isSubmitting={false}
+        oauthState={{
+          providerID: "anthropic",
+          methodIndex: 0,
+          method: "code",
+          url: "https://example.com/oauth",
+          instructions: "Введите OAuth code",
+          codeDraft: ""
+        }}
+        onRefresh={vi.fn()}
+        onStartConnect={vi.fn()}
+        onSubmitApiKey={vi.fn()}
+        onSubmitOAuthCode={vi.fn()}
+        onCompleteOAuthAuto={vi.fn()}
+        onDisconnect={vi.fn()}
+        cliproxyAccounts={cliproxyAccounts}
+        cliproxyOAuthStart={{
+          provider: "codex",
+          state: "state-123",
+          url: "https://example.com/cliproxy",
+          instructions: "Вставьте callback"
+        }}
+        isCliproxyLoading={false}
+        isCliproxySubmitting={false}
+        proxySnapshot={{
+          ...proxySnapshot,
+          mode: "vless",
+          vlessProxyUrl: "http://vless-proxy:8080"
+        }}
+        isProxyLoading={false}
+        isProxySaving={false}
+        isProxyApplying={false}
+        proxyApplyResult={null}
+        onReloadCliproxy={vi.fn()}
+        onStartCliproxyAuth={vi.fn()}
+        onCompleteCliproxyAuth={vi.fn()}
+        onReloadProxy={vi.fn()}
+        onSaveProxy={vi.fn()}
+        onApplyProxy={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Добавить провайдера" }));
+
+    expect(screen.getByPlaceholderText("Поиск провайдера").getAttribute("id")).toBe(PROVIDERS_TAB_FIELD_IDS.providerSearch);
+    expect(screen.getByPlaceholderText("Поиск провайдера").getAttribute("name")).toBe(PROVIDERS_TAB_FIELD_IDS.providerSearch);
+    expect(screen.getByPlaceholderText("Вставьте callback URL целиком").getAttribute("id")).toBe(PROVIDERS_TAB_FIELD_IDS.cliproxyCallbackUrl);
+    expect(screen.getByPlaceholderText("Или отдельно code").getAttribute("name")).toBe(PROVIDERS_TAB_FIELD_IDS.cliproxyCode);
+    expect(screen.getByPlaceholderText("state").getAttribute("id")).toBe(PROVIDERS_TAB_FIELD_IDS.cliproxyState);
+    expect(screen.getByLabelText("Outbound mode").getAttribute("name")).toBe(PROVIDERS_TAB_FIELD_IDS.proxyMode);
+    expect(screen.getByLabelText("VLESS proxy URL").getAttribute("id")).toBe(PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl);
+    expect(screen.getByLabelText("NO_PROXY").getAttribute("name")).toBe(PROVIDERS_TAB_FIELD_IDS.noProxy);
+    expect(screen.getByPlaceholderText("Введите OAuth code").getAttribute("id")).toBe(PROVIDERS_TAB_FIELD_IDS.oauthCode);
   });
 });

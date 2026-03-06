@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CliproxyAccountState, CliproxyOAuthStartPayload, ProviderAuthMethod, ProxyApplyResult, ProxySettingsInput, ProxySettingsMode, ProxySettingsSnapshot } from "../types";
 import { ProviderOAuthState } from "../hooks/use-provider-auth";
+import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 const CLIPROXY_PROVIDER_ID = "cliproxy";
 
@@ -212,6 +213,9 @@ export const ProvidersTab = (props: Props) => {
       {isPickerOpen ? (
         <>
           <input
+            id={PROVIDERS_TAB_FIELD_IDS.providerSearch}
+            name={PROVIDERS_TAB_FIELD_IDS.providerSearch}
+            aria-label="Поиск провайдера"
             className="input settings-input-compact"
             placeholder="Поиск провайдера"
             value={providerSearch}
@@ -345,18 +349,27 @@ export const ProvidersTab = (props: Props) => {
             </a>
 
             <input
+              id={PROVIDERS_TAB_FIELD_IDS.cliproxyCallbackUrl}
+              name={PROVIDERS_TAB_FIELD_IDS.cliproxyCallbackUrl}
+              aria-label="CLIProxy callback URL"
               className="input settings-input-compact"
               placeholder="Вставьте callback URL целиком"
               value={callbackUrlDraft}
               onChange={(event) => setCallbackUrlDraft(event.target.value)}
             />
             <input
+              id={PROVIDERS_TAB_FIELD_IDS.cliproxyCode}
+              name={PROVIDERS_TAB_FIELD_IDS.cliproxyCode}
+              aria-label="CLIProxy OAuth code"
               className="input settings-input-compact"
               placeholder="Или отдельно code"
               value={codeDraft}
               onChange={(event) => setCodeDraft(event.target.value)}
             />
             <input
+              id={PROVIDERS_TAB_FIELD_IDS.cliproxyState}
+              name={PROVIDERS_TAB_FIELD_IDS.cliproxyState}
+              aria-label="CLIProxy OAuth state"
               className="input settings-input-compact"
               placeholder="state"
               value={stateDraft}
@@ -394,11 +407,12 @@ export const ProvidersTab = (props: Props) => {
           </button>
         </div>
 
-        <label className="project-create-note" htmlFor="proxy-mode-select">
+        <label className="project-create-note" htmlFor={PROVIDERS_TAB_FIELD_IDS.proxyMode}>
           Outbound mode
         </label>
         <select
-          id="proxy-mode-select"
+          id={PROVIDERS_TAB_FIELD_IDS.proxyMode}
+          name={PROVIDERS_TAB_FIELD_IDS.proxyMode}
           aria-label="Outbound mode"
           className="input settings-input-compact"
           value={proxyMode}
@@ -410,11 +424,12 @@ export const ProvidersTab = (props: Props) => {
 
         {proxyMode === "vless" ? (
           <>
-            <label className="project-create-note" htmlFor="vless-proxy-url-input">
+            <label className="project-create-note" htmlFor={PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl}>
               VLESS proxy URL
             </label>
             <input
-              id="vless-proxy-url-input"
+              id={PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl}
+              name={PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl}
               aria-label="VLESS proxy URL"
               className="input settings-input-compact"
               placeholder="http://vless-proxy:8080"
@@ -424,11 +439,12 @@ export const ProvidersTab = (props: Props) => {
           </>
         ) : null}
 
-        <label className="project-create-note" htmlFor="no-proxy-input">
+        <label className="project-create-note" htmlFor={PROVIDERS_TAB_FIELD_IDS.noProxy}>
           NO_PROXY
         </label>
         <input
-          id="no-proxy-input"
+          id={PROVIDERS_TAB_FIELD_IDS.noProxy}
+          name={PROVIDERS_TAB_FIELD_IDS.noProxy}
           aria-label="NO_PROXY"
           className="input settings-input-compact"
           value={noProxy}
@@ -483,6 +499,9 @@ export const ProvidersTab = (props: Props) => {
             API key для {providerMap.get(props.oauthState.providerID) ?? props.oauthState.providerID}
           </div>
           <input
+            id={PROVIDERS_TAB_FIELD_IDS.apiKey}
+            name={PROVIDERS_TAB_FIELD_IDS.apiKey}
+            aria-label="API key"
             className="input settings-input-compact"
             placeholder="Введите API ключ"
             type="password"
@@ -522,6 +541,9 @@ export const ProvidersTab = (props: Props) => {
           ) : (
             <>
               <input
+                id={PROVIDERS_TAB_FIELD_IDS.oauthCode}
+                name={PROVIDERS_TAB_FIELD_IDS.oauthCode}
+                aria-label="OAuth code"
                 className="input settings-input-compact"
                 placeholder="Введите OAuth code"
                 value={localCodeDraft}

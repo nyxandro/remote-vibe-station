@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>OpenCode Control</title>
+  <defs>
+    <linearGradient id="bg" x1="8" x2="56" y1="8" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17304a" />
+      <stop offset="1" stop-color="#2d8f85" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)" />
+  <path d="M18 20h18a10 10 0 0 1 0 20H28" fill="none" stroke="#f4f1e8" stroke-linecap="round" stroke-linejoin="round" stroke-width="6" />
+  <path d="M28 40h18" fill="none" stroke="#f6b85c" stroke-linecap="round" stroke-width="6" />
+</svg>

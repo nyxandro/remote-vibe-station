@@ -13,6 +13,9 @@ request-retry: 2
 # Keep stable service port so OpenCode and backend integration stays deterministic.
 port: 8317
 
+# Keep OAuth auth-file discovery pinned to the Docker volume path.
+auth-dir: "/root/.cli-proxy-api"
+
 # Note: `api-keys` is intentionally omitted here.
 # If you enable API-key auth later, add keys via Management API or a private config override,
 # then keep CLIPROXY_API_KEY in .env aligned with that configured value.
