@@ -23,6 +23,7 @@ type OpenCodeBusEvent = {
 const BASH_PROGRESS_MAX_CHARS = 2600;
 const BASH_PROGRESS_MIN_INTERVAL_MS = 1000;
 const TEXT_DRAFT_MAX_CHARS = 3900;
+const TEXT_PROGRESS_MIN_INTERVAL_MS = 1400;
 const BASH_NOISE_PROBE_COMMAND = /^(node|npm|pnpm|yarn|bun|python|python3)\s+(-v|--version)$/i;
 const QUESTION_CALLBACK_PREFIX = "q";
 const PERMISSION_CALLBACK_PREFIX = "perm";
@@ -58,6 +59,8 @@ const isNoisyRuntimeProbeCommand = (command: string): boolean => {
 export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressEmittedAtMs = new Map<string, number>();
   private readonly bashProgressKeyByPart = new Map<string, string>();
+  private readonly assistantTextByPart = new Map<string, string>();
+  private readonly assistantProgressEmittedAtMs = new Map<string, number>();
   private readonly assistantTextBySession = new Map<string, string>();
   private readonly partTypeById = new Map<string, string>();
   private readonly partIdsBySession = new Map<string, Set<string>>();
@@ -252,18 +255,32 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    const nextText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
-    const normalizedText = this.normalizeAssistantStreamText(nextText);
+    const partKey = this.buildAssistantPartKey(route.adminId, sessionID, partID);
+    const nextPartText = `${this.assistantTextByPart.get(partKey) ?? ""}${delta}`;
+    const normalizedText = this.normalizeAssistantStreamText(nextPartText);
+    const sessionText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
+    const progressKey = this.resolveAssistantProgressKey(route.adminId, sessionID, partID);
+    const nowMs = Date.now();
+    const lastEmittedAtMs = this.assistantProgressEmittedAtMs.get(progressKey) ?? 0;
+    const shouldEmit = lastEmittedAtMs === 0 || nowMs - lastEmittedAtMs >= TEXT_PROGRESS_MIN_INTERVAL_MS;
 
     /* Forward important runtime/system notices even when stream mode is disabled. */
-    this.enqueueSystemNotifications({ sessionID, adminId: route.adminId, text: nextText });
+    this.enqueueSystemNotifications({ sessionID, adminId: route.adminId, text: sessionText });
+
+    this.assistantTextByPart.set(partKey, nextPartText);
+    this.assistantTextBySession.set(sessionID, sessionText);
+
+    if (!shouldEmit) {
+      return;
+    }
 
     this.outbox.enqueueAssistantStreamDelta({
       adminId: route.adminId,
       sessionId: sessionID,
+      progressKey,
       text: normalizedText
     });
-    this.assistantTextBySession.set(sessionID, nextText);
+    this.assistantProgressEmittedAtMs.set(progressKey, nowMs);
   }
 
   private normalizeAssistantStreamText(text: string): string {
@@ -353,9 +370,32 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     const sessionPartIds = this.partIdsBySession.get(sessionID);
     if (sessionPartIds) {
-      sessionPartIds.forEach((partID) => this.partTypeById.delete(partID));
+      sessionPartIds.forEach((partID) => {
+        this.partTypeById.delete(partID);
+        for (const key of this.assistantTextByPart.keys()) {
+          if (key.includes(`:${sessionID}:${partID || "part"}`)) {
+            this.assistantTextByPart.delete(key);
+          }
+        }
+      });
       this.partIdsBySession.delete(sessionID);
     }
+
+    for (const key of this.assistantProgressEmittedAtMs.keys()) {
+      if (key.includes(`:${sessionID}:`)) {
+        this.assistantProgressEmittedAtMs.delete(key);
+      }
+    }
+  }
+
+  private resolveAssistantProgressKey(adminId: number, sessionID: string, partID: string): string {
+    /* Each assistant text part must own its own Telegram progress message to avoid cross-part merging. */
+    return `assistant:${adminId}:${sessionID}:${partID || "part"}`;
+  }
+
+  private buildAssistantPartKey(adminId: number, sessionID: string, partID: string): string {
+    /* Keep part-local buffers stable even when session contains several assistant text blocks. */
+    return `assistant-part:${adminId}:${sessionID}:${partID || "part"}`;
   }
 
   private setThinking(adminId: number, sessionID: string, active: boolean): void {

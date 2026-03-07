@@ -211,11 +211,12 @@ export class TelegramOutboxService {
     this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
   }
 
-  public enqueueAssistantStreamDelta(input: { adminId: number; sessionId: string; text: string }): void {
+  public enqueueAssistantStreamDelta(input: { adminId: number; sessionId: string; text: string; progressKey?: string }): void {
     /* Route one assistant delta into the currently active live Telegram message for this response. */
     const progressKey = this.resolveAssistantProgressKey({
       adminId: input.adminId,
       sessionId: input.sessionId,
+      progressKey: (input as { progressKey?: string }).progressKey,
       createIfMissing: true
     });
     if (!progressKey) {
@@ -342,8 +343,18 @@ export class TelegramOutboxService {
     });
   }
 
-  private resolveAssistantProgressKey(input: { adminId: number; sessionId: string; createIfMissing: boolean }): string | null {
+  private resolveAssistantProgressKey(input: {
+    adminId: number;
+    sessionId: string;
+    progressKey?: string;
+    createIfMissing: boolean;
+  }): string | null {
     /* Keep one live Telegram message per assistant response, not per whole OpenCode session. */
+    if (input.progressKey) {
+      this.activeAssistantProgressKeyBySession.set(input.sessionId, input.progressKey);
+      return input.progressKey;
+    }
+
     const existing = this.activeAssistantProgressKeyBySession.get(input.sessionId);
     if (existing) {
       return existing;

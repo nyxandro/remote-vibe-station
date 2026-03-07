@@ -216,6 +216,8 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
   it("streams assistant text part deltas", () => {
     /* OpenCode emits final assistant text incrementally via message.part.delta on text parts. */
     const { bridge, outbox } = makeBridge();
+    const nowSpy = jest.spyOn(Date, "now");
+    nowSpy.mockReturnValue(1_000);
 
     (bridge as any).handlePartUpdated({
       part: {
@@ -240,6 +242,8 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
         })
       }
     });
+
+    nowSpy.mockReturnValue(2_600);
 
     (bridge as any).onEvent({
       type: "opencode.event",
@@ -266,9 +270,150 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     expect(outbox.enqueueAssistantStreamDelta).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sessionId: "session-delta",
-        text: "Первая часть и вторая"
+        text: "Первая часть и вторая",
+        progressKey: "assistant:10:session-delta:assistant-part-1"
       })
     );
+    nowSpy.mockRestore();
+  });
+
+  it("starts a fresh telegram progress key for each assistant text part", () => {
+    /* Separate assistant messages inside one OpenCode turn must not be merged into one Telegram live message. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-1",
+        sessionID: "session-split"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-split",
+            partID: "assistant-part-1",
+            field: "text",
+            delta: "Первое сообщение"
+          }
+        })
+      }
+    });
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-2",
+        sessionID: "session-split"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-split",
+            partID: "assistant-part-2",
+            field: "text",
+            delta: "Второе сообщение"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        text: "Первое сообщение",
+        progressKey: "assistant:10:session-split:assistant-part-1"
+      })
+    );
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        text: "Второе сообщение",
+        progressKey: "assistant:10:session-split:assistant-part-2"
+      })
+    );
+  });
+
+  it("throttles frequent assistant text deltas", () => {
+    /* Streaming updates should be coalesced so Telegram does not hit edit rate limits on every token burst. */
+    const { bridge, outbox } = makeBridge();
+    const nowSpy = jest.spyOn(Date, "now");
+    nowSpy.mockReturnValue(1_000);
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-throttle",
+        sessionID: "session-throttle"
+      }
+    });
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-throttle",
+            partID: "assistant-part-throttle",
+            field: "text",
+            delta: "Первая"
+          }
+        })
+      }
+    });
+
+    nowSpy.mockReturnValue(1_200);
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-throttle",
+            partID: "assistant-part-throttle",
+            field: "text",
+            delta: " вторая"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockReturnValue(2_500);
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-throttle",
+            partID: "assistant-part-throttle",
+            field: "text",
+            delta: " третья"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenCalledTimes(2);
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenLastCalledWith(
+      expect.objectContaining({ text: "Первая вторая третья" })
+    );
+    nowSpy.mockRestore();
   });
 
   it("ignores non-text part deltas", () => {
