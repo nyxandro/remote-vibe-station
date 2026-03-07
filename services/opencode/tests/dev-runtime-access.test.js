@@ -25,6 +25,7 @@ test("opencode Dockerfile installs git docker and ssh tooling", () => {
   assert.match(dockerfile, /docker\.io|docker-cli/);
   assert.match(dockerfile, /docker-compose-plugin|docker-cli-compose|docker-compose/);
   assert.match(dockerfile, /openssh-client/);
+  assert.match(dockerfile, /docker-wrapper\.sh/);
 });
 
 test("main compose grants opencode direct host access mounts", () => {
