@@ -15,7 +15,7 @@ export type TelegramMenuButtonApi = {
   }) => Promise<unknown>;
 };
 
-const MINIAPP_MENU_BUTTON_TEXT = "Open Mini App";
+const MINIAPP_MENU_BUTTON_TEXT = "Panel";
 
 export const buildMiniAppMenuButton = (publicBaseUrl: string):
   | { type: "commands" }
