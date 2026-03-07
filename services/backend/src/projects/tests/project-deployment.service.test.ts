@@ -189,13 +189,15 @@ describe("ProjectDeploymentService", () => {
       mode: "docker",
       serviceName: "web",
       internalPort: 8080,
-      staticRoot: null
+      staticRoot: null,
+      routes: []
     });
     expect(settingsStore.set).toHaveBeenNthCalledWith(2, "arena", {
       mode: "static",
       serviceName: null,
       internalPort: null,
-      staticRoot: "public"
+      staticRoot: "public",
+      routes: []
     });
   });
 
@@ -270,5 +272,113 @@ describe("ProjectDeploymentService", () => {
 
     const snapshot = await service.getRuntimeSnapshot("arena");
     expect(snapshot.availableServices).toEqual(["api", "web"]);
+  });
+
+  test("starts multi-route deployment with per-route subdomains", async () => {
+    /* One project should expose several dev subdomains from one shared VDS override file. */
+    const projectRoot = path.join(projectsRoot, "arena");
+    writeFile(
+      path.join(projectRoot, "docker-compose.yml"),
+      [
+        "services:",
+        "  web:",
+        "    image: node:22",
+        "    ports:",
+        '      - "3000:3000"',
+        "  api:",
+        "    image: node:22",
+        "    ports:",
+        '      - "8080:8080"'
+      ].join("\n")
+    );
+    writeFile(path.join(projectRoot, "docs", "index.html"), "<h1>Docs</h1>");
+
+    const dockerRun = jest
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          services: {
+            web: { ports: ["3000:3000"] },
+            api: { ports: ["8080:8080"] }
+          }
+        }),
+        stderr: ""
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          services: {
+            web: { ports: ["3000:3000"] },
+            api: { ports: ["8080:8080"] }
+          }
+        }),
+        stderr: ""
+      });
+
+    const service = new ProjectDeploymentService(
+      {
+        telegramBotToken: "token",
+        adminIds: [1],
+        publicBaseUrl: "https://example.com",
+        publicDomain: "dev.example.com",
+        projectsRoot,
+        opencodeSyncOnStart: false,
+        opencodeWarmRecentsOnStart: false,
+        opencodeWarmRecentsLimit: 0,
+        opencodeServerUrl: "http://opencode:4096",
+        eventBufferSize: 100
+      } as any,
+      { run: dockerRun } as any,
+      { set: jest.fn(), get: jest.fn(() => ({ status: "stopped" })) } as any,
+      {
+        get: jest.fn(() => ({
+          mode: "docker",
+          serviceName: null,
+          internalPort: null,
+          staticRoot: null,
+          routes: [
+            {
+              id: "web",
+              mode: "docker",
+              serviceName: "web",
+              internalPort: 3000,
+              staticRoot: null,
+              subdomain: null
+            },
+            {
+              id: "api",
+              mode: "docker",
+              serviceName: "api",
+              internalPort: 8080,
+              staticRoot: null,
+              subdomain: "api"
+            },
+            {
+              id: "docs",
+              mode: "static",
+              serviceName: null,
+              internalPort: null,
+              staticRoot: "docs",
+              subdomain: "docs"
+            }
+          ]
+        })),
+        set: jest.fn()
+      } as any
+    );
+
+    const result = await service.startDeployment("arena");
+
+    expect(result.previewUrl).toBe("https://arena.dev.example.com");
+    expect(result.routes).toEqual([
+      expect.objectContaining({ id: "web", previewUrl: "https://arena.dev.example.com" }),
+      expect.objectContaining({ id: "api", previewUrl: "https://api.arena.dev.example.com" }),
+      expect.objectContaining({ id: "docs", previewUrl: "https://docs.arena.dev.example.com" })
+    ]);
+    expect(dockerRun).toHaveBeenCalledTimes(3);
+    const deployCallArgs = dockerRun.mock.calls[1][0] as string[];
+    expect(deployCallArgs).toEqual(expect.arrayContaining(["up", "-d"]));
   });
 });

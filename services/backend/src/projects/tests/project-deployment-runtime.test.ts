@@ -4,6 +4,7 @@
 
 import {
   buildDockerOverrideConfig,
+  buildMultiRouteOverrideConfig,
   buildStaticComposeConfig,
   inferDockerRuntimeTarget,
   toComposeProjectName
@@ -111,6 +112,49 @@ describe("project-deployment-runtime helpers", () => {
     expect(staticService.labels).toContain("traefik.enable=true");
     expect(staticService.labels).toContain("traefik.http.routers.landing.rule=Host(`landing.dev.example.com`)");
     expect(staticService.networks).toContain("public");
+  });
+
+  test("builds multi-route override with docker and static subdomains", () => {
+    /* Shared VDS deploys need one override that can expose several subdomains without host port conflicts. */
+    const override = buildMultiRouteOverrideConfig({
+      slug: "arena",
+      allServices: ["web", "api", "worker"],
+      dockerRoutes: [
+        {
+          routeId: "web",
+          domain: "arena.dev.example.com",
+          targetServiceName: "web",
+          internalPort: 3000,
+          existingNetworks: ["default"]
+        },
+        {
+          routeId: "api",
+          domain: "api.arena.dev.example.com",
+          targetServiceName: "api",
+          internalPort: 8080,
+          existingNetworks: ["default", "internal"]
+        }
+      ],
+      staticRoutes: [
+        {
+          routeId: "docs",
+          domain: "docs.arena.dev.example.com",
+          staticPath: "/srv/projects/arena/docs"
+        }
+      ]
+    });
+
+    const services = (override.services ?? {}) as Record<string, any>;
+    expect(services.worker.ports).toEqual([]);
+    expect(services.web.labels).toContain("traefik.http.routers.arena-web.rule=Host(`arena.dev.example.com`)");
+    expect(services.api.labels).toContain("traefik.http.routers.arena-api.rule=Host(`api.arena.dev.example.com`)");
+    expect(services.api.labels).toContain("traefik.http.services.arena-api.loadbalancer.server.port=8080");
+    expect(services.web.networks).toEqual(["default", "public"]);
+    expect(services.api.networks).toEqual(["default", "internal", "public"]);
+    expect(services["static-arena-docs"].labels).toContain(
+      "traefik.http.routers.arena-docs.rule=Host(`docs.arena.dev.example.com`)"
+    );
+    expect(services["static-arena-docs"].volumes).toEqual(["/srv/projects/arena/docs:/usr/share/nginx/html:ro"]);
   });
 
   test("normalizes compose project name from slug", () => {

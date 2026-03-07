@@ -5,6 +5,7 @@
  * - DockerComposeConfig (L13) - Minimal compose JSON schema used for inference.
  * - inferDockerRuntimeTarget (L49) - Resolves service and internal port for Traefik.
  * - buildDockerOverrideConfig (L108) - Builds compose override with Traefik labels.
+ * - buildMultiRouteOverrideConfig (L170) - Builds compose override for several routed subdomains.
  * - buildStaticComposeConfig (L181) - Builds compose config for static HTML mode.
  * - toComposeProjectName (L220) - Normalizes slug for docker compose `-p`.
  */
@@ -25,6 +26,7 @@ export type DockerComposeConfig = {
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
 const COMPOSE_NAME_INVALID_CHAR_REGEX = /[^a-z0-9_-]/g;
+const ROUTE_KEY_INVALID_CHAR_REGEX = /[^a-z0-9_-]/g;
 
 const parsePortValue = (value: unknown): number | null => {
   /* Accept numeric or string port tokens and reject invalid ranges. */
@@ -168,6 +170,94 @@ export const buildDockerOverrideConfig = (input: {
   };
 };
 
+export const buildMultiRouteOverrideConfig = (input: {
+  slug: string;
+  allServices: string[];
+  dockerRoutes: Array<{
+    routeId: string;
+    domain: string;
+    targetServiceName: string;
+    internalPort: number;
+    existingNetworks: string[];
+  }>;
+  staticRoutes: Array<{
+    routeId: string;
+    domain: string;
+    staticPath: string;
+  }>;
+}): Record<string, unknown> => {
+  /* Shared-VDS deploys need one override that publishes multiple routed services without host port collisions. */
+  const services: Record<string, Record<string, unknown>> = {};
+  const knownServiceNames = new Set(input.allServices);
+
+  input.allServices.forEach((serviceName) => {
+    services[serviceName] = {
+      ports: []
+    };
+  });
+
+  input.dockerRoutes.forEach((route) => {
+    if (!knownServiceNames.has(route.targetServiceName)) {
+      throw new Error(`Docker route '${route.routeId}' targets unknown service '${route.targetServiceName}'`);
+    }
+
+    const routeKey = toRouteLabelKey(input.slug, route.routeId);
+    const existing = services[route.targetServiceName] ?? { ports: [] };
+    const existingLabels = Array.isArray(existing.labels) ? [...existing.labels] : [];
+    const existingNetworks = Array.isArray(existing.networks)
+      ? existing.networks.filter((name): name is string => typeof name === "string" && name.trim().length > 0)
+      : [];
+
+    services[route.targetServiceName] = {
+      ...existing,
+      labels: Array.from(new Set([
+        ...existingLabels,
+        "traefik.enable=true",
+        `traefik.http.routers.${routeKey}.rule=Host(\`${route.domain}\`)`,
+        `traefik.http.routers.${routeKey}.entrypoints=websecure`,
+        `traefik.http.routers.${routeKey}.middlewares=noindex-headers@file`,
+        `traefik.http.routers.${routeKey}.service=${routeKey}`,
+        `traefik.http.services.${routeKey}.loadbalancer.server.port=${route.internalPort}`,
+        "traefik.docker.network=public"
+      ])),
+      networks: Array.from(new Set([...(route.existingNetworks.length > 0 ? route.existingNetworks : ["default"]), ...existingNetworks, "public"]))
+    };
+  });
+
+  input.staticRoutes.forEach((route) => {
+    const routeKey = toRouteLabelKey(input.slug, route.routeId);
+    const staticServiceName = `static-${routeKey}`;
+    if (knownServiceNames.has(staticServiceName) || Object.hasOwn(services, staticServiceName)) {
+      throw new Error(`Static route '${route.routeId}' conflicts with service '${staticServiceName}'`);
+    }
+
+    services[staticServiceName] = {
+      image: "nginx:alpine",
+      restart: "unless-stopped",
+      volumes: [`${route.staticPath}:/usr/share/nginx/html:ro`],
+      labels: [
+        "traefik.enable=true",
+        `traefik.http.routers.${routeKey}.rule=Host(\`${route.domain}\`)`,
+        `traefik.http.routers.${routeKey}.entrypoints=websecure`,
+        `traefik.http.routers.${routeKey}.middlewares=noindex-headers@file`,
+        `traefik.http.routers.${routeKey}.service=${routeKey}`,
+        `traefik.http.services.${routeKey}.loadbalancer.server.port=80`,
+        "traefik.docker.network=public"
+      ],
+      networks: ["public"]
+    };
+  });
+
+  return {
+    services,
+    networks: {
+      public: {
+        external: true
+      }
+    }
+  };
+};
+
 export const buildStaticComposeConfig = (input: {
   slug: string;
   domain: string;
@@ -212,4 +302,11 @@ export const toComposeProjectName = (slug: string): string => {
   }
 
   return `p${normalized}`;
+};
+
+const toRouteLabelKey = (slug: string, routeId: string): string => {
+  /* Route ids become part of Traefik router/service keys, so keep them deterministic and safe. */
+  const normalizedSlug = toComposeProjectName(slug);
+  const normalizedRouteId = routeId.toLowerCase().replace(ROUTE_KEY_INVALID_CHAR_REGEX, "-") || "route";
+  return `${normalizedSlug}-${normalizedRouteId}`;
 };

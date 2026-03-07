@@ -174,7 +174,7 @@ export class ProjectsController {
     const hasPatch =
       typeof body === "object" &&
       body !== null &&
-      ("mode" in body || "serviceName" in body || "internalPort" in body || "staticRoot" in body);
+      ("mode" in body || "serviceName" in body || "internalPort" in body || "staticRoot" in body || "routes" in body);
     if (!hasPatch) {
       throw new BadRequestException("Deploy settings patch is required");
     }

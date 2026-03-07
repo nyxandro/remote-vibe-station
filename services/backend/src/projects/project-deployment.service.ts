@@ -15,14 +15,25 @@ import { discoverProjects, DEFAULT_COMPOSE_FILENAMES } from "./project-discovery
 import { DockerComposeService } from "./docker-compose.service";
 import {
   buildDockerOverrideConfig,
+  buildMultiRouteOverrideConfig,
   buildStaticComposeConfig,
   DockerComposeConfig,
   inferDockerRuntimeTarget,
   toComposeProjectName
 } from "./project-deployment-runtime";
 import { assertWithinRoot } from "./project-paths";
+import {
+  assertRuntimeRoutes,
+  buildPreviewUrl,
+  buildProjectDomain,
+  buildSettingsFromRoutes,
+  normalizeRuntimeRoutes,
+  toEffectiveRoutes,
+  toRouteSnapshots
+} from "./project-runtime-routes";
 import { ProjectStateStore } from "./project-state.store";
 import {
+  ProjectRuntimeRoute,
   ProjectRuntimeSettings,
   ProjectRuntimeSettingsPatch,
   ProjectRuntimeSnapshot
@@ -47,12 +58,14 @@ export class ProjectDeploymentService {
     const project = this.requireProject(slug);
     const settings = await this.getResolvedSettings(slug);
     const projectState = this.state.get(slug);
-    const availableServices = await this.getAvailableServices(project.rootPath, settings.mode);
+    const availableServices = await this.getAvailableServices(project.rootPath, settings);
+    const routes = toRouteSnapshots(slug, this.config.publicDomain, settings);
     return {
       slug,
       ...settings,
       availableServices,
-      previewUrl: this.buildPreviewUrl(slug),
+      previewUrl: buildPreviewUrl(slug, this.config.publicDomain, routes),
+      routes,
       deployed: projectState.status === "running"
     };
   }
@@ -62,22 +75,11 @@ export class ProjectDeploymentService {
     this.requireProject(slug);
     const current = await this.getResolvedSettings(slug);
     const nextMode = patch.mode ?? current.mode;
-    const merged: ProjectRuntimeSettings = {
-      mode: nextMode,
-      serviceName:
-        typeof patch.serviceName === "undefined" ? current.serviceName : this.normalizeNullableString(patch.serviceName),
-      internalPort:
-        typeof patch.internalPort === "undefined" ? current.internalPort : this.normalizeNullablePort(patch.internalPort),
-      staticRoot:
-        typeof patch.staticRoot === "undefined" ? current.staticRoot : this.normalizeNullableString(patch.staticRoot)
-    };
-
-    const next: ProjectRuntimeSettings = {
-      mode: nextMode,
-      serviceName: nextMode === "docker" ? merged.serviceName : null,
-      internalPort: nextMode === "docker" ? merged.internalPort : null,
-      staticRoot: nextMode === "static" ? merged.staticRoot : null
-    };
+    const routes = normalizeRuntimeRoutes(typeof patch.routes === "undefined" ? current.routes ?? [] : patch.routes);
+    const next =
+      routes.length > 0
+        ? buildSettingsFromRoutes({ routes, fallbackMode: nextMode })
+        : this.buildLegacySettingsFromPatch({ current, patch, nextMode });
 
     this.assertRuntimeSettings(next);
 
@@ -90,14 +92,17 @@ export class ProjectDeploymentService {
     const project = this.requireProject(slug);
     const settings = await this.getResolvedSettings(slug);
     const composeProjectName = toComposeProjectName(slug);
+    const explicitRoutes = settings.routes ?? [];
 
-    if (settings.mode === "docker") {
+    if (explicitRoutes.length > 0) {
+      await this.startMultiRouteDeployment({ slug, rootPath: project.rootPath, composeProjectName, routes: explicitRoutes });
+    } else if (settings.mode === "docker") {
       const composePath = this.resolveComposePath(project.rootPath);
       const composeConfig = await this.readComposeConfig(composePath);
       const runtimeTarget = inferDockerRuntimeTarget({ compose: composeConfig, settings });
       const overrideConfig = buildDockerOverrideConfig({
         slug,
-        domain: this.buildProjectDomain(slug),
+        domain: buildProjectDomain(slug, this.config.publicDomain, null),
         targetServiceName: runtimeTarget.serviceName,
         internalPort: runtimeTarget.internalPort,
         existingNetworks: runtimeTarget.existingNetworks,
@@ -116,7 +121,7 @@ export class ProjectDeploymentService {
       const staticPath = this.resolveStaticPath(project.rootPath, settings.staticRoot);
       const staticConfig = buildStaticComposeConfig({
         slug,
-        domain: this.buildProjectDomain(slug),
+        domain: buildProjectDomain(slug, this.config.publicDomain, null),
         staticPath
       });
       const staticComposePath = this.writeRuntimeFile(
@@ -137,7 +142,7 @@ export class ProjectDeploymentService {
     const settings = await this.getResolvedSettings(slug);
     const composeProjectName = toComposeProjectName(slug);
 
-    if (settings.mode === "docker") {
+    if ((settings.routes ?? []).length > 0 || settings.mode === "docker") {
       const composePath = this.resolveComposePath(project.rootPath);
       const overridePath = this.resolveRuntimeFilePath(`${this.toRuntimeFileKey(slug)}.docker.override.json`);
       if (fs.existsSync(overridePath)) {
@@ -153,7 +158,7 @@ export class ProjectDeploymentService {
         `${this.toRuntimeFileKey(slug)}.static.compose.json`,
         buildStaticComposeConfig({
           slug,
-          domain: this.buildProjectDomain(slug),
+          domain: buildProjectDomain(slug, this.config.publicDomain, null),
           staticPath: this.resolveStaticPath(project.rootPath, settings.staticRoot)
         })
       );
@@ -164,9 +169,10 @@ export class ProjectDeploymentService {
     return this.getRuntimeSnapshot(slug);
   }
 
-  private async getAvailableServices(rootPath: string, mode: ProjectRuntimeSettings["mode"]): Promise<string[]> {
+  private async getAvailableServices(rootPath: string, settings: ProjectRuntimeSettings): Promise<string[]> {
     /* For docker mode expose compose service names as quick presets in Mini App settings. */
-    if (mode !== "docker") {
+    const hasDockerRoutes = (settings.routes ?? []).some((route) => route.mode === "docker");
+    if (settings.mode !== "docker" && !hasDockerRoutes) {
       return [];
     }
 
@@ -204,25 +210,17 @@ export class ProjectDeploymentService {
         mode: DEFAULT_RUNTIME_MODE,
         serviceName: null,
         internalPort: null,
-        staticRoot: null
+        staticRoot: null,
+        routes: []
       };
     }
     return {
       mode: saved.mode ?? DEFAULT_RUNTIME_MODE,
       serviceName: this.normalizeNullableString(saved.serviceName),
       internalPort: this.normalizeNullablePort(saved.internalPort),
-      staticRoot: this.normalizeNullableString(saved.staticRoot)
+      staticRoot: this.normalizeNullableString(saved.staticRoot),
+      routes: normalizeRuntimeRoutes(saved.routes ?? [])
     };
-  }
-
-  private buildProjectDomain(slug: string): string {
-    /* Build routed domain as <slug>.<public-domain>. */
-    return `${slug}.${this.config.publicDomain}`;
-  }
-
-  private buildPreviewUrl(slug: string): string {
-    /* Keep preview URL deterministic for UI copy/open actions. */
-    return `https://${this.buildProjectDomain(slug)}`;
   }
 
   private resolveComposePath(rootPath: string): string {
@@ -323,6 +321,11 @@ export class ProjectDeploymentService {
 
   private assertRuntimeSettings(settings: ProjectRuntimeSettings): void {
     /* Validate mode-specific required fields to keep deployment input explicit. */
+    if ((settings.routes ?? []).length > 0) {
+      assertRuntimeRoutes(settings.routes ?? []);
+      return;
+    }
+
     if (settings.mode === "static") {
       this.requireStaticRoot(settings.staticRoot);
     }
@@ -334,5 +337,103 @@ export class ProjectDeploymentService {
       throw new Error("Set staticRoot in project runtime settings for static deploy mode");
     }
     return staticRoot.trim();
+  }
+
+  private buildLegacySettingsFromPatch(input: {
+    current: ProjectRuntimeSettings;
+    patch: ProjectRuntimeSettingsPatch;
+    nextMode: ProjectRuntimeSettings["mode"];
+  }): ProjectRuntimeSettings {
+    /* Preserve existing single-route behavior when advanced routes are not configured. */
+    const merged: ProjectRuntimeSettings = {
+      mode: input.nextMode,
+      serviceName:
+        typeof input.patch.serviceName === "undefined"
+          ? input.current.serviceName
+          : this.normalizeNullableString(input.patch.serviceName),
+      internalPort:
+        typeof input.patch.internalPort === "undefined"
+          ? input.current.internalPort
+          : this.normalizeNullablePort(input.patch.internalPort),
+      staticRoot:
+        typeof input.patch.staticRoot === "undefined"
+          ? input.current.staticRoot
+          : this.normalizeNullableString(input.patch.staticRoot),
+      routes: []
+    };
+
+    return {
+      mode: input.nextMode,
+      serviceName: input.nextMode === "docker" ? merged.serviceName : null,
+      internalPort: input.nextMode === "docker" ? merged.internalPort : null,
+      staticRoot: input.nextMode === "static" ? merged.staticRoot : null,
+      routes: []
+    };
+  }
+
+  private async startMultiRouteDeployment(input: {
+    slug: string;
+    rootPath: string;
+    composeProjectName: string;
+    routes: ProjectRuntimeRoute[];
+  }): Promise<void> {
+    /* One generated override should expose all configured subdomains for the selected project. */
+    const dockerRouteInputs = input.routes.filter((route) => route.mode === "docker");
+    const staticRoutes = input.routes
+      .filter((route) => route.mode === "static")
+      .map((route) => ({
+        routeId: route.id,
+        domain: buildProjectDomain(input.slug, this.config.publicDomain, route.subdomain),
+        staticPath: this.resolveStaticPath(input.rootPath, route.staticRoot)
+      }));
+
+    if (dockerRouteInputs.length === 0) {
+      const staticOverridePath = this.writeRuntimeFile(
+        `${this.toRuntimeFileKey(input.slug)}.docker.override.json`,
+        buildMultiRouteOverrideConfig({
+          slug: input.slug,
+          allServices: [],
+          dockerRoutes: [],
+          staticRoutes
+        })
+      );
+      await this.docker.run(["-f", staticOverridePath, "-p", input.composeProjectName, "up", "-d"], input.rootPath);
+      return;
+    }
+
+    const composePath = this.resolveComposePath(input.rootPath);
+    const composeConfig = await this.readComposeConfig(composePath);
+    const dockerRoutes = dockerRouteInputs.map((route) => {
+      const runtimeTarget = inferDockerRuntimeTarget({
+        compose: composeConfig,
+        settings: {
+          mode: "docker",
+          serviceName: route.serviceName,
+          internalPort: route.internalPort,
+          staticRoot: null,
+          routes: []
+        }
+      });
+      return {
+        routeId: route.id,
+        domain: buildProjectDomain(input.slug, this.config.publicDomain, route.subdomain),
+        targetServiceName: runtimeTarget.serviceName,
+        internalPort: runtimeTarget.internalPort,
+        existingNetworks: runtimeTarget.existingNetworks
+      };
+    });
+
+    const overrideConfig = buildMultiRouteOverrideConfig({
+      slug: input.slug,
+      allServices: Object.keys(composeConfig.services ?? {}).sort((left, right) => left.localeCompare(right)),
+      dockerRoutes,
+      staticRoutes
+    });
+    const overridePath = this.writeRuntimeFile(`${this.toRuntimeFileKey(input.slug)}.docker.override.json`, overrideConfig);
+
+    await this.docker.run(
+      ["-f", composePath, "-f", overridePath, "-p", input.composeProjectName, "up", "-d"],
+      path.dirname(composePath)
+    );
   }
 }
