@@ -380,6 +380,7 @@ describe("ProjectDeploymentService", () => {
     expect(dockerRun).toHaveBeenCalledTimes(3);
     const deployCallArgs = dockerRun.mock.calls[1][0] as string[];
     expect(deployCallArgs).toEqual(expect.arrayContaining(["up", "-d"]));
+    expect(deployCallArgs.slice(-2)).toEqual(["web", "api"]);
   });
 
   test("autoconfigures deploy routes from compose services", async () => {
@@ -458,5 +459,106 @@ describe("ProjectDeploymentService", () => {
       expect.objectContaining({ previewUrl: "https://arena.dev.example.com" }),
       expect.objectContaining({ previewUrl: "https://api.arena.dev.example.com" })
     ]);
+  });
+
+  test("uses included nested compose file for bridge-based deploys", async () => {
+    /* Shared VDS should support project-local bridge compose files by targeting the real nested compose file. */
+    const projectRoot = path.join(projectsRoot, "carusel");
+    writeFile(path.join(projectRoot, "docker-compose.yml"), "include:\n  - infra/docker/docker-compose.yml\n");
+    writeFile(
+      path.join(projectRoot, "infra", "docker", "docker-compose.yml"),
+      [
+        "services:",
+        "  dashboard:",
+        "    image: node:22",
+        "    ports:",
+        '      - "3000:3000"',
+        "  backend:",
+        "    image: node:22",
+        "    ports:",
+        '      - "8080:3000"'
+      ].join("\n")
+    );
+
+    const dockerRun = jest
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          services: {
+            dashboard: { ports: ["3000:3000"] },
+            backend: { ports: ["8080:3000"] }
+          }
+        }),
+        stderr: ""
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          services: {
+            dashboard: { ports: ["3000:3000"] },
+            backend: { ports: ["8080:3000"] }
+          }
+        }),
+        stderr: ""
+      });
+
+    const service = new ProjectDeploymentService(
+      {
+        telegramBotToken: "token",
+        adminIds: [1],
+        publicBaseUrl: "https://example.com",
+        publicDomain: "dev.example.com",
+        projectsRoot,
+        opencodeSyncOnStart: false,
+        opencodeWarmRecentsOnStart: false,
+        opencodeWarmRecentsLimit: 0,
+        opencodeServerUrl: "http://opencode:4096",
+        eventBufferSize: 100
+      } as any,
+      { run: dockerRun } as any,
+      { set: jest.fn(), get: jest.fn(() => ({ status: "stopped" })) } as any,
+      {
+        get: jest.fn(() => ({
+          mode: "docker",
+          serviceName: null,
+          internalPort: null,
+          staticRoot: null,
+          routes: [
+            {
+              id: "web",
+              mode: "docker",
+              serviceName: "dashboard",
+              internalPort: 3000,
+              staticRoot: null,
+              subdomain: null
+            },
+            {
+              id: "api",
+              mode: "docker",
+              serviceName: "backend",
+              internalPort: 3000,
+              staticRoot: null,
+              subdomain: "api"
+            }
+          ]
+        })),
+        set: jest.fn()
+      } as any
+    );
+
+    await service.startDeployment("carusel");
+
+    expect(dockerRun).toHaveBeenNthCalledWith(
+      1,
+      ["-f", path.join(projectRoot, "infra", "docker", "docker-compose.yml"), "config", "--format", "json"],
+      path.join(projectRoot, "infra", "docker")
+    );
+    expect(dockerRun).toHaveBeenNthCalledWith(
+      2,
+      expect.arrayContaining(["-f", path.join(projectRoot, "infra", "docker", "docker-compose.yml"), "dashboard", "backend"]),
+      path.join(projectRoot, "infra", "docker")
+    );
   });
 });

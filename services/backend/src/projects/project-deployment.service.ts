@@ -44,6 +44,8 @@ import { ProjectRuntimeSettingsStore } from "./project-runtime-settings.store";
 const RUNTIME_OVERRIDES_DIR = path.join("data", "runtime-overrides");
 const DEFAULT_RUNTIME_MODE: ProjectRuntimeSettings["mode"] = "docker";
 const RUNTIME_FILE_SAFE_NAME_REGEX = /^[a-z0-9_-]+\.(docker\.override|static\.compose)\.json$/;
+const PROJECT_CONFIG_FILE_NAME = "opencode.project.json";
+const INCLUDE_LINE_REGEX = /^\s*-\s*(.+?)\s*$/;
 
 @Injectable()
 export class ProjectDeploymentService {
@@ -242,7 +244,7 @@ export class ProjectDeploymentService {
   }
 
   private resolveComposePath(rootPath: string): string {
-    /* Resolve compose file path from supported filenames with fail-fast semantics. */
+    /* Resolve compose file path from project config first, then supported root filenames. */
     const found = this.tryResolveComposePath(rootPath);
 
     if (!found) {
@@ -255,10 +257,94 @@ export class ProjectDeploymentService {
 
   private tryResolveComposePath(rootPath: string): string | null {
     /* Non-throwing compose resolver used by settings snapshot helpers. */
+    const configured = this.tryResolveConfiguredComposePath(rootPath);
+    if (configured) {
+      return configured;
+    }
+
+    const included = this.tryResolveIncludedComposePath(rootPath);
+    if (included) {
+      return included;
+    }
+
     const found = DEFAULT_COMPOSE_FILENAMES
       .map((name) => path.join(rootPath, name))
       .find((filePath) => fs.existsSync(filePath));
     return found ?? null;
+  }
+
+  private tryResolveConfiguredComposePath(rootPath: string): string | null {
+    /* Prefer explicit composePath from opencode.project.json for include-bridge projects. */
+    const configPath = path.join(rootPath, PROJECT_CONFIG_FILE_NAME);
+    if (!fs.existsSync(configPath)) {
+      return null;
+    }
+
+    let parsed: { composePath?: unknown };
+    try {
+      parsed = JSON.parse(fs.readFileSync(configPath, "utf-8")) as { composePath?: unknown };
+    } catch {
+      return null;
+    }
+
+    if (typeof parsed.composePath !== "string") {
+      return null;
+    }
+
+    const candidate = parsed.composePath.trim();
+    if (!candidate) {
+      return null;
+    }
+
+    assertWithinRoot(this.config.projectsRoot, candidate);
+    if (!fs.existsSync(candidate)) {
+      throw new Error(`Configured composePath does not exist: ${candidate}`);
+    }
+
+    return candidate;
+  }
+
+  private tryResolveIncludedComposePath(rootPath: string): string | null {
+    /* Root bridge compose files may include the real nested compose that should be used for shared-VDS deploy. */
+    const rootComposePath = DEFAULT_COMPOSE_FILENAMES
+      .map((name) => path.join(rootPath, name))
+      .find((filePath) => fs.existsSync(filePath));
+    if (!rootComposePath) {
+      return null;
+    }
+
+    const raw = fs.readFileSync(rootComposePath, "utf-8");
+    const lines = raw.split(/\r?\n/);
+    const includeIndex = lines.findIndex((line) => line.trim() === "include:");
+    if (includeIndex === -1) {
+      return null;
+    }
+
+    for (const line of lines.slice(includeIndex + 1)) {
+      if (!line.startsWith(" ") && !line.startsWith("\t") && line.trim().length > 0) {
+        break;
+      }
+
+      const match = line.match(INCLUDE_LINE_REGEX);
+      if (!match) {
+        continue;
+      }
+
+      const includeValue = match[1].trim().replace(/^['"]|['"]$/g, "");
+      if (!includeValue) {
+        continue;
+      }
+
+      const candidate = path.resolve(rootPath, includeValue);
+      if (!fs.existsSync(candidate)) {
+        continue;
+      }
+
+      assertWithinRoot(this.config.projectsRoot, candidate);
+      return candidate;
+    }
+
+    return null;
   }
 
   private async readComposeConfig(composePath: string): Promise<DockerComposeConfig> {
@@ -448,9 +534,10 @@ export class ProjectDeploymentService {
       staticRoutes
     });
     const overridePath = this.writeRuntimeFile(`${this.toRuntimeFileKey(input.slug)}.docker.override.json`, overrideConfig);
+    const targetServices = Array.from(new Set(dockerRoutes.map((route) => route.targetServiceName)));
 
     await this.docker.run(
-      ["-f", composePath, "-f", overridePath, "-p", input.composeProjectName, "up", "-d"],
+      ["-f", composePath, "-f", overridePath, "-p", input.composeProjectName, "up", "-d", ...targetServices],
       path.dirname(composePath)
     );
   }
