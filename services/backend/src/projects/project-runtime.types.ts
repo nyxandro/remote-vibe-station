@@ -20,6 +20,7 @@ export type ProjectRuntimeRoute = {
   internalPort: number | null;
   staticRoot: string | null;
   subdomain: string | null;
+  pathPrefix: string | null;
 };
 
 export type ProjectRuntimeRoutePatch = {
@@ -29,6 +30,7 @@ export type ProjectRuntimeRoutePatch = {
   internalPort?: number | null;
   staticRoot?: string | null;
   subdomain?: string | null;
+  pathPrefix?: string | null;
 };
 
 export type ProjectRuntimeRouteSnapshot = ProjectRuntimeRoute & {

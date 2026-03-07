@@ -47,6 +47,8 @@ services:
       - "traefik.docker.network=public"
       - "traefik.http.routers.rvs-backend.rule=Host(`${PUBLIC_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/events`))"
       - "traefik.http.routers.rvs-backend.entrypoints=websecure"
+      - "traefik.http.routers.rvs-backend.tls=true"
+      - "traefik.http.routers.rvs-backend.tls.certresolver=le"
       - "traefik.http.services.rvs-backend.loadbalancer.server.port=3000"
     networks:
       - internal
@@ -76,8 +78,12 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.bot.rule=Host(`${PUBLIC_DOMAIN}`) && Path(`/bot/webhook`)"
       - "traefik.http.routers.bot.entrypoints=websecure"
+      - "traefik.http.routers.bot.tls=true"
+      - "traefik.http.routers.bot.tls.certresolver=le"
       - "traefik.http.routers.bot-auth.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`) && PathPrefix(`/opencode-auth`)"
       - "traefik.http.routers.bot-auth.entrypoints=websecure"
+      - "traefik.http.routers.bot-auth.tls=true"
+      - "traefik.http.routers.bot-auth.tls.certresolver=le"
       - "traefik.http.routers.bot-auth.middlewares=noindex-headers@file"
       - "traefik.http.services.bot.loadbalancer.server.port=3001"
     networks:
@@ -95,6 +101,8 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.miniapp.rule=Host(`${PUBLIC_DOMAIN}`) && PathPrefix(`/miniapp`)"
       - "traefik.http.routers.miniapp.entrypoints=websecure"
+      - "traefik.http.routers.miniapp.tls=true"
+      - "traefik.http.routers.miniapp.tls.certresolver=le"
       - "traefik.http.services.miniapp.loadbalancer.server.port=4173"
     networks:
       - internal
@@ -133,6 +141,8 @@ services:
       - "traefik.docker.network=public"
       - "traefik.http.routers.opencode.rule=Host(`${OPENCODE_PUBLIC_DOMAIN:?OPENCODE_PUBLIC_DOMAIN must be set}`)"
       - "traefik.http.routers.opencode.entrypoints=websecure"
+      - "traefik.http.routers.opencode.tls=true"
+      - "traefik.http.routers.opencode.tls.certresolver=le"
       - "traefik.http.routers.opencode.middlewares=opencode-forward-auth@file,noindex-headers@file"
       - "traefik.http.services.opencode.loadbalancer.server.port=4096"
     networks:

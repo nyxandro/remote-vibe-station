@@ -1,5 +1,10 @@
 /**
  * @fileoverview Tests for ProjectDeploymentService docker/static runtime flows.
+ *
+ * Constructs:
+ * - docker/static start flows - validate generated compose arguments and preview URLs.
+ * - settings normalization - keeps mode-specific runtime fields explicit.
+ * - autoconfigure/include handling - supports shared-VDS deploy conventions.
  */
 
 import * as fs from "node:fs";
@@ -73,9 +78,7 @@ describe("ProjectDeploymentService", () => {
     expect(result.previewUrl).toBe("https://arena.dev.example.com");
     expect(dockerRun).toHaveBeenCalledTimes(3);
     const deployCallArgs = dockerRun.mock.calls[1][0] as string[];
-    expect(deployCallArgs).toContain("up");
-    expect(deployCallArgs).toContain("-d");
-    expect(deployCallArgs).toContain("-f");
+    expect(deployCallArgs).toEqual(expect.arrayContaining(["up", "-d", "web", "proxy-arena"]));
   });
 
   test("starts static deployment using generated nginx compose", async () => {
@@ -345,7 +348,8 @@ describe("ProjectDeploymentService", () => {
               serviceName: "web",
               internalPort: 3000,
               staticRoot: null,
-              subdomain: null
+              subdomain: null,
+              pathPrefix: null
             },
             {
               id: "api",
@@ -353,7 +357,8 @@ describe("ProjectDeploymentService", () => {
               serviceName: "api",
               internalPort: 8080,
               staticRoot: null,
-              subdomain: "api"
+              subdomain: "api",
+              pathPrefix: null
             },
             {
               id: "docs",
@@ -361,7 +366,8 @@ describe("ProjectDeploymentService", () => {
               serviceName: null,
               internalPort: null,
               staticRoot: "docs",
-              subdomain: "docs"
+              subdomain: "docs",
+              pathPrefix: null
             }
           ]
         })),
@@ -380,7 +386,7 @@ describe("ProjectDeploymentService", () => {
     expect(dockerRun).toHaveBeenCalledTimes(3);
     const deployCallArgs = dockerRun.mock.calls[1][0] as string[];
     expect(deployCallArgs).toEqual(expect.arrayContaining(["up", "-d"]));
-    expect(deployCallArgs.slice(-2)).toEqual(["web", "api"]);
+    expect(deployCallArgs.slice(-4)).toEqual(["web", "api", "proxy-arena-web", "proxy-arena-api"]);
   });
 
   test("autoconfigures deploy routes from compose services", async () => {
@@ -532,7 +538,8 @@ describe("ProjectDeploymentService", () => {
               serviceName: "dashboard",
               internalPort: 3000,
               staticRoot: null,
-              subdomain: null
+              subdomain: null,
+              pathPrefix: null
             },
             {
               id: "api",
@@ -540,7 +547,8 @@ describe("ProjectDeploymentService", () => {
               serviceName: "backend",
               internalPort: 3000,
               staticRoot: null,
-              subdomain: "api"
+              subdomain: "api",
+              pathPrefix: null
             }
           ]
         })),
@@ -557,7 +565,14 @@ describe("ProjectDeploymentService", () => {
     );
     expect(dockerRun).toHaveBeenNthCalledWith(
       2,
-      expect.arrayContaining(["-f", path.join(projectRoot, "infra", "docker", "docker-compose.yml"), "dashboard", "backend"]),
+      expect.arrayContaining([
+        "-f",
+        path.join(projectRoot, "infra", "docker", "docker-compose.yml"),
+        "dashboard",
+        "backend",
+        "proxy-carusel-web",
+        "proxy-carusel-api"
+      ]),
       path.join(projectRoot, "infra", "docker")
     );
   });

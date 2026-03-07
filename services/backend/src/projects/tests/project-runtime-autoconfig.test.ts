@@ -22,7 +22,8 @@ describe("buildSuggestedRuntimeRoutes", () => {
         serviceName: "frontend",
         internalPort: 3000,
         staticRoot: null,
-        subdomain: null
+        subdomain: null,
+        pathPrefix: null
       },
       {
         id: "api",
@@ -30,7 +31,8 @@ describe("buildSuggestedRuntimeRoutes", () => {
         serviceName: "api",
         internalPort: 8080,
         staticRoot: null,
-        subdomain: "api"
+        subdomain: "api",
+        pathPrefix: null
       }
     ]);
   });
@@ -65,7 +67,8 @@ describe("buildSuggestedRuntimeRoutes", () => {
         serviceName: "gateway",
         internalPort: 4000,
         staticRoot: null,
-        subdomain: null
+        subdomain: null,
+        pathPrefix: null
       }
     ]);
   });

@@ -27,6 +27,20 @@ const normalizeNullableString = (value: string | null | undefined): string | nul
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const normalizeNullablePathPrefix = (value: string | null | undefined): string | null => {
+  /* Public path prefixes must be stable absolute paths without trailing slashes. */
+  const normalized = normalizeNullableString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (!normalized.startsWith("/")) {
+    throw new Error(`Invalid pathPrefix: ${normalized}`);
+  }
+
+  return normalized !== "/" ? normalized.replace(/\/+$/g, "") : normalized;
+};
+
 const normalizeNullablePort = (value: number | null | undefined): number | null => {
   /* Route ports must stay explicit and valid for deterministic Traefik label generation. */
   if (typeof value !== "number") {
@@ -57,7 +71,7 @@ export const buildProjectDomain = (slug: string, publicDomain: string, subdomain
 
 export const buildPreviewUrl = (slug: string, publicDomain: string, routes: ProjectRuntimeRouteSnapshot[]): string => {
   /* Prefer the primary route for UI quick-open actions and fallback to first explicit route. */
-  const preferred = routes.find((route) => route.subdomain === null) ?? routes[0];
+  const preferred = routes.find((route) => route.subdomain === null && route.pathPrefix === null) ?? routes[0];
   return preferred?.previewUrl ?? `https://${buildProjectDomain(slug, publicDomain, null)}`;
 };
 
@@ -75,14 +89,15 @@ export const normalizeRuntimeRoutes = (
     serviceName: normalizeNullableString(route.serviceName),
     internalPort: normalizeNullablePort(route.internalPort),
     staticRoot: normalizeNullableString(route.staticRoot),
-    subdomain: normalizeNullableString(route.subdomain)
+    subdomain: normalizeNullableString(route.subdomain),
+    pathPrefix: normalizeNullablePathPrefix(route.pathPrefix)
   }));
 };
 
 export const assertRuntimeRoutes = (routes: ProjectRuntimeRoute[]): void => {
-  /* Explicit route config must not contain duplicate ids or conflicting subdomain assignments. */
+  /* Explicit route config must not contain duplicate ids or conflicting host+path assignments. */
   const ids = new Set<string>();
-  const hosts = new Set<string>();
+  const hostPaths = new Set<string>();
 
   routes.forEach((route) => {
     if (ids.has(route.id)) {
@@ -91,10 +106,11 @@ export const assertRuntimeRoutes = (routes: ProjectRuntimeRoute[]): void => {
     ids.add(route.id);
 
     const hostKey = route.subdomain ?? "<primary>";
-    if (hosts.has(hostKey)) {
-      throw new Error(`Duplicate route subdomain: ${hostKey}`);
+    const hostPathKey = `${hostKey}${route.pathPrefix ?? ""}`;
+    if (hostPaths.has(hostPathKey)) {
+      throw new Error(`Duplicate route host/path: ${hostPathKey}`);
     }
-    hosts.add(hostKey);
+    hostPaths.add(hostPathKey);
 
     if (route.mode === "static") {
       if (!route.staticRoot) {
@@ -114,7 +130,7 @@ export const buildSettingsFromRoutes = (input: {
   fallbackMode: ProjectRuntimeSettings["mode"];
 }): ProjectRuntimeSettings => {
   /* Legacy top-level fields mirror the primary route so older UI consumers still get sane values. */
-  const primaryRoute = input.routes.find((route) => route.subdomain === null) ?? input.routes[0];
+  const primaryRoute = input.routes.find((route) => route.subdomain === null && route.pathPrefix === null) ?? input.routes[0];
   return {
     mode: primaryRoute?.mode ?? input.fallbackMode,
     serviceName: primaryRoute?.mode === "docker" ? primaryRoute.serviceName : null,
@@ -137,7 +153,8 @@ export const toEffectiveRoutes = (settings: ProjectRuntimeSettings): ProjectRunt
       serviceName: settings.serviceName,
       internalPort: settings.internalPort,
       staticRoot: settings.staticRoot,
-      subdomain: null
+      subdomain: null,
+      pathPrefix: null
     }
   ];
 };
@@ -150,6 +167,6 @@ export const toRouteSnapshots = (
   /* Snapshot payload exposes every routed subdomain with a ready-to-open preview URL. */
   return toEffectiveRoutes(settings).map((route) => ({
     ...route,
-    previewUrl: `https://${buildProjectDomain(slug, publicDomain, route.subdomain)}`
+    previewUrl: `https://${buildProjectDomain(slug, publicDomain, route.subdomain)}${route.pathPrefix ?? ""}`
   }));
 };

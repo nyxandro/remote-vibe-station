@@ -101,6 +101,7 @@ const toDockerRoute = (
     serviceName,
     internalPort,
     staticRoot: null,
-    subdomain
+    subdomain,
+    pathPrefix: null
   };
 };

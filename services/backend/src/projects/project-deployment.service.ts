@@ -2,7 +2,12 @@
  * @fileoverview Project deployment service for per-project domain routing via Traefik.
  *
  * Exports:
- * - ProjectDeploymentService (L40) - Start/stop deployment and manage runtime settings.
+ * - ProjectDeploymentService - starts/stops deployments and manages runtime settings.
+ *
+ * Key constructs:
+ * - compose resolution helpers - find direct, configured, or include-based compose files.
+ * - runtime snapshot/settings helpers - normalize persisted deploy state.
+ * - docker/static deploy flows - generate runtime overrides for shared-VDS routing.
  */
 
 import * as fs from "node:fs";
@@ -19,6 +24,8 @@ import {
   buildStaticComposeConfig,
   DockerComposeConfig,
   inferDockerRuntimeTarget,
+  inferServicePathPrefix,
+  toDockerRouteProxyServiceName,
   toComposeProjectName
 } from "./project-deployment-runtime";
 import { assertWithinRoot } from "./project-paths";
@@ -123,10 +130,12 @@ export class ProjectDeploymentService {
       const overrideConfig = buildDockerOverrideConfig({
         slug,
         domain: buildProjectDomain(slug, this.config.publicDomain, null),
+        routePathPrefix: null,
         targetServiceName: runtimeTarget.serviceName,
         internalPort: runtimeTarget.internalPort,
         existingNetworks: runtimeTarget.existingNetworks,
-        allServices: runtimeTarget.allServices
+        allServices: runtimeTarget.allServices,
+        servicePathPrefix: inferServicePathPrefix(composeConfig.services?.[runtimeTarget.serviceName] ?? {})
       });
       const overridePath = this.writeRuntimeFile(
         `${this.toRuntimeFileKey(slug)}.docker.override.json`,
@@ -134,7 +143,18 @@ export class ProjectDeploymentService {
       );
 
       await this.docker.run(
-        ["-f", composePath, "-f", overridePath, "-p", composeProjectName, "up", "-d"],
+        [
+          "-f",
+          composePath,
+          "-f",
+          overridePath,
+          "-p",
+          composeProjectName,
+          "up",
+          "-d",
+          runtimeTarget.serviceName,
+          toDockerRouteProxyServiceName(slug, null)
+        ],
         path.dirname(composePath)
       );
     } else {
@@ -521,9 +541,11 @@ export class ProjectDeploymentService {
       return {
         routeId: route.id,
         domain: buildProjectDomain(input.slug, this.config.publicDomain, route.subdomain),
+        routePathPrefix: route.pathPrefix,
         targetServiceName: runtimeTarget.serviceName,
         internalPort: runtimeTarget.internalPort,
-        existingNetworks: runtimeTarget.existingNetworks
+        existingNetworks: runtimeTarget.existingNetworks,
+        servicePathPrefix: inferServicePathPrefix(composeConfig.services?.[runtimeTarget.serviceName] ?? {})
       };
     });
 
@@ -535,9 +557,21 @@ export class ProjectDeploymentService {
     });
     const overridePath = this.writeRuntimeFile(`${this.toRuntimeFileKey(input.slug)}.docker.override.json`, overrideConfig);
     const targetServices = Array.from(new Set(dockerRoutes.map((route) => route.targetServiceName)));
+    const proxyServices = dockerRoutes.map((route) => toDockerRouteProxyServiceName(input.slug, route.routeId));
 
     await this.docker.run(
-      ["-f", composePath, "-f", overridePath, "-p", input.composeProjectName, "up", "-d", ...targetServices],
+      [
+        "-f",
+        composePath,
+        "-f",
+        overridePath,
+        "-p",
+        input.composeProjectName,
+        "up",
+        "-d",
+        ...targetServices,
+        ...proxyServices
+      ],
       path.dirname(composePath)
     );
   }
