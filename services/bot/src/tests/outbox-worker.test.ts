@@ -4,6 +4,7 @@
  * Exports/constructs:
  * - makeWorker (L20) - Builds worker with mocked config/bot.
  * - describe("OutboxWorker replace delivery", L35) - Covers edit and draft fallback paths.
+ * - describe("OutboxWorker report retry", L169) - Covers dedupe when backend report ack is flaky.
  */
 
 import { OutboxWorker } from "../outbox-worker";
@@ -162,6 +163,93 @@ describe("OutboxWorker replace delivery", () => {
     expect(secondResult).toEqual({ id: "draft-1", ok: true, telegramMessageId: 808 });
     expect(telegram.callApi).toHaveBeenCalledTimes(1);
     expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
-    expect(telegram.editMessageText).toHaveBeenCalledTimes(1);
+    expect(telegram.editMessageText).not.toHaveBeenCalled();
+  });
+
+  it("reuses cached successful delivery for the same outbox item id", async () => {
+    /* Re-pulled items after a failed report must not send a second Telegram message. */
+    const telegram: TelegramMock = {
+      callApi: jest.fn(),
+      editMessageText: jest.fn(),
+      sendMessage: jest.fn(async () => ({ message_id: 909 }))
+    };
+    const worker = makeWorker(telegram);
+
+    const firstResult = await (worker as any).deliver({
+      id: "send-item-1",
+      chatId: 100,
+      text: "Команда завершена",
+      disableNotification: true
+    });
+    const secondResult = await (worker as any).deliver({
+      id: "send-item-1",
+      chatId: 100,
+      text: "Команда завершена",
+      disableNotification: true
+    });
+
+    expect(firstResult).toEqual({ id: "send-item-1", ok: true, telegramMessageId: 909 });
+    expect(secondResult).toEqual({ id: "send-item-1", ok: true, telegramMessageId: 909 });
+    expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries pending report before pulling new items", async () => {
+    /* Backend report failure must not cause the same Telegram message to be resent on the next poll. */
+    const telegram: TelegramMock = {
+      callApi: jest.fn(),
+      editMessageText: jest.fn(),
+      sendMessage: jest.fn(async () => ({ message_id: 1001 }))
+    };
+    const worker = makeWorker(telegram);
+    const fetchSpy = jest.spyOn(globalThis, "fetch" as any);
+    let pullCalls = 0;
+
+    fetchSpy.mockImplementation(async (...args: unknown[]) => {
+      const url = String(args[0] ?? "");
+      if (url.includes("/api/telegram/outbox/pull")) {
+        pullCalls += 1;
+        return {
+          ok: true,
+          json: async () => ({
+            items:
+              pullCalls === 1
+                ? [
+                    {
+                      id: "send-item-2",
+                      chatId: 100,
+                      text: "Старое сообщение",
+                      disableNotification: true
+                    }
+                  ]
+                : []
+          })
+        } as Response;
+      }
+
+      if (url.includes("/api/admin/projects/active")) {
+        return {
+          ok: false,
+          json: async () => ({})
+        } as Response;
+      }
+
+      if (url.includes("/api/telegram/outbox/report")) {
+        const callIndex = fetchSpy.mock.calls.filter(([candidate]) => String(candidate).includes("/api/telegram/outbox/report")).length;
+        return {
+          ok: callIndex > 1,
+          status: callIndex > 1 ? 200 : 500,
+          text: async () => "report failed"
+        } as Response;
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    await (worker as any).processAdmin(1);
+    await (worker as any).processAdmin(1);
+
+    expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes("/api/telegram/outbox/report"))).toHaveLength(2);
+    fetchSpy.mockRestore();
   });
 });

@@ -15,6 +15,7 @@ import { Telegraf } from "telegraf";
 import { buildBotBackendHeaders } from "./backend-auth";
 import { BotConfig } from "./config";
 import { buildModeButtonText } from "./mode-control";
+import { OutboxDeliveryResult, OutboxDeliveryState } from "./outbox-delivery-state";
 import { ThinkingIndicator } from "./thinking-indicator";
 
 type PullResponse = {
@@ -34,14 +35,6 @@ type PullResponse = {
       inlineKeyboard: Array<Array<{ text: string; callback_data: string }>>;
     };
   }>;
-};
-
-type ReportResult = {
-  id: string;
-  ok: boolean;
-  telegramMessageId?: number;
-  error?: string;
-  retryAfterSec?: number;
 };
 
 const WORKER_HEADER = "x-bot-worker-id";
@@ -73,6 +66,7 @@ export class OutboxWorker {
   >();
   private draftDeliverySupported = true;
   private readonly modeProjectByChatId = new Map<number, string>();
+  private readonly deliveryState = new OutboxDeliveryState();
 
   public constructor(
     private readonly config: BotConfig,
@@ -118,6 +112,10 @@ export class OutboxWorker {
 
   private async processAdmin(adminId: number): Promise<void> {
     /* Pull a batch and deliver sequentially to respect rate limits. */
+    if (!(await this.flushPendingReports(adminId))) {
+      return;
+    }
+
     const pulled = await this.pull(adminId);
     if (!pulled.items.length) {
       return;
@@ -131,7 +129,7 @@ export class OutboxWorker {
       });
     }
 
-    const results: ReportResult[] = [];
+    const results: OutboxDeliveryResult[] = [];
     for (const item of pulled.items) {
       results.push(await this.deliver(item));
     }
@@ -155,29 +153,45 @@ export class OutboxWorker {
     return (await response.json()) as PullResponse;
   }
 
-  private async report(adminId: number, results: ReportResult[]): Promise<void> {
+  private async report(adminId: number, results: OutboxDeliveryResult[]): Promise<boolean> {
     /* Persist delivery outcome on backend. */
     if (results.length === 0) {
-      return;
+      return true;
     }
 
-    const response = await fetch(`${this.config.backendUrl}/api/telegram/outbox/report`, {
-      method: "POST",
-      headers: buildBotBackendHeaders(this.config, adminId, {
-        "Content-Type": "application/json",
-        [WORKER_HEADER]: this.workerId
-      }),
-      body: JSON.stringify({ results })
-    });
+    try {
+      const response = await fetch(`${this.config.backendUrl}/api/telegram/outbox/report`, {
+        method: "POST",
+        headers: buildBotBackendHeaders(this.config, adminId, {
+          "Content-Type": "application/json",
+          [WORKER_HEADER]: this.workerId
+        }),
+        body: JSON.stringify({ results })
+      });
 
-    if (!response.ok) {
+      if (!response.ok) {
+        this.deliveryState.rememberPendingReports(adminId, results);
+        // eslint-disable-next-line no-console
+        console.error("Outbox report failed", {
+          adminId,
+          workerId: this.workerId,
+          status: response.status,
+          body: await response.text()
+        });
+        return false;
+      }
+
+      this.deliveryState.clearReported(adminId, results);
+      return true;
+    } catch (error) {
+      this.deliveryState.rememberPendingReports(adminId, results);
       // eslint-disable-next-line no-console
-      console.error("Outbox report failed", {
+      console.error("Outbox report request crashed", {
         adminId,
         workerId: this.workerId,
-        status: response.status,
-        body: await response.text()
+        error: error instanceof Error ? error.message : String(error)
       });
+      return false;
     }
   }
 
@@ -216,6 +230,9 @@ export class OutboxWorker {
         this.progressMessageByKey.delete(key);
       }
     }
+
+    /* Drop acknowledged-delivery receipts after a generous TTL to avoid duplicate re-sends on flaky report calls. */
+    this.deliveryState.prune(nowMs);
 
     /* Keep mode project cache bounded similarly to progress map lifecycle. */
     if (this.modeProjectByChatId.size > 5000) {
@@ -269,9 +286,16 @@ export class OutboxWorker {
     replyMarkup?: {
       inlineKeyboard: Array<Array<{ text: string; callback_data: string }>>;
     };
-  }): Promise<ReportResult> {
+  }): Promise<OutboxDeliveryResult> {
     /* Attempt to send a single Telegram message. */
     try {
+      const cachedDelivery = this.deliveryState.getSuccessful(item.id);
+      if (cachedDelivery) {
+        return cachedDelivery;
+      }
+
+      let result: OutboxDeliveryResult;
+
       if (item.control?.kind === "thinking") {
         /* Execute bot-local indicator control command. */
         if (this.indicator) {
@@ -281,19 +305,22 @@ export class OutboxWorker {
             await this.indicator.stop(item.chatId);
           }
         }
-
-        return { id: item.id, ok: true };
+        result = { id: item.id, ok: true };
+        this.deliveryState.rememberSuccessful(result);
+        return result;
       }
 
       let sentMessageId: number;
 
       if (item.mode === "draft" && item.progressKey) {
-        return await this.deliverDraft({
+        result = await this.deliverDraft({
           id: item.id,
           chatId: item.chatId,
           text: item.text,
           progressKey: item.progressKey
         });
+        this.deliveryState.rememberSuccessful(result);
+        return result;
       }
 
       if (item.mode === "replace" && item.progressKey) {
@@ -315,12 +342,16 @@ export class OutboxWorker {
         sentMessageId = sent.message_id;
       }
 
-      return { id: item.id, ok: true, telegramMessageId: sentMessageId };
+      result = { id: item.id, ok: true, telegramMessageId: sentMessageId };
+      this.deliveryState.rememberSuccessful(result);
+      return result;
     } catch (error: any) {
       const message = error instanceof Error ? error.message : "Failed to send Telegram message";
       if (typeof message === "string" && message.includes("message is not modified")) {
         /* Telegram edit can fail when content is identical; treat as delivered. */
-        return { id: item.id, ok: true };
+        const result = { id: item.id, ok: true };
+        this.deliveryState.rememberSuccessful(result);
+        return result;
       }
 
       /*
@@ -331,6 +362,16 @@ export class OutboxWorker {
       const retryAfterSec = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined;
       return { id: item.id, ok: false, error: message, retryAfterSec };
     }
+  }
+
+  private async flushPendingReports(adminId: number): Promise<boolean> {
+    /* Never pull new outbox items while previous successful sends are still waiting for backend acknowledgement. */
+    const pending = this.deliveryState.getPendingReports(adminId);
+    if (pending.length === 0) {
+      return true;
+    }
+
+    return this.report(adminId, pending);
   }
 
   private async deliverReplace(item: {
@@ -396,7 +437,7 @@ export class OutboxWorker {
     chatId: number;
     text: string;
     progressKey: string;
-  }): Promise<ReportResult> {
+  }): Promise<OutboxDeliveryResult> {
     /* Draft mode uses Telegram native streaming previews and falls back when unsupported. */
     if (!this.draftDeliverySupported || typeof this.bot.telegram.callApi !== "function") {
       this.draftDeliverySupported = false;
