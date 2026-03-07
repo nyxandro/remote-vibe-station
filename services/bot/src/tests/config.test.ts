@@ -15,6 +15,7 @@ const baseEnv = {
   TELEGRAM_BOT_TOKEN: "token",
   ADMIN_IDS: "123",
   BACKEND_URL: "http://backend:3000",
+  BOT_BACKEND_AUTH_TOKEN: "secret-token",
   PUBLIC_BASE_URL: "https://example.com",
   OPENCODE_PUBLIC_BASE_URL: "https://code.example.com"
 };
@@ -37,6 +38,7 @@ describe("loadConfig", () => {
       TELEGRAM_BOT_TOKEN: undefined,
       ADMIN_IDS: undefined,
       BACKEND_URL: undefined,
+      BOT_BACKEND_AUTH_TOKEN: undefined,
       PUBLIC_BASE_URL: undefined,
       OPENCODE_PUBLIC_BASE_URL: undefined
     });
@@ -56,6 +58,7 @@ describe("loadConfig", () => {
     expect(config.telegramBotToken).toBe("token");
     expect(config.adminIds).toEqual([123]);
     expect(config.backendUrl).toBe("http://backend:3000");
+    expect(config.botBackendAuthToken).toBe("secret-token");
     expect(config.opencodePublicBaseUrl).toBe("https://code.example.com");
   });
 

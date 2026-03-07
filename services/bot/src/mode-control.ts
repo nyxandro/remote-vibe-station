@@ -11,6 +11,7 @@
 
 import { Markup, Telegraf } from "telegraf";
 
+import { buildBotBackendHeaders } from "./backend-auth";
 import { BotConfig } from "./config";
 import { encodeModeCallback, parseModeCallback } from "./mode-callback";
 
@@ -92,7 +93,7 @@ const decodeProvider = (value: string): string => {
 export const registerModeControl = ({ bot, config, isAdmin }: RegisterModeControlInput): void => {
   const fetchSettings = async (adminId: number): Promise<TelegramSettingsSnapshot> => {
     const response = await fetch(`${config.backendUrl}/api/telegram/settings`, {
-      headers: { "x-admin-id": String(adminId) }
+      headers: buildBotBackendHeaders(config, adminId)
     });
 
     if (!response.ok) {
@@ -109,7 +110,7 @@ export const registerModeControl = ({ bot, config, isAdmin }: RegisterModeContro
     const response = await fetch(
       `${config.backendUrl}/api/telegram/settings/models?providerID=${encodeURIComponent(providerID)}`,
       {
-        headers: { "x-admin-id": String(adminId) }
+        headers: buildBotBackendHeaders(config, adminId)
       }
     );
 
@@ -127,10 +128,9 @@ export const registerModeControl = ({ bot, config, isAdmin }: RegisterModeContro
   ): Promise<TelegramSettingsSnapshot> => {
     const response = await fetch(`${config.backendUrl}/api/telegram/settings`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-id": String(adminId)
-      },
+      headers: buildBotBackendHeaders(config, adminId, {
+        "Content-Type": "application/json"
+      }),
       body: JSON.stringify(payload)
     });
 

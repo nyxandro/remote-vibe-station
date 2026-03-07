@@ -11,6 +11,7 @@ import { isIP } from "node:net";
 import { Telegraf } from "telegraf";
 
 import { buildBackendErrorMessage } from "./backend-error";
+import { buildBotBackendHeaders } from "./backend-auth";
 import { fetchActiveSessionTitle, formatActiveSessionLine } from "./active-session";
 import { startPeriodicTask } from "./command-sync";
 import { loadConfig } from "./config";
@@ -138,10 +139,9 @@ const bootstrap = async (): Promise<void> => {
     /* Tell backend which chat should receive stream output for this admin. */
     const response = await fetch(`${config.backendUrl}/api/telegram/bind`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-id": String(adminId)
-      },
+      headers: buildBotBackendHeaders(config, adminId, {
+        "Content-Type": "application/json"
+      }),
       body: JSON.stringify({ adminId, chatId })
     });
 
@@ -156,7 +156,7 @@ const bootstrap = async (): Promise<void> => {
      * Backend returns a normalized catalog with merged local+OpenCode commands.
      */
     const response = await fetch(`${config.backendUrl}/api/telegram/commands`, {
-      headers: { "x-admin-id": String(adminId) }
+      headers: buildBotBackendHeaders(config, adminId)
     });
 
     if (!response.ok) {
@@ -226,11 +226,11 @@ const bootstrap = async (): Promise<void> => {
     }
 
     try {
-      const summary = await fetchStartupSummary(config.backendUrl, ctx.from!.id);
+      const summary = await fetchStartupSummary(config, ctx.from!.id);
       /* Session line for /start should reflect currently active OpenCode thread title. */
       if (summary.project) {
         try {
-          const activeSessionTitle = await fetchActiveSessionTitle(config.backendUrl, ctx.from!.id);
+          const activeSessionTitle = await fetchActiveSessionTitle(config, ctx.from!.id);
           summary.session = activeSessionTitle ? { title: activeSessionTitle } : null;
         } catch {
           summary.session = null;
@@ -262,10 +262,9 @@ const bootstrap = async (): Promise<void> => {
     /* Persist stream state on backend (source of truth). */
     await fetch(`${config.backendUrl}/api/telegram/stream/on`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-id": String(adminId)
-      },
+      headers: buildBotBackendHeaders(config, adminId, {
+        "Content-Type": "application/json"
+      }),
       body: JSON.stringify({ adminId, chatId: ctx.chat.id })
     });
 
@@ -284,10 +283,9 @@ const bootstrap = async (): Promise<void> => {
 
     await fetch(`${config.backendUrl}/api/telegram/stream/off`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-id": String(adminId)
-      },
+      headers: buildBotBackendHeaders(config, adminId, {
+        "Content-Type": "application/json"
+      }),
       body: JSON.stringify({ adminId, chatId: ctx.chat.id })
     });
 
@@ -302,7 +300,7 @@ const bootstrap = async (): Promise<void> => {
     }
 
     const response = await fetch(`${config.backendUrl}/api/admin/projects`, {
-      headers: { "x-admin-id": String(ctx.from?.id) }
+      headers: buildBotBackendHeaders(config, Number(ctx.from?.id))
     });
 
     if (!response.ok) {
@@ -336,12 +334,11 @@ const bootstrap = async (): Promise<void> => {
       `${config.backendUrl}/api/admin/projects/${encodeURIComponent(slug)}/select`,
       {
       method: "POST",
-      headers: {
+      headers: buildBotBackendHeaders(config, Number(ctx.from?.id), {
         "Content-Type": "application/json",
-        "x-admin-id": String(ctx.from?.id),
         /* Bot will reply itself; avoid duplicate project.selected event. */
         "x-suppress-events": "1"
-      },
+      }),
       body: "{}"
       }
     );
@@ -357,7 +354,7 @@ const bootstrap = async (): Promise<void> => {
     /* Show active session context immediately after project switch. */
     let sessionLine = formatActiveSessionLine(null);
     try {
-      const activeSessionTitle = await fetchActiveSessionTitle(config.backendUrl, ctx.from!.id);
+      const activeSessionTitle = await fetchActiveSessionTitle(config, ctx.from!.id);
       sessionLine = formatActiveSessionLine(activeSessionTitle);
     } catch {
       sessionLine = formatActiveSessionLine(null);
@@ -387,10 +384,9 @@ const bootstrap = async (): Promise<void> => {
       try {
         const response = await fetch(`${config.backendUrl}/api/telegram/prompt/enqueue`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-admin-id": String(input.adminId)
-          },
+          headers: buildBotBackendHeaders(config, input.adminId, {
+            "Content-Type": "application/json"
+          }),
           body: JSON.stringify({ chatId: input.chatId, ...input.payload })
         });
 
@@ -446,7 +442,7 @@ const bootstrap = async (): Promise<void> => {
 
     let statusMessageId: number | null = null;
     try {
-      const settings = await fetchVoiceControlSettings(config.backendUrl, adminId);
+      const settings = await fetchVoiceControlSettings(config, adminId);
       if (!settings.enabled || !settings.apiKey || !settings.model) {
         await ctx.reply(VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE);
         return;
@@ -591,10 +587,9 @@ const bootstrap = async (): Promise<void> => {
         try {
           const commandResponse = await fetch(`${config.backendUrl}/api/telegram/command`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-admin-id": String(adminId)
-            },
+            headers: buildBotBackendHeaders(config, adminId, {
+              "Content-Type": "application/json"
+            }),
             body: JSON.stringify({
               command: resolvedCommand,
               arguments: slash.args
@@ -655,10 +650,9 @@ const bootstrap = async (): Promise<void> => {
     try {
       const response = await fetch(`${config.backendUrl}/api/telegram/opencode/version/check`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-id": String(adminId)
-        },
+        headers: buildBotBackendHeaders(config, adminId, {
+          "Content-Type": "application/json"
+        }),
         body: "{}"
       });
 

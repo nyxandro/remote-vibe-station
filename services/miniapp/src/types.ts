@@ -121,7 +121,7 @@ export type GroqTranscriptionModel = "whisper-large-v3-turbo" | "whisper-large-v
 
 export type VoiceControlSettings = {
   enabled: boolean;
-  apiKey: string | null;
+  hasApiKey: boolean;
   model: GroqTranscriptionModel | null;
   supportedModels: GroqTranscriptionModel[];
 };

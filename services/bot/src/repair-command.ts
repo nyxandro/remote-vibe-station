@@ -7,6 +7,7 @@
 
 import { Telegraf } from "telegraf";
 
+import { buildBotBackendHeaders } from "./backend-auth";
 import { buildBackendErrorMessage } from "./backend-error";
 import { BotConfig } from "./config";
 
@@ -71,9 +72,7 @@ export const registerRepairCommand = (input: {
     const adminId = Number(ctx.from?.id);
     const response = await fetch(`${input.config.backendUrl}/api/telegram/repair`, {
       method: "POST",
-      headers: {
-        "x-admin-id": String(adminId)
-      }
+      headers: buildBotBackendHeaders(input.config, adminId)
     });
 
     if (!response.ok) {

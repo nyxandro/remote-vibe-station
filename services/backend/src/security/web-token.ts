@@ -14,7 +14,7 @@
 import * as crypto from "node:crypto";
 
 const DOT = ".";
-const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const TOKEN_TTL_MS = 60 * 60 * 1000;
 
 type WebTokenPayload = {
   adminId: number;

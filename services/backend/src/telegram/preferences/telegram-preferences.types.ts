@@ -8,7 +8,8 @@
  * - VoiceControlSettings (L20) - Persisted Groq voice control configuration.
  * - AdminPreferences (L26) - Persisted per-admin preferences.
  * - SettingsSnapshot (L36) - Full settings payload for Telegram UI.
- * - VoiceControlSettingsSnapshot (L47) - Voice settings payload for bot/miniapp.
+ * - VoiceControlPublicSettingsSnapshot (L47) - Redacted voice settings payload for Mini App.
+ * - VoiceControlSecretSettingsSnapshot (L52) - Secret-bearing voice settings payload for bot.
  */
 
 export type SelectedModel = {
@@ -44,7 +45,14 @@ export type SettingsSnapshot = {
   thinkingOptions: string[];
 };
 
-export type VoiceControlSettingsSnapshot = {
+export type VoiceControlPublicSettingsSnapshot = {
+  enabled: boolean;
+  hasApiKey: boolean;
+  model: GroqTranscriptionModel | null;
+  supportedModels: GroqTranscriptionModel[];
+};
+
+export type VoiceControlSecretSettingsSnapshot = {
   enabled: boolean;
   apiKey: string | null;
   model: GroqTranscriptionModel | null;

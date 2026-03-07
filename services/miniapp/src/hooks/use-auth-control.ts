@@ -17,7 +17,7 @@ export const useAuthControl = (): {
   /*
    * Determine auth mode:
    * - Telegram Mini App: window.Telegram.WebApp.initData
-   * - Browser: signed web token passed via #token=... and persisted.
+     * - Browser: signed web token passed via #token=... and kept only in sessionStorage.
    */
   return useMemo(() => {
     const telegramInitData = (window as any)?.Telegram?.WebApp?.initData as string | undefined;
@@ -26,10 +26,11 @@ export const useAuthControl = (): {
       window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash
     );
     const hashToken = hashParams.get("token") ?? "";
-    const storedToken = localStorage.getItem(STORAGE_KEY_WEB_TOKEN) ?? "";
+    const storedToken = sessionStorage.getItem(STORAGE_KEY_WEB_TOKEN) ?? "";
 
     if (!storedToken && hashToken) {
-      localStorage.setItem(STORAGE_KEY_WEB_TOKEN, hashToken);
+      sessionStorage.setItem(STORAGE_KEY_WEB_TOKEN, hashToken);
+      window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
     }
 
     const webToken = storedToken || hashToken || undefined;

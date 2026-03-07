@@ -17,7 +17,8 @@ const baseEnv = {
   PUBLIC_BASE_URL: "https://example.com",
   PUBLIC_DOMAIN: "example.com",
   PROJECTS_ROOT: "/srv/projects",
-  OPENCODE_SERVER_URL: "http://opencode:4096"
+  OPENCODE_SERVER_URL: "http://opencode:4096",
+  BOT_BACKEND_AUTH_TOKEN: "secret-token"
 };
 
 const setEnv = (env: Record<string, string | undefined>): void => {
@@ -41,6 +42,7 @@ describe("loadConfig", () => {
       PUBLIC_DOMAIN: undefined,
       PROJECTS_ROOT: undefined,
       OPENCODE_SERVER_URL: undefined,
+      BOT_BACKEND_AUTH_TOKEN: undefined,
       OPENCODE_SERVER_PASSWORD: undefined,
       OPENCODE_SERVER_USERNAME: undefined,
       GITHUB_APP_ID: undefined,
@@ -64,6 +66,7 @@ describe("loadConfig", () => {
     expect(config.telegramBotToken).toBe("token");
     expect(config.adminIds).toEqual([123]);
     expect(config.publicDomain).toBe("example.com");
+    expect(config.botBackendAuthToken).toBe("secret-token");
   });
 
   it("requires username when password is set", () => {

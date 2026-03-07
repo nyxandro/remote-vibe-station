@@ -13,20 +13,24 @@ import { VoiceControlSettings } from "../types";
 
 export type VoiceControlFormState = {
   apiKey: string;
+  hasApiKey: boolean;
   model: VoiceControlSettings["model"];
   supportedModels: VoiceControlSettings["supportedModels"];
   isLoading: boolean;
   isSaving: boolean;
+  isApiKeyDirty: boolean;
   saveResult: "idle" | "success" | "error";
 };
 
 export const useVoiceControlSettings = (setError: (value: string | null) => void) => {
   const [state, setState] = useState<VoiceControlFormState>({
     apiKey: "",
+    hasApiKey: false,
     model: null,
     supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"],
     isLoading: false,
     isSaving: false,
+    isApiKeyDirty: false,
     saveResult: "idle"
   });
 
@@ -39,13 +43,15 @@ export const useVoiceControlSettings = (setError: (value: string | null) => void
       const supportedModels = Array.isArray(payload.supportedModels) ? payload.supportedModels : [];
       setState((prev) => ({
         ...prev,
-        apiKey: payload.apiKey ?? "",
+        apiKey: "",
+        hasApiKey: Boolean(payload.hasApiKey),
         model: payload.model,
         supportedModels:
           supportedModels.length > 0
             ? supportedModels
             : ["whisper-large-v3-turbo", "whisper-large-v3"],
-        isLoading: false
+        isLoading: false,
+        isApiKeyDirty: false
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load voice control settings";
@@ -60,21 +66,26 @@ export const useVoiceControlSettings = (setError: (value: string | null) => void
       setState((prev) => ({ ...prev, isSaving: true, saveResult: "idle" }));
       setError(null);
 
+      /* Prevent accidental deletion of an existing server-side key from a blank password field. */
+      const shouldSendApiKey = state.isApiKeyDirty && (!state.hasApiKey || state.apiKey.trim().length > 0);
+
       const payload = await apiPost<VoiceControlSettings>("/api/telegram/voice-control", {
-        apiKey: state.apiKey,
+        ...(shouldSendApiKey ? { apiKey: state.apiKey } : {}),
         model: state.model
       });
       const supportedModels = Array.isArray(payload.supportedModels) ? payload.supportedModels : [];
 
       setState((prev) => ({
         ...prev,
-        apiKey: payload.apiKey ?? "",
+        apiKey: "",
+        hasApiKey: Boolean(payload.hasApiKey),
         model: payload.model,
         supportedModels:
           supportedModels.length > 0
             ? supportedModels
             : ["whisper-large-v3-turbo", "whisper-large-v3"],
         isSaving: false,
+        isApiKeyDirty: false,
         saveResult: "success"
       }));
     } catch (error) {
@@ -82,12 +93,17 @@ export const useVoiceControlSettings = (setError: (value: string | null) => void
       setState((prev) => ({ ...prev, isSaving: false, saveResult: "error" }));
       setError(message);
     }
-  }, [setError, state.apiKey, state.model]);
+  }, [setError, state.apiKey, state.isApiKeyDirty, state.model]);
 
   return {
     state,
     setApiKey: (value: string) =>
-      setState((prev) => ({ ...prev, apiKey: value, saveResult: prev.isSaving ? prev.saveResult : "idle" })),
+      setState((prev) => ({
+        ...prev,
+        apiKey: value,
+        isApiKeyDirty: true,
+        saveResult: prev.isSaving ? prev.saveResult : "idle"
+      })),
     setModel: (value: VoiceControlSettings["model"]) =>
       setState((prev) => ({ ...prev, model: value, saveResult: prev.isSaving ? prev.saveResult : "idle" })),
     loadSettings,

@@ -36,7 +36,7 @@ export class AppAuthGuard implements CanActivate {
     }
 
     /*
-     * Local dev convenience: allow unauthenticated Mini App browsing.
+      * Local dev bypass is intentionally opt-in because these endpoints are admin-capable.
      *
      * Important:
      * - Some endpoints (Telegram stream status/start/stop) require admin identity.
@@ -47,7 +47,7 @@ export class AppAuthGuard implements CanActivate {
     const isLocalPublicBaseUrl =
       this.config.publicBaseUrl.startsWith("http://localhost") ||
       this.config.publicBaseUrl.startsWith("http://127.0.0.1");
-    if (isLocalPublicBaseUrl) {
+    if (isLocalPublicBaseUrl && this.config.allowUnsafeLocalAuth) {
       if ((request as any).authAdminId == null && this.config.adminIds.length === 1) {
         (request as any).authAdminId = this.config.adminIds[0];
       }

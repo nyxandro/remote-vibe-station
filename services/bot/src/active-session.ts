@@ -6,6 +6,9 @@
  * - formatActiveSessionLine (L52) - Formats user-facing session line with fallback text.
  */
 
+import { buildBotBackendHeaders } from "./backend-auth";
+import { BotConfig } from "./config";
+
 type SessionsPayload = {
   ok?: boolean;
   sessions?: Array<{
@@ -16,24 +19,25 @@ type SessionsPayload = {
 
 const ACTIVE_SESSION_FETCH_TIMEOUT_MS = 5000;
 
-export const fetchActiveSessionTitle = async (backendUrl: string, adminId: number): Promise<string | null> => {
+export const fetchActiveSessionTitle = async (
+  config: Pick<BotConfig, "backendUrl" | "botBackendAuthToken">,
+  adminId: number
+): Promise<string | null> => {
   /* Read sessions from backend and pick only explicitly active entry. */
   let response: Response;
   try {
-    response = await fetch(`${backendUrl}/api/telegram/sessions`, {
-      headers: {
-        "x-admin-id": String(adminId)
-      },
+    response = await fetch(`${config.backendUrl}/api/telegram/sessions`, {
+      headers: buildBotBackendHeaders(config, adminId),
       signal: AbortSignal.timeout(ACTIVE_SESSION_FETCH_TIMEOUT_MS)
     });
   } catch (error) {
     /* Surface timeout/error with backend context to simplify troubleshooting. */
     if ((error as { name?: string } | null)?.name === "AbortError") {
       throw new Error(
-        `Failed to load sessions: request timed out after ${ACTIVE_SESSION_FETCH_TIMEOUT_MS}ms (backend=${backendUrl}, adminId=${adminId})`
+        `Failed to load sessions: request timed out after ${ACTIVE_SESSION_FETCH_TIMEOUT_MS}ms (backend=${config.backendUrl}, adminId=${adminId})`
       );
     }
-    throw new Error(`Failed to load sessions (backend=${backendUrl}, adminId=${adminId}): ${String(error)}`);
+    throw new Error(`Failed to load sessions (backend=${config.backendUrl}, adminId=${adminId}): ${String(error)}`);
   }
 
   if (!response.ok) {

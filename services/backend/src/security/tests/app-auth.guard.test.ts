@@ -2,9 +2,9 @@
  * @fileoverview Tests for AppAuthGuard.
  *
  * Expects:
- * - Localhost mode allows unauthenticated browsing (L29).
- * - Localhost mode derives authAdminId when exactly one admin is configured (L43).
- * - Non-localhost mode rejects missing auth (L63).
+  * - Unsafe localhost bypass stays disabled by default (L29).
+  * - Explicit opt-in enables localhost bypass and derives authAdminId (L44).
+  * - Non-localhost mode rejects missing auth (L65).
  */
 
 import { UnauthorizedException } from "@nestjs/common";
@@ -22,13 +22,14 @@ const makeContext = (request: any): ExecutionContext => {
 };
 
 describe("AppAuthGuard", () => {
-  it("allows unauthenticated requests on localhost", () => {
-    /* Localhost browsing should not require headers. */
+  it("rejects unauthenticated localhost requests by default", () => {
+    /* Dev mode must not silently expose admin APIs unless explicitly enabled. */
     const guard = new AppAuthGuard({
       telegramBotToken: "x",
       adminIds: [123],
       publicBaseUrl: "http://localhost:4173",
       publicDomain: "localhost",
+      allowUnsafeLocalAuth: false,
       projectsRoot: "/tmp",
       opencodeSyncOnStart: false,
       opencodeWarmRecentsOnStart: false,
@@ -38,16 +39,17 @@ describe("AppAuthGuard", () => {
     } as any);
 
     const req: any = { headers: {} };
-    expect(guard.canActivate(makeContext(req))).toBe(true);
+    expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
   });
 
-  it("derives authAdminId on localhost when one admin configured", () => {
-    /* In dev mode we can pick the only configured admin id. */
+  it("derives authAdminId on localhost only when unsafe bypass is explicitly enabled", () => {
+    /* Local bypass remains available only as an intentional opt-in for isolated dev flows. */
     const guard = new AppAuthGuard({
       telegramBotToken: "x",
       adminIds: [649624756],
       publicBaseUrl: "http://127.0.0.1:4173",
       publicDomain: "localhost",
+      allowUnsafeLocalAuth: true,
       projectsRoot: "/tmp",
       opencodeSyncOnStart: false,
       opencodeWarmRecentsOnStart: false,
@@ -68,6 +70,7 @@ describe("AppAuthGuard", () => {
       adminIds: [123],
       publicBaseUrl: "https://example.com",
       publicDomain: "example.com",
+      allowUnsafeLocalAuth: false,
       projectsRoot: "/tmp",
       opencodeSyncOnStart: false,
       opencodeWarmRecentsOnStart: false,

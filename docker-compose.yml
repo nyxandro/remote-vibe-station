@@ -26,6 +26,7 @@ services:
     # Middleware: OpenCode API, Telegram webhook, управление Docker
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:?BOT_BACKEND_AUTH_TOKEN must be set}
       - ADMIN_IDS=${ADMIN_IDS}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
@@ -66,6 +67,7 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_IDS=${ADMIN_IDS}
       - BACKEND_URL=http://backend:3000
+      - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:?BOT_BACKEND_AUTH_TOKEN must be set}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL:?OPENCODE_PUBLIC_BASE_URL must be set}
     volumes:

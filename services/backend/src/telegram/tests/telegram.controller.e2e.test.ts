@@ -67,7 +67,8 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
         {
           provide: ConfigToken,
           useValue: {
-            adminIds: [649624756]
+            adminIds: [649624756],
+            botBackendAuthToken: "secret-token"
           }
         },
         { provide: TelegramStreamStore, useValue: {} },
@@ -99,7 +100,10 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
   test("returns merged command catalog JSON for valid admin header", async () => {
     /* Endpoint contract must include both commands and lookup map for bot sync. */
     const response = await fetch(`${await app.getUrl()}/api/telegram/commands`, {
-      headers: { "x-admin-id": "649624756" }
+      headers: {
+        "x-admin-id": "649624756",
+        "x-bot-backend-token": "secret-token"
+      }
     });
 
     expect(response.status).toBe(200);
@@ -126,7 +130,10 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
   test("returns 401 when x-admin-id is not in configured ADMIN_IDS", async () => {
     /* Guard must reject unknown admins so command catalog cannot leak across tenants. */
     const response = await fetch(`${await app.getUrl()}/api/telegram/commands`, {
-      headers: { "x-admin-id": "111" }
+      headers: {
+        "x-admin-id": "111",
+        "x-bot-backend-token": "secret-token"
+      }
     });
 
     expect(response.status).toBe(401);
@@ -136,7 +143,10 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
   test("returns startup summary JSON for valid admin header", async () => {
     /* Startup summary must provide project, git, mode and command blocks. */
     const response = await fetch(`${await app.getUrl()}/api/telegram/startup-summary`, {
-      headers: { "x-admin-id": "649624756" }
+      headers: {
+        "x-admin-id": "649624756",
+        "x-bot-backend-token": "secret-token"
+      }
     });
 
     expect(response.status).toBe(200);

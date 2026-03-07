@@ -5,7 +5,7 @@
  * - HASH_KEY (L14) - Query param key for hash.
  * - NEWLINE (L15) - Separator for data-check-string.
  * - parseInitData (L17) - Parse initData into key/value map.
- * - verifyInitData (L29) - Verify initData signature using bot token.
+ * - verifyInitData (L29) - Verify initData signature and freshness using bot token.
  * - extractUserId (L58) - Extract Telegram user id from initData.
  */
 
@@ -14,6 +14,8 @@ import * as crypto from "node:crypto";
 const HASH_KEY = "hash";
 const NEWLINE = "\n";
 const WEB_APP_DATA_KEY = "WebAppData";
+const AUTH_DATE_KEY = "auth_date";
+const MAX_INIT_DATA_AGE_SECONDS = 15 * 60;
 
 export const parseInitData = (initData: string): Map<string, string> => {
   /* Parse query string into a map. */
@@ -27,7 +29,7 @@ export const parseInitData = (initData: string): Map<string, string> => {
   return map;
 };
 
-export const verifyInitData = (initData: string, botToken: string): boolean => {
+export const verifyInitData = (initData: string, botToken: string, input?: { nowMs?: number }): boolean => {
   /* Parse and validate presence of hash. */
   const params = parseInitData(initData);
   const receivedHash = params.get(HASH_KEY);
@@ -50,7 +52,28 @@ export const verifyInitData = (initData: string, botToken: string): boolean => {
     .update(dataCheckString)
     .digest("hex");
 
-  return computedHash === receivedHash;
+  const receivedHashBuffer = Buffer.from(receivedHash, "utf-8");
+  const computedHashBuffer = Buffer.from(computedHash, "utf-8");
+  if (
+    receivedHashBuffer.length !== computedHashBuffer.length ||
+    !crypto.timingSafeEqual(receivedHashBuffer, computedHashBuffer)
+  ) {
+    return false;
+  }
+
+  /* Reject stale initData so captured launch payloads cannot be replayed forever. */
+  const authDateRaw = params.get(AUTH_DATE_KEY);
+  const authDateSeconds = Number(authDateRaw);
+  if (!Number.isFinite(authDateSeconds)) {
+    return false;
+  }
+
+  const nowSeconds = Math.floor((input?.nowMs ?? Date.now()) / 1000);
+  if (authDateSeconds > nowSeconds) {
+    return false;
+  }
+
+  return nowSeconds - authDateSeconds <= MAX_INIT_DATA_AGE_SECONDS;
 };
 
 export const extractUserId = (initData: string): number | null => {

@@ -160,10 +160,12 @@ vi.mock("../hooks/use-voice-control-settings", () => ({
   useVoiceControlSettings: () => ({
     state: {
       apiKey: "",
+      hasApiKey: false,
       model: null,
       supportedModels: [],
       isLoading: false,
       isSaving: false,
+      isApiKeyDirty: false,
       saveResult: "idle"
     },
     setApiKey: vi.fn(),

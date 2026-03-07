@@ -7,6 +7,9 @@
  * - buildStartSummaryMessage (L54) - Renders operator-facing /start message text.
  */
 
+import { buildBotBackendHeaders } from "./backend-auth";
+import { BotConfig } from "./config";
+
 export type StartupSummary = {
   project: {
     slug: string;
@@ -35,12 +38,12 @@ export type StartupSummary = {
 const COMMANDS_PREVIEW_LIMIT = 40;
 
 export const fetchStartupSummary = async (
-  backendUrl: string,
+  config: Pick<BotConfig, "backendUrl" | "botBackendAuthToken">,
   adminId: number
 ): Promise<StartupSummary> => {
   /* Request a single backend payload so /start is fast and consistent. */
-  const response = await fetch(`${backendUrl}/api/telegram/startup-summary`, {
-    headers: { "x-admin-id": String(adminId) }
+  const response = await fetch(`${config.backendUrl}/api/telegram/startup-summary`, {
+    headers: buildBotBackendHeaders(config, adminId)
   });
 
   if (!response.ok) {

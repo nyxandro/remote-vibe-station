@@ -7,6 +7,11 @@
 
 import { fetchActiveSessionTitle, formatActiveSessionLine } from "../active-session";
 
+const backendConfig = {
+  backendUrl: "http://backend:3000",
+  botBackendAuthToken: "secret-token"
+} as const;
+
 describe("active-session helpers", () => {
   beforeEach(() => {
     jest.restoreAllMocks();
@@ -25,12 +30,15 @@ describe("active-session helpers", () => {
       })
     } as Response);
 
-    const title = await fetchActiveSessionTitle("http://backend:3000", 42);
+    const title = await fetchActiveSessionTitle(backendConfig, 42);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://backend:3000/api/telegram/sessions",
       expect.objectContaining({
-        headers: { "x-admin-id": "42" },
+        headers: {
+          "x-admin-id": "42",
+          "x-bot-backend-token": "secret-token"
+        },
         signal: expect.any(Object)
       })
     );
@@ -47,7 +55,7 @@ describe("active-session helpers", () => {
       })
     } as Response);
 
-    const title = await fetchActiveSessionTitle("http://backend:3000", 42);
+    const title = await fetchActiveSessionTitle(backendConfig, 42);
     expect(title).toBeNull();
   });
 
@@ -61,7 +69,7 @@ describe("active-session helpers", () => {
       })
     } as Response);
 
-    await expect(fetchActiveSessionTitle("http://backend:3000", 42)).rejects.toThrow(
+    await expect(fetchActiveSessionTitle(backendConfig, 42)).rejects.toThrow(
       "Failed to load sessions: backend returned ok=false"
     );
   });
@@ -72,7 +80,7 @@ describe("active-session helpers", () => {
     (abortError as { name?: string }).name = "AbortError";
     jest.spyOn(globalThis, "fetch" as any).mockRejectedValue(abortError);
 
-    await expect(fetchActiveSessionTitle("http://backend:3000", 42)).rejects.toThrow(
+    await expect(fetchActiveSessionTitle(backendConfig, 42)).rejects.toThrow(
       "request timed out"
     );
   });

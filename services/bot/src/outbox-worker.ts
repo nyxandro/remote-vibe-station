@@ -12,6 +12,7 @@ import * as crypto from "node:crypto";
 
 import { Telegraf } from "telegraf";
 
+import { buildBotBackendHeaders } from "./backend-auth";
 import { BotConfig } from "./config";
 import { buildModeButtonText } from "./mode-control";
 import { ThinkingIndicator } from "./thinking-indicator";
@@ -142,10 +143,9 @@ export class OutboxWorker {
     /* Fetch leased pending items from backend. */
     const url = `${this.config.backendUrl}/api/telegram/outbox/pull?limit=${PULL_LIMIT}`;
     const response = await fetch(url, {
-      headers: {
-        "x-admin-id": String(adminId),
+      headers: buildBotBackendHeaders(this.config, adminId, {
         [WORKER_HEADER]: this.workerId
-      }
+      })
     });
 
     if (!response.ok) {
@@ -163,11 +163,10 @@ export class OutboxWorker {
 
     const response = await fetch(`${this.config.backendUrl}/api/telegram/outbox/report`, {
       method: "POST",
-      headers: {
+      headers: buildBotBackendHeaders(this.config, adminId, {
         "Content-Type": "application/json",
-        "x-admin-id": String(adminId),
         [WORKER_HEADER]: this.workerId
-      },
+      }),
       body: JSON.stringify({ results })
     });
 
@@ -186,9 +185,7 @@ export class OutboxWorker {
     /* Keep bot resilient: mode label refresh must never block message delivery. */
     try {
       const response = await fetch(`${this.config.backendUrl}/api/admin/projects/active`, {
-        headers: {
-          "x-admin-id": String(adminId)
-        }
+        headers: buildBotBackendHeaders(this.config, adminId)
       });
 
       if (!response.ok) {

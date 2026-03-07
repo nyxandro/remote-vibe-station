@@ -517,6 +517,7 @@ describe("SettingsTab", () => {
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
         voiceControl={{
           apiKey: "",
+          hasApiKey: false,
           model: null,
           supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"],
           isLoading: false,
@@ -566,6 +567,7 @@ describe("SettingsTab", () => {
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
         voiceControl={{
           apiKey: "gsk_test_123",
+          hasApiKey: true,
           model: "whisper-large-v3",
           supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"],
           isLoading: false,

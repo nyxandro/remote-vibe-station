@@ -8,6 +8,7 @@
 
 import { Telegraf } from "telegraf";
 
+import { buildBotBackendHeaders } from "./backend-auth";
 import { BotConfig } from "./config";
 
 export type OpenCodePermissionResponse = "once" | "always" | "reject";
@@ -42,6 +43,7 @@ export const registerOpenCodeCallbacks = (input: {
         raw,
         adminId: Number(ctx.from?.id),
         backendUrl: input.config.backendUrl,
+        botBackendAuthToken: input.config.botBackendAuthToken,
         answerCbQuery: (text: string, showAlert?: boolean) =>
           ctx.answerCbQuery(text, showAlert ? { show_alert: true } : undefined),
         editInlineKeyboard: () => ctx.editMessageReplyMarkup({ inline_keyboard: [] }),
@@ -54,6 +56,7 @@ export const registerOpenCodeCallbacks = (input: {
       raw,
       adminId: Number(ctx.from?.id),
       backendUrl: input.config.backendUrl,
+      botBackendAuthToken: input.config.botBackendAuthToken,
       answerCbQuery: (text: string, showAlert?: boolean) =>
         ctx.answerCbQuery(text, showAlert ? { show_alert: true } : undefined),
       editInlineKeyboard: () => ctx.editMessageReplyMarkup({ inline_keyboard: [] }),
@@ -69,6 +72,7 @@ const handleQuestionCallback = async (input: {
   answerCbQuery: (text: string, showAlert?: boolean) => Promise<unknown>;
   editInlineKeyboard: () => Promise<unknown>;
   sendReply: (text: string) => Promise<unknown>;
+  botBackendAuthToken: string;
 }): Promise<void> => {
   /* Route selected question option to backend and clear inline keyboard on success. */
   const parts = input.raw.split("|");
@@ -81,10 +85,11 @@ const handleQuestionCallback = async (input: {
 
   const response = await fetch(`${input.backendUrl}/api/telegram/question/reply`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-id": String(input.adminId)
-    },
+    headers: buildBotBackendHeaders(
+      { botBackendAuthToken: input.botBackendAuthToken },
+      input.adminId,
+      { "Content-Type": "application/json" }
+    ),
     body: JSON.stringify({ questionToken, optionIndex })
   });
 
@@ -110,6 +115,7 @@ const handlePermissionCallback = async (input: {
   answerCbQuery: (text: string, showAlert?: boolean) => Promise<unknown>;
   editInlineKeyboard: () => Promise<unknown>;
   sendReply: (text: string) => Promise<unknown>;
+  botBackendAuthToken: string;
 }): Promise<void> => {
   /* Route permission approval decision to backend and clear inline keyboard on success. */
   const parts = input.raw.split("|");
@@ -122,10 +128,11 @@ const handlePermissionCallback = async (input: {
 
   const response = await fetch(`${input.backendUrl}/api/telegram/permission/reply`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-id": String(input.adminId)
-    },
+    headers: buildBotBackendHeaders(
+      { botBackendAuthToken: input.botBackendAuthToken },
+      input.adminId,
+      { "Content-Type": "application/json" }
+    ),
     body: JSON.stringify({ permissionToken, response: responseValue })
   });
 

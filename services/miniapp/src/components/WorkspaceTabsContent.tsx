@@ -97,6 +97,7 @@ type Props = {
   };
   voiceControl?: {
     apiKey: string;
+    hasApiKey: boolean;
     model: GroqTranscriptionModel | null;
     supportedModels: GroqTranscriptionModel[];
     isLoading: boolean;

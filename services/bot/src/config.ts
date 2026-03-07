@@ -16,6 +16,7 @@ export type BotConfig = {
   telegramBotToken: string;
   adminIds: number[];
   backendUrl: string;
+  botBackendAuthToken: string;
   publicBaseUrl: string;
   opencodePublicBaseUrl: string;
 };
@@ -28,6 +29,7 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   ADMIN_IDS: z.string().min(1),
   BACKEND_URL: z.string().min(1),
+  BOT_BACKEND_AUTH_TOKEN: z.string().min(1),
   PUBLIC_BASE_URL: z.string().min(1),
   OPENCODE_PUBLIC_BASE_URL: z.string().min(1)
 });
@@ -88,6 +90,7 @@ export const loadConfig = (): BotConfig => {
     telegramBotToken: env.TELEGRAM_BOT_TOKEN,
     adminIds: parseAdminIds(env.ADMIN_IDS),
     backendUrl: env.BACKEND_URL,
+    botBackendAuthToken: env.BOT_BACKEND_AUTH_TOKEN,
     publicBaseUrl: requirePublicBaseUrl(env.PUBLIC_BASE_URL, "PUBLIC_BASE_URL"),
     opencodePublicBaseUrl: requirePublicBaseUrl(
       env.OPENCODE_PUBLIC_BASE_URL,

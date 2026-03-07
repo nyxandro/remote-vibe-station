@@ -57,6 +57,7 @@ type Props = {
   };
   voiceControl?: {
     apiKey: string;
+    hasApiKey: boolean;
     model: VoiceControlSettings["model"];
     supportedModels: VoiceControlSettings["supportedModels"];
     isLoading: boolean;
@@ -408,7 +409,13 @@ export const SettingsTab = (props: Props) => {
         <div className="settings-accordion-body">
           {props.voiceControl ? (
             <>
-              {/* Voice control reads/writes Groq key+model used by Telegram bot transcription. */}
+              {/* The browser must never receive the stored Groq key; blank input means "keep unchanged" until edited. */}
+              {props.voiceControl.hasApiKey ? (
+                <div className="settings-save-status" aria-live="polite">
+                  <span className="settings-save-dot" /> Ключ Groq сохранен на сервере и не раскрывается в UI.
+                </div>
+              ) : null}
+
               <input
                 className="input settings-input-compact"
                 type="password"

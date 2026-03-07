@@ -19,6 +19,7 @@ const makeWorker = (telegram: TelegramMock): OutboxWorker => {
   const config = {
     telegramBotToken: "token",
     backendUrl: "http://backend:3000",
+    botBackendAuthToken: "secret-token",
     adminIds: [1]
   } as any;
   const bot = { telegram } as any;

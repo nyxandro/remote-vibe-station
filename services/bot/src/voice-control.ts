@@ -15,6 +15,9 @@
  * - buildTranscriptionFailureMessage (L197) - Maps runtime errors to user-facing hints.
  */
 
+import { buildBotBackendHeaders } from "./backend-auth";
+import { BotConfig } from "./config";
+
 export const GROQ_TRANSCRIPTION_MODELS = ["whisper-large-v3-turbo", "whisper-large-v3"] as const;
 export const VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE = "Для перевода речи в текст настройте Groq API.";
 export const VOICE_TRANSCRIPTION_PROGRESS_MESSAGE = "Распознаю голосовое сообщение...";
@@ -38,14 +41,12 @@ const GROQ_MAX_AUDIO_FILE_BYTES = 25 * 1024 * 1024;
 const GROQ_MIN_AUDIO_SECONDS = 0.01;
 
 export const fetchVoiceControlSettings = async (
-  backendUrl: string,
+  config: Pick<BotConfig, "backendUrl" | "botBackendAuthToken">,
   adminId: number
 ): Promise<VoiceControlSettingsSnapshot> => {
   /* Keep bot-side voice processing aligned with settings from Mini App. */
-  const response = await fetch(`${backendUrl}/api/telegram/voice-control/admin`, {
-    headers: {
-      "x-admin-id": String(adminId)
-    }
+  const response = await fetch(`${config.backendUrl}/api/telegram/voice-control/admin`, {
+    headers: buildBotBackendHeaders(config, adminId)
   });
 
   if (!response.ok) {

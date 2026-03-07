@@ -8,6 +8,8 @@
 
 export type AppConfig = {
   telegramBotToken: string;
+  /** Shared secret required on bot->backend admin API calls. */
+  botBackendAuthToken: string;
   /** Optional BotFather mini app short name used in t.me deep-links. */
   telegramMiniappShortName?: string;
   adminIds: number[];
@@ -40,6 +42,8 @@ export type AppConfig = {
   githubAppSlug?: string;
   /** Base64-encoded PEM private key for GitHub App JWT signing. */
   githubAppPrivateKeyBase64?: string;
+  /** Explicit opt-in for unauthenticated localhost browsing during isolated dev only. */
+  allowUnsafeLocalAuth: boolean;
   eventBufferSize: number;
 };
 

@@ -181,7 +181,7 @@ export class TelegramController {
       throw new BadRequestException("Admin identity missing");
     }
 
-    return this.preferences.getVoiceControlSettings(adminId);
+    return this.preferences.getVoiceControlSecretSettings(adminId);
   }
 
   @UseGuards(AppAuthGuard)

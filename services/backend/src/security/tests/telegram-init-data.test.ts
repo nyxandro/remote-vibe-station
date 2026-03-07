@@ -44,7 +44,7 @@ describe("verifyInitData", () => {
     const botToken = "test:token";
     const initData = buildInitData(botToken);
 
-    expect(verifyInitData(initData, botToken)).toBe(true);
+    expect(verifyInitData(initData, botToken, { nowMs: 1700000000 * 1000 })).toBe(true);
     expect(extractUserId(initData)).toBe(123);
   });
 
@@ -62,5 +62,13 @@ describe("verifyInitData", () => {
     const initData = buildInitData(botToken);
 
     expect(verifyInitData(initData, "another:token")).toBe(false);
+  });
+
+  it("returns false for expired auth_date", () => {
+    /* Signed initData must still expire to block long-lived replay attacks. */
+    const botToken = "test:token";
+    const initData = buildInitData(botToken);
+
+    expect(verifyInitData(initData, botToken, { nowMs: 1700000000 * 1000 + 16 * 60 * 1000 })).toBe(false);
   });
 });

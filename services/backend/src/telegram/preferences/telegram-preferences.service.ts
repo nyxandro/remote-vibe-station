@@ -20,7 +20,8 @@ import {
   GROQ_TRANSCRIPTION_MODELS,
   GroqTranscriptionModel,
   SettingsSnapshot,
-  VoiceControlSettingsSnapshot
+  VoiceControlPublicSettingsSnapshot,
+  VoiceControlSecretSettingsSnapshot
 } from "./telegram-preferences.types";
 import { TelegramPreferencesStore } from "./telegram-preferences.store";
 
@@ -60,8 +61,22 @@ export class TelegramPreferencesService {
     };
   }
 
-  public getVoiceControlSettings(adminId: number): VoiceControlSettingsSnapshot {
-    /* Read Groq key/model and expose explicit enabled state for UI/bot. */
+  public getVoiceControlSettings(adminId: number): VoiceControlPublicSettingsSnapshot {
+    /* Expose only redacted state to Mini App so the browser never receives the raw key. */
+    const persisted = this.store.get(adminId);
+    const apiKey = this.normalizeApiKey(persisted.voiceControl?.groqApiKey ?? null);
+    const model = this.normalizeGroqModel(persisted.voiceControl?.model ?? null);
+
+    return {
+      enabled: Boolean(apiKey && model),
+      hasApiKey: Boolean(apiKey),
+      model,
+      supportedModels: [...GROQ_TRANSCRIPTION_MODELS]
+    };
+  }
+
+  public getVoiceControlSecretSettings(adminId: number): VoiceControlSecretSettingsSnapshot {
+    /* Keep raw key accessible only for trusted bot->backend traffic. */
     const persisted = this.store.get(adminId);
     const apiKey = this.normalizeApiKey(persisted.voiceControl?.groqApiKey ?? null);
     const model = this.normalizeGroqModel(persisted.voiceControl?.model ?? null);
@@ -77,7 +92,7 @@ export class TelegramPreferencesService {
   public updateVoiceControlSettings(
     adminId: number,
     input: { apiKey?: string | null; model?: string | null }
-  ): VoiceControlSettingsSnapshot {
+  ): VoiceControlPublicSettingsSnapshot {
     /* Update only provided fields and keep validation strict for required inputs. */
     const prev = this.store.get(adminId);
     const prevVoice = prev.voiceControl;
@@ -102,7 +117,7 @@ export class TelegramPreferencesService {
 
     return {
       enabled: Boolean(nextApiKey && nextModel),
-      apiKey: nextApiKey,
+      hasApiKey: Boolean(nextApiKey),
       model: nextModel,
       supportedModels: [...GROQ_TRANSCRIPTION_MODELS]
     };

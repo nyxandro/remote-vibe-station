@@ -8,6 +8,7 @@
 import { Markup, Telegraf } from "telegraf";
 
 import { fetchActiveSessionTitle, formatActiveSessionLine } from "./active-session";
+import { buildBotBackendHeaders } from "./backend-auth";
 import { buildBackendErrorMessage } from "./backend-error";
 import { BotConfig } from "./config";
 
@@ -75,9 +76,7 @@ export const registerSessionCommands = (input: {
 
     const response = await fetch(`${input.config.backendUrl}/api/telegram/session/new`, {
       method: "POST",
-      headers: {
-        "x-admin-id": String(ctx.from?.id)
-      }
+      headers: buildBotBackendHeaders(input.config, Number(ctx.from?.id))
     });
 
     if (!response.ok) {
@@ -100,9 +99,7 @@ export const registerSessionCommands = (input: {
 
     const response = await fetch(`${input.config.backendUrl}/api/telegram/sessions`, {
       method: "GET",
-      headers: {
-        "x-admin-id": String(ctx.from?.id)
-      }
+      headers: buildBotBackendHeaders(input.config, Number(ctx.from?.id))
     });
 
     if (!response.ok) {
@@ -151,10 +148,9 @@ export const registerSessionCommands = (input: {
 
       const response = await fetch(`${input.config.backendUrl}/api/telegram/session/select`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-id": String(ctx.from?.id)
-        },
+        headers: buildBotBackendHeaders(input.config, Number(ctx.from?.id), {
+          "Content-Type": "application/json"
+        }),
         body: JSON.stringify({ sessionToken }),
         signal: AbortSignal.timeout(SESSION_SWITCH_TIMEOUT_MS)
       });
@@ -169,7 +165,7 @@ export const registerSessionCommands = (input: {
       const projectSlug = typeof payload.projectSlug === "string" ? payload.projectSlug : "unknown";
       let sessionLine = formatActiveSessionLine(null);
       try {
-        const activeSessionTitle = await fetchActiveSessionTitle(input.config.backendUrl, Number(ctx.from?.id));
+        const activeSessionTitle = await fetchActiveSessionTitle(input.config, Number(ctx.from?.id));
         sessionLine = formatActiveSessionLine(activeSessionTitle);
       } catch {
         sessionLine = formatActiveSessionLine(null);

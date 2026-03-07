@@ -35,8 +35,8 @@ const readWebTokenFromLocation = (): string | null => {
 };
 
 const getWebToken = (): string | undefined => {
-  /* Read persisted token or capture it from URL hash. */
-  const fromStorage = localStorage.getItem(STORAGE_KEY_WEB_TOKEN);
+  /* Keep browser token only for the current tab session to reduce exfiltration window. */
+  const fromStorage = sessionStorage.getItem(STORAGE_KEY_WEB_TOKEN);
   if (fromStorage && fromStorage.trim().length > 0) {
     return fromStorage;
   }
@@ -46,7 +46,8 @@ const getWebToken = (): string | undefined => {
     return undefined;
   }
 
-  localStorage.setItem(STORAGE_KEY_WEB_TOKEN, fromHash);
+  sessionStorage.setItem(STORAGE_KEY_WEB_TOKEN, fromHash);
+  window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
   return fromHash;
 };
 

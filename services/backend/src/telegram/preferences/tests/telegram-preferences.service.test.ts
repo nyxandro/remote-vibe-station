@@ -20,8 +20,31 @@ describe("TelegramPreferencesService voice control", () => {
 
     expect(snapshot).toEqual({
       enabled: false,
-      apiKey: null,
+      hasApiKey: false,
       model: null,
+      supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"]
+    });
+  });
+
+  it("returns bot-only snapshot with api key for internal transcription flow", () => {
+    /* Public UI must not receive the raw key, but internal bot path still needs it. */
+    const store = {
+      get: jest.fn().mockReturnValue({
+        voiceControl: {
+          groqApiKey: "gsk_live_123",
+          model: "whisper-large-v3"
+        }
+      }),
+      set: jest.fn()
+    };
+
+    const service = new TelegramPreferencesService(store as never, {} as never, {} as never);
+    const snapshot = service.getVoiceControlSecretSettings(42);
+
+    expect(snapshot).toEqual({
+      enabled: true,
+      apiKey: "gsk_live_123",
+      model: "whisper-large-v3",
       supportedModels: ["whisper-large-v3-turbo", "whisper-large-v3"]
     });
   });
@@ -46,7 +69,7 @@ describe("TelegramPreferencesService voice control", () => {
       }
     });
     expect(snapshot.enabled).toBe(true);
-    expect(snapshot.apiKey).toBe("gsk_live_123");
+    expect(snapshot.hasApiKey).toBe(true);
     expect(snapshot.model).toBe("whisper-large-v3");
   });
 

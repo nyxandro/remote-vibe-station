@@ -16,6 +16,7 @@ describe("registerOpenCodeAccessCommand", () => {
     telegramBotToken: "token",
     adminIds: [1],
     backendUrl: "http://backend:3000",
+    botBackendAuthToken: "secret-token",
     publicBaseUrl: "http://localhost:4173",
     opencodePublicBaseUrl: "https://code.example.com"
   };

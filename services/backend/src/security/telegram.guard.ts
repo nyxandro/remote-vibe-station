@@ -23,16 +23,16 @@ export class TelegramInitDataGuard implements CanActivate {
     const initData = request.headers?.[INIT_DATA_HEADER] as string | undefined;
 
     /*
-     * Local development convenience:
-     * When PUBLIC_BASE_URL points to localhost, allow requests without initData.
-     * This keeps the dev stack usable before Telegram HTTPS/webhook is configured.
-     */
+      * Local development bypass:
+      * When PUBLIC_BASE_URL points to localhost, allow requests without initData.
+      * This stays behind explicit config because these routes can still expose admin data.
+      */
     const isLocalPublicBaseUrl =
       this.config.publicBaseUrl.startsWith("http://localhost") ||
       this.config.publicBaseUrl.startsWith("http://127.0.0.1");
 
     if (!initData) {
-      if (isLocalPublicBaseUrl) {
+      if (isLocalPublicBaseUrl && this.config.allowUnsafeLocalAuth) {
         return true;
       }
       throw new UnauthorizedException("Missing Telegram initData");

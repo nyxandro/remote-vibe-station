@@ -21,6 +21,7 @@ const LOCAL_HTTP_PREFIXES = ["http://localhost", "http://127.0.0.1"];
 
 const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
+  BOT_BACKEND_AUTH_TOKEN: z.string().min(1),
   TELEGRAM_MINIAPP_SHORT_NAME: z.string().optional(),
   ADMIN_IDS: z.string().min(1),
   PUBLIC_BASE_URL: z.string().min(1),
@@ -41,6 +42,7 @@ const envSchema = z.object({
   GITHUB_APP_ID: z.string().optional(),
   GITHUB_APP_SLUG: z.string().optional(),
   GITHUB_APP_PRIVATE_KEY_BASE64: z.string().optional(),
+  ALLOW_UNSAFE_LOCAL_AUTH: z.string().optional(),
   EVENT_BUFFER_SIZE: z.string().optional()
 });
 
@@ -158,6 +160,7 @@ export const loadConfig = (): AppConfig => {
   /* Assemble config object. */
   return {
     telegramBotToken: env.TELEGRAM_BOT_TOKEN,
+    botBackendAuthToken: env.BOT_BACKEND_AUTH_TOKEN,
     telegramMiniappShortName: env.TELEGRAM_MINIAPP_SHORT_NAME,
     adminIds,
     publicBaseUrl,
@@ -178,6 +181,7 @@ export const loadConfig = (): AppConfig => {
     githubAppId,
     githubAppSlug,
     githubAppPrivateKeyBase64,
+    allowUnsafeLocalAuth: parseOptionalBoolean(env.ALLOW_UNSAFE_LOCAL_AUTH) ?? false,
     eventBufferSize
   };
 };
