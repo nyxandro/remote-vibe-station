@@ -122,6 +122,7 @@ services:
     restart: unless-stopped
   opencode:
     image: ${RVS_OPENCODE_IMAGE:?RVS_OPENCODE_IMAGE must be set}
+    working_dir: ${PROJECTS_ROOT:?PROJECTS_ROOT must be set}
     environment:
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID}
@@ -129,8 +130,12 @@ services:
       - CLIPROXY_BASE_URL=http://cliproxy:8317/v1
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID}
+      - HOST_ROOT_PATH=/hostfs
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      - /:/hostfs
+      - /root/.ssh:/root/.ssh
       - opencode_data:/root/.local/share/opencode
       - opencode_config:/root/.config/opencode
     labels:

@@ -55,6 +55,7 @@ services:
     build:
       context: ./services/opencode
       dockerfile: Dockerfile
+    working_dir: ${PROJECTS_ROOT:-/srv/projects}
     environment:
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID:-cliproxy}
@@ -62,8 +63,13 @@ services:
       - CLIPROXY_BASE_URL=${CLIPROXY_BASE_URL:-http://cliproxy:8317/v1}
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY:-sk-cliproxy-local}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID:-}
+      - HOST_ROOT_PATH=/hostfs
     volumes:
+      # Mirror server-side operator permissions locally for reproducible behavior.
+      - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      - /:/hostfs
+      - /root/.ssh:/root/.ssh
       # Persist OpenCode state (projects/sessions/messages) in a named volume.
       - opencode_data:/root/.local/share/opencode
       # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).

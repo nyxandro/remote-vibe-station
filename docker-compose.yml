@@ -106,6 +106,7 @@ services:
       dockerfile: Dockerfile
     # OpenCode server mode
     command: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
+    working_dir: ${PROJECTS_ROOT:?PROJECTS_ROOT must be set}
     environment:
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID:-cliproxy}
@@ -113,8 +114,16 @@ services:
       - CLIPROXY_BASE_URL=${CLIPROXY_BASE_URL:-http://cliproxy:8317/v1}
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY:?CLIPROXY_API_KEY must be set}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID:-}
+      - HOST_ROOT_PATH=/hostfs
     volumes:
+      # Trust the dev operator container with host docker control.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Keep native project paths available inside the container.
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      # Expose full host filesystem for server-level inspection and maintenance.
+      - /:/hostfs
+      # Reuse host SSH identities for git/ssh operations initiated by the agent.
+      - /root/.ssh:/root/.ssh
       # Persist OpenCode state (projects/sessions/messages) in a named volume.
       - opencode_data:/root/.local/share/opencode
       # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).
