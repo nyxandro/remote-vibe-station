@@ -10,8 +10,109 @@ import {
   buildTranscriptionFailureMessage,
   buildTranscriptionSuccessHtml,
   extractTelegramVoiceInput,
+  transcribeTelegramAudioWithGroq,
   validateVoiceInput
 } from "../voice-control";
+
+jest.mock("undici", () => ({
+  ProxyAgent: jest.fn().mockImplementation((input: { uri: string }) => ({
+    kind: "proxy-agent",
+    uri: input.uri
+  }))
+}));
+
+const originalFetch = global.fetch;
+const originalHttpProxy = process.env.HTTP_PROXY;
+const originalHttpsProxy = process.env.HTTPS_PROXY;
+const originalAllProxy = process.env.ALL_PROXY;
+const originalNoProxy = process.env.NO_PROXY;
+
+describe("transcribeTelegramAudioWithGroq", () => {
+  afterEach(() => {
+    global.fetch = originalFetch;
+    process.env.HTTP_PROXY = originalHttpProxy;
+    process.env.HTTPS_PROXY = originalHttpsProxy;
+    process.env.ALL_PROXY = originalAllProxy;
+    process.env.NO_PROXY = originalNoProxy;
+    jest.clearAllMocks();
+  });
+
+  it("routes Groq transcription through configured HTTPS proxy", async () => {
+    /* External AI requests must use the VLESS proxy when HTTPS_PROXY is configured. */
+    process.env.HTTPS_PROXY = "http://vless-proxy:8080";
+    delete process.env.HTTP_PROXY;
+    delete process.env.ALL_PROXY;
+    delete process.env.NO_PROXY;
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new TextEncoder().encode("voice").buffer
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: "ready" })
+      });
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const text = await transcribeTelegramAudioWithGroq({
+      telegramFileUrl: "https://api.telegram.org/file/bot/voice.ogg",
+      apiKey: "gsk_test",
+      model: "whisper-large-v3-turbo",
+      mimeType: "audio/ogg"
+    });
+
+    expect(text).toBe("ready");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.telegram.org/file/bot/voice.ogg"
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.groq.com/openai/v1/audio/transcriptions",
+      expect.objectContaining({
+        dispatcher: expect.objectContaining({
+          kind: "proxy-agent",
+          uri: "http://vless-proxy:8080"
+        })
+      })
+    );
+  });
+
+  it("bypasses proxy for hosts covered by NO_PROXY", async () => {
+    /* Internal or explicitly excluded hosts must not be forced through the external proxy. */
+    process.env.HTTPS_PROXY = "http://vless-proxy:8080";
+    process.env.NO_PROXY = "api.groq.com";
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new TextEncoder().encode("voice").buffer
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ text: "ready" })
+      });
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await transcribeTelegramAudioWithGroq({
+      telegramFileUrl: "https://api.telegram.org/file/bot/voice.ogg",
+      apiKey: "gsk_test",
+      model: "whisper-large-v3-turbo",
+      mimeType: "audio/ogg"
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.groq.com/openai/v1/audio/transcriptions",
+      expect.not.objectContaining({ dispatcher: expect.anything() })
+    );
+  });
+});
 
 describe("extractTelegramVoiceInput", () => {
   it("extracts payload from voice messages", () => {

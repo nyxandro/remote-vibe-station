@@ -17,6 +17,7 @@
 
 import { buildBotBackendHeaders } from "./backend-auth";
 import { BotConfig } from "./config";
+import { fetchWithOptionalProxy } from "./http-proxy";
 
 export const GROQ_TRANSCRIPTION_MODELS = ["whisper-large-v3-turbo", "whisper-large-v3"] as const;
 export const VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE = "Для перевода речи в текст настройте Groq API.";
@@ -124,7 +125,7 @@ export const transcribeTelegramAudioWithGroq = async (input: {
   form.append("model", input.model);
   form.append("response_format", "json");
 
-  const response = await fetch(GROQ_TRANSCRIPTION_URL, {
+  const response = await fetchWithOptionalProxy(GROQ_TRANSCRIPTION_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${input.apiKey}`
