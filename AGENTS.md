@@ -101,6 +101,17 @@
 - In all environments the edge reverse proxy runs in Docker (Nginx or Traefik) and proxies traffic to the `frontend` and `backend` containers.
 - **For development, prefer `stop`/`start` instead of `down` to preserve data and enable fast restarts.**
 
+### Remote Dev Deploy Flow
+
+- For remote dev on the shared VDS, prefer agent automation over manual per-project infra edits.
+- Default flow for a new Docker project:
+  1. `POST /api/projects/:id/deploy/autoconfigure` - infer public routes from compose (`web`, `api`, `admin`) without editing the project.
+  2. Inspect returned `routes` + `previewUrl`.
+  3. If needed, refine via `POST /api/projects/:id/deploy/settings` with explicit `routes`.
+  4. Start exposure with `POST /api/projects/:id/deploy/start`.
+- Keep server-specific deploy routing in backend runtime settings, not in project repo files.
+- Do not rewrite project compose files just to fit the shared VDS unless autoconfig and runtime overrides are insufficient.
+
 ## Frontend development rules
 
 - Navigation: any changes to menu, header, footer, or breadcrumbs are atomic and updated simultaneously in UI components and navigation configs.

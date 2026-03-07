@@ -198,6 +198,17 @@ export class ProjectsController {
     }
   }
 
+  @Post(":id/deploy/autoconfigure")
+  public async autoConfigureDeploy(@Param("id") id: string) {
+    /* Agent-oriented helper infers common public routes before first deploy on remote dev VDS. */
+    try {
+      return await this.deployment.autoConfigureDeployment(id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
+  }
+
   @Post(":id/deploy/stop")
   public async stopDeploy(@Param("id") id: string) {
     /* Stop external deployment endpoint for selected project domain. */

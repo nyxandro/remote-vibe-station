@@ -381,4 +381,82 @@ describe("ProjectDeploymentService", () => {
     const deployCallArgs = dockerRun.mock.calls[1][0] as string[];
     expect(deployCallArgs).toEqual(expect.arrayContaining(["up", "-d"]));
   });
+
+  test("autoconfigures deploy routes from compose services", async () => {
+    /* Agent-first deploy flow should infer web/api routes without asking for manual settings first. */
+    const projectRoot = path.join(projectsRoot, "arena");
+    writeFile(
+      path.join(projectRoot, "docker-compose.yml"),
+      [
+        "services:",
+        "  frontend:",
+        "    image: node:22",
+        "    ports:",
+        '      - "3000:3000"',
+        "  api:",
+        "    image: node:22",
+        "    ports:",
+        '      - "8080:8080"'
+      ].join("\n")
+    );
+
+    let savedSettings: any = null;
+    const settingsStore = {
+      get: jest.fn(() => savedSettings),
+      set: jest.fn((slug: string, value: unknown) => {
+        savedSettings = value;
+        return { slug, value };
+      })
+    };
+
+    const dockerRun = jest
+      .fn()
+      .mockResolvedValue({
+        exitCode: 0,
+        stdout: JSON.stringify({
+          services: {
+            frontend: { ports: ["3000:3000"] },
+            api: { ports: ["8080:8080"] }
+          }
+        }),
+        stderr: ""
+      });
+
+    const service = new ProjectDeploymentService(
+      {
+        telegramBotToken: "token",
+        adminIds: [1],
+        publicBaseUrl: "https://example.com",
+        publicDomain: "dev.example.com",
+        projectsRoot,
+        opencodeSyncOnStart: false,
+        opencodeWarmRecentsOnStart: false,
+        opencodeWarmRecentsLimit: 0,
+        opencodeServerUrl: "http://opencode:4096",
+        eventBufferSize: 100
+      } as any,
+      { run: dockerRun } as any,
+      { set: jest.fn(), get: jest.fn(() => ({ status: "stopped" })) } as any,
+      settingsStore as any
+    );
+
+    const result = await service.autoConfigureDeployment("arena");
+
+    expect(settingsStore.set).toHaveBeenCalledWith(
+      "arena",
+      expect.objectContaining({
+        mode: "docker",
+        serviceName: "frontend",
+        internalPort: 3000,
+        routes: [
+          expect.objectContaining({ id: "web", serviceName: "frontend", subdomain: null }),
+          expect.objectContaining({ id: "api", serviceName: "api", subdomain: "api" })
+        ]
+      })
+    );
+    expect(result.routes).toEqual([
+      expect.objectContaining({ previewUrl: "https://arena.dev.example.com" }),
+      expect.objectContaining({ previewUrl: "https://api.arena.dev.example.com" })
+    ]);
+  });
 });

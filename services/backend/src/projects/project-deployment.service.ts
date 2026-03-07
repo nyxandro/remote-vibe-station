@@ -22,6 +22,7 @@ import {
   toComposeProjectName
 } from "./project-deployment-runtime";
 import { assertWithinRoot } from "./project-paths";
+import { buildSuggestedRuntimeRoutes } from "./project-runtime-autoconfig";
 import {
   assertRuntimeRoutes,
   buildPreviewUrl,
@@ -84,6 +85,23 @@ export class ProjectDeploymentService {
     this.assertRuntimeSettings(next);
 
     await this.settingsStore.set(slug, next);
+    return this.getRuntimeSnapshot(slug);
+  }
+
+  public async autoConfigureDeployment(slug: string): Promise<ProjectRuntimeSnapshot> {
+    /* Agent-first flow infers common web/api/admin routes from compose without manual per-project rewrites. */
+    const project = this.requireProject(slug);
+    const composePath = this.resolveComposePath(project.rootPath);
+    const composeConfig = await this.readComposeConfig(composePath);
+    const routes = buildSuggestedRuntimeRoutes(composeConfig);
+
+    if (routes.length === 0) {
+      throw new Error("Could not infer public routes from compose services. Configure deploy settings manually.");
+    }
+
+    const settings = buildSettingsFromRoutes({ routes, fallbackMode: DEFAULT_RUNTIME_MODE });
+    this.assertRuntimeSettings(settings);
+    await this.settingsStore.set(slug, settings);
     return this.getRuntimeSnapshot(slug);
   }
 
