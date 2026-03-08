@@ -3,7 +3,6 @@
  *
  * Exports:
  * - TelegramTodoItem - normalized todo item shape extracted from OpenCode todowrite payloads.
- * - buildTodoProgressKey - returns stable Telegram replace key for one OpenCode session todo list.
  * - extractTodoItemsFromToolPart - extracts todo items from todowrite metadata/input/output payloads.
  * - formatTelegramTodoProgressMessage - renders a compact checklist for Telegram chat updates.
  */
@@ -93,12 +92,8 @@ const formatTodoLine = (todo: TelegramTodoItem): string => {
     return `🚫 <s>${escapedContent}</s>`;
   }
 
-  return `⬜️ ${escapedContent}`;
-};
-
-export const buildTodoProgressKey = (adminId: number, sessionID: string): string => {
-  /* One Telegram replace slot per OpenCode session keeps todo updates together in chat history. */
-  return `todo:${adminId}:${sessionID}`;
+  /* Pending items should read as queued work, not an empty checkbox glyph that renders poorly in Telegram. */
+  return `🔹 ${escapedContent}`;
 };
 
 export const extractTodoItemsFromToolPart = (part: { state?: Record<string, unknown> | null }): TelegramTodoItem[] => {

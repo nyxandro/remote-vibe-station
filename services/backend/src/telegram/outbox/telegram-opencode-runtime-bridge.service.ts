@@ -14,7 +14,7 @@ import { OpenCodeSessionRoutingStore } from "../../open-code/opencode-session-ro
 import { TelegramDiffPreviewStore } from "../diff-preview/telegram-diff-preview.store";
 import { formatFileOperationMessageHtml } from "./telegram-file-event-message";
 import { TelegramOutboxService } from "./telegram-outbox.service";
-import { buildTodoProgressKey, extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
+import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
 
 type OpenCodeBusEvent = {
   type?: string;
@@ -226,16 +226,15 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     if (toolName === "todowrite") {
-      /* Todo list updates should replace one Telegram checklist message for the active OpenCode session. */
+      /* Todo list updates should land as fresh chat messages so the newest checklist stays visible at the bottom. */
       if (status !== "completed") {
         return;
       }
 
       const todos = extractTodoItemsFromToolPart(part);
       const text = formatTelegramTodoProgressMessage(todos);
-      this.outbox.enqueueProgressReplace({
+      this.outbox.enqueueAdminNotification({
         adminId: route.adminId,
-        progressKey: buildTodoProgressKey(route.adminId, sessionID),
         text,
         parseMode: "HTML"
       });

@@ -8,7 +8,6 @@
 
 import { TelegramOpenCodeRuntimeBridge } from "../telegram-opencode-runtime-bridge.service";
 import {
-  buildTodoProgressKey,
   extractTodoItemsFromToolPart,
   formatTelegramTodoProgressMessage
 } from "../telegram-todo-progress";
@@ -73,13 +72,13 @@ describe("telegram todo progress helper", () => {
     expect(formatted).toContain("<b>1 из 3 задач завершено</b>");
     expect(formatted).toContain("✅ <s>Проверить &lt;конфиг&gt;</s>");
     expect(formatted).toContain("⏳ Обновить сервер");
-    expect(formatted).toContain("⬜️ Проверить Telegram");
+    expect(formatted).toContain("🔹 Проверить Telegram");
   });
 });
 
 describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
-  it("updates one Telegram todo message for repeated todowrite calls in the same session", () => {
-    /* Todo list changes should edit one live Telegram message instead of spamming the chat. */
+  it("sends a fresh Telegram todo message for every completed todowrite update", () => {
+    /* Todo list changes should stay visible at the end of chat instead of editing an older checklist far above. */
     const { bridge, outbox } = makeBridge();
 
     (bridge as any).handlePartUpdated({
@@ -118,21 +117,20 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
-    expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
+    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(2);
+    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         adminId: 10,
-        progressKey: buildTodoProgressKey(10, "session-todo"),
         parseMode: "HTML",
         text: expect.stringContaining("<b>0 из 2 задач завершено</b>")
       })
     );
-    expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
+    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         adminId: 10,
-        progressKey: buildTodoProgressKey(10, "session-todo"),
         parseMode: "HTML",
         text: expect.stringContaining("✅ <s>Подключить сервер</s>")
       })
