@@ -7,11 +7,15 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const {
   buildModelsMap,
   extractModelIdsFromCatalog,
-  generateOpenCodeConfigFromEnv
+  generateOpenCodeConfigFromEnv,
+  writeOpenCodeConfigFromEnv
 } = require("../cliproxy-provider-config");
 
 test("extractModelIdsFromCatalog returns unique non-empty model ids", () => {
@@ -311,4 +315,157 @@ test("generateOpenCodeConfigFromEnv fails when default model is absent in catalo
     ),
     /default model.*not found/i
   );
+});
+
+test("writeOpenCodeConfigFromEnv preserves unrelated OpenCode config sections", async () => {
+  /* Runtime refresh must update managed provider block without erasing MCP servers and other user config. */
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-opencode-config-"));
+  const configPath = path.join(tmpRoot, "opencode.json");
+
+  try {
+    fs.writeFileSync(
+      configPath,
+      `${JSON.stringify(
+        {
+          $schema: "https://opencode.ai/config.json",
+          theme: "nord",
+          mcp: {
+            servers: {
+              github: {
+                command: "npx",
+                args: ["-y", "@modelcontextprotocol/server-github"]
+              }
+            }
+          },
+          provider: {
+            other: {
+              npm: "@ai-sdk/openai",
+              name: "OpenAI",
+              options: {
+                apiKey: "sk-existing"
+              },
+              models: {
+                "gpt-4.1": {
+                  name: "gpt-4.1"
+                }
+              }
+            },
+            cliproxy: {
+              npm: "legacy-provider",
+              name: "Old CLIProxy",
+              options: {
+                baseURL: "http://old-proxy/v1",
+                apiKey: "old-token"
+              },
+              models: {
+                stale: {
+                  name: "stale"
+                }
+              }
+            }
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    await writeOpenCodeConfigFromEnv(configPath, {
+      CLIPROXY_PROVIDER_ID: "cliproxy",
+      CLIPROXY_PROVIDER_NAME: "CLIProxy",
+      CLIPROXY_BASE_URL: "http://cliproxy:8317/v1",
+      CLIPROXY_API_KEY: "sk-test"
+    }, {
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ data: [{ id: "gpt-5.4" }] })
+      })
+    });
+
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+    assert.equal(saved.theme, "nord");
+    assert.deepEqual(saved.mcp, {
+      servers: {
+        github: {
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-github"]
+        }
+      }
+    });
+    assert.deepEqual(saved.provider.other, {
+      npm: "@ai-sdk/openai",
+      name: "OpenAI",
+      options: {
+        apiKey: "sk-existing"
+      },
+      models: {
+        "gpt-4.1": {
+          name: "gpt-4.1"
+        }
+      }
+    });
+    assert.equal(saved.provider.cliproxy.name, "CLIProxy");
+    assert.equal(saved.provider.cliproxy.options.baseURL, "http://cliproxy:8317/v1");
+    assert.equal(saved.provider.cliproxy.options.apiKey, "sk-test");
+    assert.deepEqual(saved.provider.cliproxy.models, {
+      "gpt-5.4": {
+        name: "gpt-5.4",
+        variants: {
+          low: {
+            reasoningEffort: "low",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"]
+          },
+          medium: {
+            reasoningEffort: "medium",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"]
+          },
+          high: {
+            reasoningEffort: "high",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"]
+          },
+          xhigh: {
+            reasoningEffort: "xhigh",
+            reasoningSummary: "auto",
+            include: ["reasoning.encrypted_content"]
+          }
+        }
+      }
+    });
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test("writeOpenCodeConfigFromEnv fails on invalid existing JSON", async () => {
+  /* Broken persisted config must stop startup instead of silently replacing user state. */
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-opencode-config-"));
+  const configPath = path.join(tmpRoot, "opencode.json");
+
+  try {
+    fs.writeFileSync(configPath, "{not-json}\n", "utf8");
+
+    await assert.rejects(
+      writeOpenCodeConfigFromEnv(configPath, {
+        CLIPROXY_PROVIDER_ID: "cliproxy",
+        CLIPROXY_PROVIDER_NAME: "CLIProxy",
+        CLIPROXY_BASE_URL: "http://cliproxy:8317/v1",
+        CLIPROXY_API_KEY: "sk-test"
+      }, {
+        fetchImpl: async () => ({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ data: [{ id: "gpt-5.4" }] })
+        })
+      }),
+      /invalid json/i
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });

@@ -10,6 +10,7 @@ RUN apt-get update \
     curl \
     docker-compose \
     docker.io \
+    gh \
     git \
     jq \
     openssh-client \

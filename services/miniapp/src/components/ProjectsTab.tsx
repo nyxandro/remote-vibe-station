@@ -34,6 +34,11 @@ export const ProjectsTab = (props: Props) => {
   const [folderName, setFolderName] = useState<string>("");
   const [repoUrl, setRepoUrl] = useState<string>("");
   const [cloneFolderName, setCloneFolderName] = useState<string>("");
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+
+  const toggleCardExpansion = (id: string) => {
+    setExpandedCardId((prev) => (prev === id ? null : id));
+  };
 
   return (
     <>
@@ -42,7 +47,9 @@ export const ProjectsTab = (props: Props) => {
           className="input project-search-input"
           placeholder="Search projects…"
           value={props.query}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => props.onQueryChange(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+            props.onQueryChange(e.target.value)
+          }
         />
 
         <div className="project-create-menu-shell">
@@ -106,7 +113,11 @@ export const ProjectsTab = (props: Props) => {
             >
               Create
             </button>
-            <button className="btn ghost" onClick={() => setCreateOpen(false)} type="button">
+            <button
+              className="btn ghost"
+              onClick={() => setCreateOpen(false)}
+              type="button"
+            >
               Cancel
             </button>
           </div>
@@ -136,7 +147,10 @@ export const ProjectsTab = (props: Props) => {
               className="btn"
               disabled={!repoUrl.trim()}
               onClick={() => {
-                props.onCloneRepository(repoUrl.trim(), cloneFolderName.trim() || undefined);
+                props.onCloneRepository(
+                  repoUrl.trim(),
+                  cloneFolderName.trim() || undefined,
+                );
                 setRepoUrl("");
                 setCloneFolderName("");
                 setCloneOpen(false);
@@ -145,7 +159,11 @@ export const ProjectsTab = (props: Props) => {
             >
               Clone
             </button>
-            <button className="btn ghost" onClick={() => setCloneOpen(false)} type="button">
+            <button
+              className="btn ghost"
+              onClick={() => setCloneOpen(false)}
+              type="button"
+            >
               Cancel
             </button>
           </div>
@@ -156,19 +174,32 @@ export const ProjectsTab = (props: Props) => {
         {props.visibleProjects.map((project) => {
           const isActive = project.id === props.activeId;
           const showStream = isActive && props.telegramStreamEnabled;
-          const health = deriveProjectContainerHealth(props.statusMap[project.id]);
-          const healthClass = health ? `project-health project-health-${health.level}` : undefined;
+          const health = deriveProjectContainerHealth(
+            props.statusMap[project.id],
+          );
+          const healthClass = health
+            ? `project-health project-health-${health.level}`
+            : undefined;
           const gitSummary = props.gitSummaryMap[project.id] ?? null;
+          const isExpanded = expandedCardId === project.id;
           const isDeployed = project.status === "running";
 
           return (
-            <article key={project.id} className={isActive ? "project-card active" : "project-card"}>
+            <article
+              key={project.id}
+              className={isActive ? "project-card active" : "project-card"}
+              onClick={() => toggleCardExpansion(project.id)}
+              style={{ cursor: "pointer" }}
+            >
               <div className="project-meta">
                 <div className="project-top">
                   <div className="project-name-row">
                     <div className="project-name">{project.name}</div>
                     {showStream ? (
-                      <span className="stream-pill" title="Streaming to Telegram">
+                      <span
+                        className="stream-pill"
+                        title="Streaming to Telegram"
+                      >
                         <span className="stream-dot" />
                         STREAM
                       </span>
@@ -176,7 +207,10 @@ export const ProjectsTab = (props: Props) => {
                   </div>
 
                   {health ? (
-                    <span className={healthClass} aria-label={`Containers ${health.countLabel}`}>
+                    <span
+                      className={healthClass}
+                      aria-label={`Containers ${health.countLabel}`}
+                    >
                       <Container size={13} />
                       {health.countLabel}
                     </span>
@@ -185,40 +219,59 @@ export const ProjectsTab = (props: Props) => {
                 <div className="project-path">{project.rootPath}</div>
 
                 {gitSummary ? (
-                  <div className="project-git-stats" aria-label="Uncommitted git changes">
+                  <div
+                    className="project-git-stats"
+                    aria-label="Uncommitted git changes"
+                  >
                     <GitCommitHorizontal size={13} />
-                    <span className="project-git-plus">+{gitSummary.additions}</span>
-                    <span className="project-git-minus">-{gitSummary.deletions}</span>
+                    <span className="project-git-plus">
+                      +{gitSummary.additions}
+                    </span>
+                    <span className="project-git-minus">
+                      -{gitSummary.deletions}
+                    </span>
                     <span>{gitSummary.filesChanged} files</span>
                   </div>
                 ) : null}
               </div>
 
-              <div className="project-actions">
-                <button
-                  className={isDeployed ? "btn ghost" : "btn"}
-                  onClick={() => {
-                    if (isDeployed) {
-                      props.onStopProjectDeploy(project.id);
-                      return;
-                    }
-                    props.onDeployProject(project.id);
-                  }}
-                  type="button"
+              {isExpanded ? (
+                <div
+                  className="project-actions"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {isDeployed ? "Stop deploy" : "Deploy"}
-                </button>
+                  <button
+                    className={isDeployed ? "btn outline" : "btn primary"}
+                    onClick={() => {
+                      if (isDeployed) {
+                        props.onStopProjectDeploy(project.id);
+                        return;
+                      }
+                      props.onDeployProject(project.id);
+                    }}
+                    type="button"
+                  >
+                    {isDeployed ? "Stop deploy" : "Deploy"}
+                  </button>
 
-                {!isActive ? (
-                  <button className="btn outline" onClick={() => props.onSelectProject(project.id)}>
-                    Select
-                  </button>
-                ) : (
-                  <button className="btn outline" disabled title="Already selected">
-                    Selected
-                  </button>
-                )}
-              </div>
+                  {!isActive ? (
+                    <button
+                      className="btn outline"
+                      onClick={() => props.onSelectProject(project.id)}
+                    >
+                      Select
+                    </button>
+                  ) : (
+                    <button
+                      className="btn outline"
+                      disabled
+                      title="Already selected"
+                    >
+                      Selected
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </article>
           );
         })}

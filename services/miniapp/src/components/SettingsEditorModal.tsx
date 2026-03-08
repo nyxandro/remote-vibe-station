@@ -46,23 +46,33 @@ export const SettingsEditorModal = (props: Props) => {
   }
 
   return (
-    <div className="settings-editor-modal-backdrop" onClick={props.onClose} role="presentation">
-      <div className="settings-editor-modal" onClick={(event) => event.stopPropagation()}>
+    <div
+      className="settings-editor-modal-backdrop"
+      onClick={props.onClose}
+      role="presentation"
+    >
+      <div
+        className="settings-editor-modal"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="settings-editor-modal-header">
           <div className="settings-editor-header-meta">
             <div className="settings-editor-meta">{props.filePath}</div>
-            <div className="settings-editor-language">{props.language.toUpperCase()}</div>
+            <div className="settings-editor-language">
+              {props.language.toUpperCase()}
+            </div>
           </div>
           <button className="btn outline" onClick={props.onClose} type="button">
             Close
           </button>
         </div>
 
+        {/* Use calc() because height: 100% doesn't cascade through CodeMirror DOM in WebView */}
         <div className="settings-editor-modal-body">
           <CodeEditor
             value={props.draft}
             language={props.language}
-            height="100%"
+            height="calc(100dvh - 90px)"
             themeMode={props.themeMode}
             autoFocus
             onSaveShortcut={props.onSave}
@@ -71,21 +81,35 @@ export const SettingsEditorModal = (props: Props) => {
         </div>
 
         <div className="settings-editor-modal-footer">
-          <div className={props.saveResult === "error" ? "settings-editor-status error" : "settings-editor-status"}>
+          <div
+            className={
+              props.saveResult === "error"
+                ? "settings-editor-status error"
+                : "settings-editor-status"
+            }
+          >
             {saveStatusLabel({
               isDirty: props.isDirty,
               isSaving: props.isSaving,
-              saveResult: props.saveResult
+              saveResult: props.saveResult,
             })}
             <span className="settings-editor-shortcut">Ctrl/Cmd+S</span>
           </div>
 
           <div className="settings-editor-actions">
-            <button className="btn outline" onClick={props.onClose} type="button">
+            <button
+              className="btn outline"
+              onClick={props.onClose}
+              type="button"
+            >
               Cancel
             </button>
             <button
-              className={props.isSaving ? "btn primary settings-save-btn is-busy" : "btn primary"}
+              className={
+                props.isSaving
+                  ? "btn primary settings-save-btn is-busy"
+                  : "btn primary"
+              }
               onClick={props.onSave}
               disabled={props.isSaving}
               type="button"

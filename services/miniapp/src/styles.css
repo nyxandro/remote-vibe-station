@@ -173,13 +173,19 @@ body {
 
 .project-create-panel {
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #f8fbff;
-  padding: 10px;
-  margin-bottom: 12px;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 16px;
+  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+html[data-theme="dark"] .project-create-panel {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.05);
 }
 
 .project-create-title {
@@ -198,13 +204,22 @@ body {
 }
 
 .input {
-  flex: 1 1 220px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 13px;
+  padding: 12px 16px;
+  font-size: 14px;
   outline: none;
   background: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(27, 108, 255, 0.1);
 }
 
 .toggle {
@@ -240,12 +255,24 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .project-card.active {
-  border-color: #9db8ff;
+  border-color: rgba(27, 108, 255, 0.2);
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
   box-shadow: 0 10px 24px rgba(27, 108, 255, 0.15);
+}
+
+html[data-theme="dark"] .project-card.active {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 58, 138, 0.4) 0%,
+    rgba(15, 23, 42, 0.6) 100%
+  );
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 .project-card:hover {
@@ -499,10 +526,11 @@ body {
  */
 .codebox pre {
   margin: 0;
-  padding: 14px !important;
-  font-size: 12px !important;
+  padding: 16px !important;
+  font-size: 13px !important;
   line-height: 1.6 !important;
   min-width: 100%;
+  width: max-content; /* Force background to cover full width of code */
   box-sizing: border-box;
 }
 
@@ -560,7 +588,6 @@ body {
 .file-item.dir {
   background: #fcfeff;
 }
-
 
 .file-icon {
   width: 18px;
@@ -649,41 +676,286 @@ body {
   .app-shell {
     padding: 0;
     gap: 0;
+    background: #f4f6fa;
   }
 
   .panel {
     border-radius: 0;
-    border-left: 0;
-    border-right: 0;
+    border: none;
     box-shadow: none;
-    padding: 12px;
+    padding: 16px 14px 32px;
+    background: transparent;
   }
 
-  .panel-top {
-    margin-bottom: 10px;
+  .panel-title {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 24px;
+    color: #0f172a;
+  }
+
+  html[data-theme="dark"] .panel-title {
+    color: #f8fafc;
   }
 
   .project-grid {
-    gap: 10px;
+    gap: 16px;
   }
 
   .project-card {
-    border-radius: 12px;
-    padding: 12px;
+    border-radius: 24px;
+    padding: 20px;
+    background: #ffffff;
+    border: none;
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.05);
+    position: relative;
+    overflow: hidden;
+  }
+
+  html[data-theme="dark"] .project-card {
+    background: #1e293b;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
+  }
+
+  .project-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #1b6cff, #4facfe);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .project-card.active::before {
+    opacity: 1;
+  }
+
+  .project-card.active {
+    background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
+    box-shadow: 0 16px 40px rgba(27, 108, 255, 0.12);
+    border: 1px solid rgba(27, 108, 255, 0.2);
+  }
+
+  html[data-theme="dark"] .project-card.active {
+    background: linear-gradient(
+      135deg,
+      rgba(30, 58, 138, 0.4) 0%,
+      rgba(15, 23, 42, 0.6) 100%
+    );
+    border: 1px solid rgba(59, 130, 246, 0.3);
+  }
+
+  .project-top {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .project-name {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .project-actions {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    animation: slideDownFade 0.2s ease-out;
+  }
+
+  @keyframes slideDownFade {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .btn {
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 48px;
+    justify-content: center;
+    border: none;
+    background: rgba(15, 23, 42, 0.04);
+    color: #1e293b;
+    transition:
+      transform 0.2s,
+      background 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  }
+
+  html[data-theme="dark"] .btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .btn:active {
+    transform: scale(0.96);
+  }
+
+  .btn.primary {
+    background: linear-gradient(135deg, #1b6cff 0%, #0b2a6d 100%);
+    color: #ffffff;
+    box-shadow: 0 8px 16px rgba(27, 108, 255, 0.25);
+  }
+
+  .btn.outlined {
+    background: transparent;
+    border: 1px solid rgba(27, 108, 255, 0.4);
+    color: #1b6cff;
+  }
+
+  html[data-theme="dark"] .btn.outlined {
+    border-color: rgba(96, 165, 250, 0.4);
+    color: #60a5fa;
+  }
+
+  .files-toolbar {
+    padding: 12px 14px;
+    border-radius: 20px;
+    background: #ffffff;
+    border: none;
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.05);
+    margin-bottom: 8px;
+  }
+
+  html[data-theme="dark"] .files-toolbar {
+    background: #1e293b;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
+  }
+
+  .icon-tool-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.04);
+    border: none;
+    transition:
+      transform 0.2s,
+      background 0.2s;
+  }
+
+  html[data-theme="dark"] .icon-tool-btn {
+    background: rgba(255, 255, 255, 0.05);
+    color: #f8fafc;
+  }
+
+  .icon-tool-btn:active {
+    transform: scale(0.94);
+  }
+
+  .files-path {
+    font-size: 15px;
+    font-weight: 600;
   }
 
   .files-grid {
-    gap: 8px;
+    gap: 16px;
+  }
+
+  .files-list {
+    border-radius: 24px;
+    border: none;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  }
+
+  html[data-theme="dark"] .files-list {
+    background: #1e293b;
+  }
+
+  .file-item {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+  }
+
+  html[data-theme="dark"] .file-item {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .file-name {
+    font-size: 15px;
+    font-weight: 500;
   }
 
   .codebox {
-    border-radius: 10px;
-    max-height: 60vh;
+    border-radius: 20px;
+    max-height: 65vh;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.05);
   }
 
   .log-box {
-    border-radius: 10px;
-    max-height: 52vh;
-    padding: 10px;
+    border-radius: 20px;
+    max-height: 60vh;
+    padding: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  }
+
+  .input {
+    min-height: 48px;
+    font-size: 15px;
+    border-radius: 16px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: #ffffff;
+    padding: 12px 16px;
+  }
+
+  html[data-theme="dark"] .input {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .project-create-menu {
+    border-radius: 24px;
+    padding: 16px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.15);
+    width: min(320px, 90vw);
+  }
+
+  html[data-theme="dark"] .project-create-menu {
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .status-card {
+    border-radius: 20px;
+    padding: 16px;
+    background: white;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.03);
+    border: none;
+  }
+
+  html[data-theme="dark"] .status-card {
+    background: #1e293b;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  }
+
+  .placeholder {
+    border: none;
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 24px;
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.05);
+    color: #64748b;
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  html[data-theme="dark"] .placeholder {
+    background: #1e293b;
+    color: #94a3b8;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
   }
 }

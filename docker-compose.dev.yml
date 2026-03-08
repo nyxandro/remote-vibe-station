@@ -14,9 +14,16 @@ services:
       - OPENCODE_SERVER_URL=http://opencode:4096
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      - GIT_CONFIG_COUNT=1
+      - GIT_CONFIG_KEY_0=credential.https://github.com.helper
+      - GIT_CONFIG_VALUE_0=!gh auth git-credential
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      # Mirror host git credentials so backend clone/pull/push matches OpenCode behavior.
+      - /root/.ssh:/root/.ssh
+      - /root/.config/gh:/root/.config/gh
       # Shared OpenCode state volume (projects/sessions/messages).
       - opencode_data:/opencode-data
       - opencode_config:/opencode-config
@@ -64,12 +71,17 @@ services:
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY:-sk-cliproxy-local}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID:-}
       - HOST_ROOT_PATH=/hostfs
+      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      - GIT_CONFIG_COUNT=1
+      - GIT_CONFIG_KEY_0=credential.https://github.com.helper
+      - GIT_CONFIG_VALUE_0=!gh auth git-credential
     volumes:
       # Mirror server-side operator permissions locally for reproducible behavior.
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
       - /:/hostfs
       - /root/.ssh:/root/.ssh
+      - /root/.config/gh:/root/.config/gh
       # Persist OpenCode state (projects/sessions/messages) in a named volume.
       - opencode_data:/root/.local/share/opencode
       # Persist global OpenCode config (AGENTS, agents, skills, plugins, opencode.json).

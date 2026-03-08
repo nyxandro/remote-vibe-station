@@ -74,6 +74,11 @@ const GEMINI_THINKING_VARIANTS = {
   }
 };
 
+function isPlainObject(value) {
+  /* OpenCode config roots and provider maps must stay object-shaped for safe merging. */
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeNonEmpty(input, fieldName) {
   /* Required fields must be explicit to avoid silently generating broken provider config. */
   const value = String(input ?? "").trim();
@@ -247,10 +252,63 @@ async function generateOpenCodeConfigFromEnv(env, options = {}) {
   };
 }
 
+function readExistingOpenCodeConfig(configPath) {
+  /* Preserve user-managed sections like MCP servers when the runtime refreshes managed provider config. */
+  if (!fs.existsSync(configPath)) {
+    return {};
+  }
+
+  const raw = fs.readFileSync(configPath, "utf8");
+  if (!raw.trim()) {
+    return {};
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    throw new Error(`Existing OpenCode config contains invalid JSON: ${details}`);
+  }
+
+  if (!isPlainObject(parsed)) {
+    throw new Error("Existing OpenCode config must be a JSON object");
+  }
+
+  if (parsed.provider !== undefined && !isPlainObject(parsed.provider)) {
+    throw new Error("Existing OpenCode config provider section must be a JSON object");
+  }
+
+  return parsed;
+}
+
+function mergeManagedProviderConfig(existingConfig, generatedConfig, providerID) {
+  /* Refresh only the managed CLIProxy provider branch and keep unrelated OpenCode settings untouched. */
+  const existingProviders = isPlainObject(existingConfig.provider) ? existingConfig.provider : {};
+  const generatedProviders = isPlainObject(generatedConfig.provider) ? generatedConfig.provider : {};
+
+  return {
+    ...existingConfig,
+    ...generatedConfig,
+    provider: {
+      ...existingProviders,
+      ...generatedProviders,
+      [providerID]: generatedProviders[providerID]
+    }
+  };
+}
+
 async function writeOpenCodeConfigFromEnv(outPath, env = process.env, options = {}) {
   /* Single writer helper keeps entrypoint shell script minimal and deterministic. */
-  const config = await generateOpenCodeConfigFromEnv(env, options);
-  fs.writeFileSync(outPath, `${JSON.stringify(config, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
+  const generatedConfig = await generateOpenCodeConfigFromEnv(env, options);
+  const providerID = String(env.CLIPROXY_PROVIDER_ID || "cliproxy").trim();
+  const existingConfig = readExistingOpenCodeConfig(outPath);
+  const mergedConfig = mergeManagedProviderConfig(existingConfig, generatedConfig, providerID);
+
+  fs.writeFileSync(outPath, `${JSON.stringify(mergedConfig, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600
+  });
 }
 
 module.exports = {
@@ -258,6 +316,8 @@ module.exports = {
   buildModelsMap,
   fetchCliproxyModelIds,
   generateOpenCodeConfigFromEnv,
+  mergeManagedProviderConfig,
+  readExistingOpenCodeConfig,
   writeOpenCodeConfigFromEnv
 };
 

@@ -17,7 +17,7 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-RUN apk add --no-cache bash curl git docker-cli docker-cli-compose
+RUN apk add --no-cache bash curl git github-cli openssh-client docker-cli docker-cli-compose
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json

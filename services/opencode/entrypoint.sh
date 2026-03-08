@@ -3,8 +3,8 @@
 set -eu
 
 # Configure OpenCode provider defaults for CLIProxyAPI.
-# The container generates /root/.config/opencode/opencode.json at startup,
-# so OpenCode immediately sees a preconnected OpenAI-compatible provider.
+# The container refreshes the managed provider block at startup while preserving
+# unrelated user-managed config sections in /root/.config/opencode/opencode.json.
 CONFIG_DIR="${OPENCODE_CONFIG_DIR:-/root/.config/opencode}"
 CONFIG_PATH="${CONFIG_DIR}/opencode.json"
 TMP_PATH="${CONFIG_PATH}.tmp"
@@ -16,6 +16,12 @@ fi
 
 # Ensure target config directory exists before writing a new file.
 mkdir -p "$CONFIG_DIR"
+
+# Seed the temp file with the existing config so the generator can merge instead
+# of replacing unrelated user-managed keys like MCP server definitions.
+if [ -f "$CONFIG_PATH" ]; then
+  cp "$CONFIG_PATH" "$TMP_PATH"
+fi
 
 # Build provider config from live CLIProxy /v1/models to avoid manual model mapping maintenance.
 node /usr/local/bin/cliproxy-provider-config.js "$TMP_PATH"

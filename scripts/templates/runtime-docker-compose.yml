@@ -42,10 +42,17 @@ services:
       - OPENCODE_WARM_RECENTS_ON_START=false
       - OPENCODE_WARM_RECENTS_LIMIT=50
       - RUNTIME_CONFIG_DIR=/runtime-config
+      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      - GIT_CONFIG_COUNT=1
+      - GIT_CONFIG_KEY_0=credential.https://github.com.helper
+      - GIT_CONFIG_VALUE_0=!gh auth git-credential
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/runtime-config
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
+      # Mirror host git credentials so backend clone/pull/push matches OpenCode behavior.
+      - /root/.ssh:/root/.ssh
+      - /root/.config/gh:/root/.config/gh
       - opencode_data:/opencode-data
       - opencode_config:/opencode-config
       - backend_data:/app/data
@@ -131,11 +138,16 @@ services:
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID}
       - HOST_ROOT_PATH=/hostfs
+      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      - GIT_CONFIG_COUNT=1
+      - GIT_CONFIG_KEY_0=credential.https://github.com.helper
+      - GIT_CONFIG_VALUE_0=!gh auth git-credential
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
       - /:/hostfs
       - /root/.ssh:/root/.ssh
+      - /root/.config/gh:/root/.config/gh
       - opencode_data:/root/.local/share/opencode
       - opencode_config:/root/.config/opencode
     labels:
