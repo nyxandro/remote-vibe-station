@@ -15,7 +15,7 @@ import { Injectable } from "@nestjs/common";
 import { TelegramStreamStore } from "../telegram-stream.store";
 import { renderTelegramHtmlFromMarkdown } from "./telegram-markdown";
 import { TelegramOutboxStore } from "./telegram-outbox.store";
-import { formatTelegramFooter } from "./telegram-footer";
+import { formatTelegramFooter, renderTelegramFooterHtml } from "./telegram-footer";
 import { splitTelegramTextWithFooter } from "./telegram-split-with-footer";
 
 type AssistantDelivery = {
@@ -154,6 +154,14 @@ export class TelegramOutboxService {
       thinking: input.delivery.thinking,
       agent: input.delivery.agent
     });
+    const footerHtml = renderTelegramFooterHtml({
+      contextUsedTokens: contextUsed,
+      contextLimitTokens: input.delivery.contextLimit,
+      providerID: input.delivery.providerID,
+      modelID: input.delivery.modelID,
+      thinking: input.delivery.thinking,
+      agent: input.delivery.agent
+    });
 
     const trace = buildTrace(input.delivery.telemetry);
     const body = trace ? `${input.delivery.text}\n\n${trace}` : input.delivery.text;
@@ -172,22 +180,32 @@ export class TelegramOutboxService {
 
     if (binding.streamEnabled && streamProgressKey && chunks.length > 0) {
       /* Reuse the live streamed message as the first final chunk to avoid duplicates. */
-      this.outbox.enqueue({
-        adminId: input.adminId,
-        chatId: binding.chatId,
-        text: renderTelegramHtmlFromMarkdown(chunks[0]),
-        parseMode: "HTML",
-        disableNotification: chunks.length > 1,
-        mode: "replace",
+        const renderedChunk = this.ensureRenderedFooter({
+          html: renderTelegramHtmlFromMarkdown(chunks[0]),
+          isFinalChunk: chunks.length === 1,
+          footerHtml
+        });
+        this.outbox.enqueue({
+          adminId: input.adminId,
+          chatId: binding.chatId,
+          text: renderedChunk,
+          parseMode: "HTML",
+          disableNotification: chunks.length > 1,
+          mode: "replace",
         progressKey: streamProgressKey
       });
 
       chunks.slice(1).forEach((chunk, index) => {
         const isFinalChunk = index === chunks.length - 2;
+        const renderedChunk = this.ensureRenderedFooter({
+          html: renderTelegramHtmlFromMarkdown(chunk),
+          isFinalChunk,
+          footerHtml
+        });
         this.outbox.enqueue({
           adminId: input.adminId,
           chatId: binding.chatId,
-          text: renderTelegramHtmlFromMarkdown(chunk),
+          text: renderedChunk,
           parseMode: "HTML",
           disableNotification: !isFinalChunk
         });
@@ -199,7 +217,11 @@ export class TelegramOutboxService {
     chunks.forEach((chunk, index) => {
       /* Keep intermediate chunks silent, notify only on the final chunk. */
       const isFinalChunk = index === chunks.length - 1;
-      const html = renderTelegramHtmlFromMarkdown(chunk);
+      const html = this.ensureRenderedFooter({
+        html: renderTelegramHtmlFromMarkdown(chunk),
+        isFinalChunk,
+        footerHtml
+      });
       this.outbox.enqueue({
         adminId: input.adminId,
         chatId: binding.chatId,
@@ -209,6 +231,15 @@ export class TelegramOutboxService {
       });
     });
     this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
+  }
+
+  private ensureRenderedFooter(input: { html: string; isFinalChunk: boolean; footerHtml: string }): string {
+    /* Final reply must always end with the metadata quote block even if chunk rendering path changes. */
+    if (!input.isFinalChunk || input.html.includes(input.footerHtml)) {
+      return input.html;
+    }
+
+    return input.html.trim().length > 0 ? `${input.html}\n\n${input.footerHtml}` : input.footerHtml;
   }
 
   public enqueueAssistantCommentary(input: { adminId: number; text: string }): void {

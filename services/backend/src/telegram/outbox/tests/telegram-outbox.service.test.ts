@@ -84,6 +84,9 @@ describe("TelegramOutboxService", () => {
       expect(assistantItems[0].progressKey).toBe("assistant:1:session-1:assistant-part-2");
       expect(assistantItems[0].mode).toBe("replace");
       expect(assistantItems[0].text).toContain("Финальный ответ");
+      expect(assistantItems[0].text).toContain("<blockquote>");
+      expect(assistantItems[0].text).toContain("cliproxy/gpt-5.4");
+      expect(assistantItems[0].text).toContain("| build");
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -119,6 +122,32 @@ describe("TelegramOutboxService", () => {
       expect(assistantItems).toHaveLength(2);
       expect(assistantItems[0].progressKey).toBe("assistant:1:session-1:1");
       expect(assistantItems[1].progressKey).toBe("assistant:1:session-1:2");
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("adds footer block even when final chunk renderer receives body without quote line", () => {
+    /* Final message metadata should remain visible even if only the body chunk survives into rendering. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, false);
+
+      const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
+      const ensured = (service as any).ensureRenderedFooter({
+        html: "Финальный ответ",
+        isFinalChunk: true,
+        footerHtml: "<blockquote>10 | 1% | cliproxy/gpt-5.4 | medium | build</blockquote>"
+      });
+
+      expect(ensured).toContain("Финальный ответ");
+      expect(ensured).toContain("<blockquote>10 | 1% | cliproxy/gpt-5.4 | medium | build</blockquote>");
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });

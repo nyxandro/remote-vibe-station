@@ -128,6 +128,8 @@ describe("TelegramEventsOutboxBridge", () => {
       expect(assistantItems[0].mode).toBe("replace");
       expect(assistantItems[0].progressKey).toBe("assistant:1:session-1:1");
       expect(assistantItems[0].text).toContain("Готовый ответ");
+      expect(assistantItems[0].text).toContain("<blockquote>");
+      expect(assistantItems[0].text).toContain("cliproxy/gpt-5.4");
     } finally {
       process.chdir(prev);
       try {
@@ -257,6 +259,63 @@ describe("TelegramEventsOutboxBridge", () => {
       expect(assistantItems[0].text).toContain("Нашел проблему и исправил.");
       expect(assistantItems[0].text).not.toContain("Понял задачу.");
       expect(assistantItems[0].text).not.toContain("Сейчас проверю compose.");
+    } finally {
+      process.chdir(prev);
+      try {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  });
+
+  test("falls back to text when upstream finalText is blank", () => {
+    /* Empty trailing text extraction must not erase the final answer or its footer. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-bridge-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, false);
+
+      const outboxStore = new TelegramOutboxStore();
+      const outboxService = new TelegramOutboxService(streamStore, outboxStore);
+      const events = new EventsService(config as any);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      bridge.onModuleInit();
+
+      events.publish({
+        type: "opencode.message",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: 1,
+          sessionId: "session-1",
+          text: "Финальный текст целиком",
+          finalText: "   ",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: "medium",
+          agent: "build",
+          tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+        }
+      });
+
+      const assistantItems = readOutboxItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(assistantItems[0].text).toContain("Финальный текст целиком");
+      expect(assistantItems[0].text).toContain("<blockquote>");
     } finally {
       process.chdir(prev);
       try {

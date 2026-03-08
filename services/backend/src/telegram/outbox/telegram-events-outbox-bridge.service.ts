@@ -40,7 +40,8 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       this.outbox.enqueueAssistantReply({
         adminId,
         delivery: {
-          text: String(data?.finalText ?? data?.text ?? ""),
+          /* Empty finalText is not useful; fall back to the full final message body instead. */
+          text: this.resolveFinalAssistantText(data),
           sessionId: typeof data?.sessionId === "string" ? data.sessionId : null,
           contextLimit: typeof data?.contextLimit === "number" ? data.contextLimit : null,
           providerID: String(data?.providerID ?? ""),
@@ -138,5 +139,15 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
     const raw = (event.data as any)?.adminId;
     const id = typeof raw === "number" ? raw : raw === null || typeof raw === "undefined" ? null : Number(raw);
     return id && Number.isFinite(id) ? id : null;
+  }
+
+  private resolveFinalAssistantText(data: Record<string, unknown> | null | undefined): string {
+    /* Keep the final Telegram answer non-empty even when upstream trailing text extraction returns blank. */
+    const finalText = typeof data?.finalText === "string" ? data.finalText.trim() : "";
+    if (finalText.length > 0) {
+      return finalText;
+    }
+
+    return String(data?.text ?? "");
   }
 }

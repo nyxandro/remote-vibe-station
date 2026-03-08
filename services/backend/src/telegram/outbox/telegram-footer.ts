@@ -2,7 +2,8 @@
  * @fileoverview Telegram message footer formatting (tokens/model/thinking/agent).
  *
  * Exports:
- * - formatTelegramFooter (L23) - Formats a single-line footer as markdown quote.
+ * - formatTelegramFooter (L24) - Formats a single-line footer as markdown quote.
+ * - renderTelegramFooterHtml (L78) - Renders the same footer as Telegram HTML blockquote.
  */
 
 type FooterInput = {
@@ -17,6 +18,12 @@ type FooterInput = {
 const GPT5_DEFAULT_CONTEXT_LIMIT = 400_000;
 const GPT54_CONTEXT_LIMIT = 1_050_000;
 const GPT53_CODEX_SPARK_CONTEXT_LIMIT = 128_000;
+
+const escapeHtml = (value: string): string =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 
 const formatInt = (value: number): string => {
   /* Format number with spaces as thousands separators. */
@@ -69,4 +76,9 @@ export const formatTelegramFooter = (input: FooterInput): string => {
 
   /* Prefix with markdown quote marker so Telegram renderer can show blockquote style. */
   return `> ${used} | ${percent} | ${model} | ${thinking} | ${agent}`;
+};
+
+export const renderTelegramFooterHtml = (input: FooterInput): string => {
+  /* Final assistant message should keep footer visible even if markdown quote parsing changes. */
+  return `<blockquote>${escapeHtml(formatTelegramFooter(input).replace(/^>\s?/, ""))}</blockquote>`;
 };
