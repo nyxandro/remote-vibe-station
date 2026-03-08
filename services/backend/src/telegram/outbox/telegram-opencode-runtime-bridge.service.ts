@@ -274,11 +274,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     const partKey = this.buildAssistantPartKey(route.adminId, sessionID, partID);
     const nextPartText = `${this.assistantTextByPart.get(partKey) ?? ""}${delta}`;
-    const normalizedText = this.normalizeAssistantStreamText(nextPartText);
     const sessionText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
-    const progressKey = this.resolveAssistantProgressKey(route.adminId, sessionID, partID);
+    const normalizedSessionText = this.normalizeAssistantStreamText(sessionText);
+    const streamKey = this.buildAssistantStreamKey(route.adminId, sessionID);
     const nowMs = Date.now();
-    const lastEmittedAtMs = this.assistantProgressEmittedAtMs.get(progressKey) ?? 0;
+    const lastEmittedAtMs = this.assistantProgressEmittedAtMs.get(streamKey) ?? 0;
     const shouldEmit = lastEmittedAtMs === 0 || nowMs - lastEmittedAtMs >= TEXT_PROGRESS_MIN_INTERVAL_MS;
 
     /* Forward important runtime/system notices even when stream mode is disabled. */
@@ -294,10 +294,9 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     this.outbox.enqueueAssistantStreamDelta({
       adminId: route.adminId,
       sessionId: sessionID,
-      progressKey,
-      text: normalizedText
+      text: normalizedSessionText
     });
-    this.assistantProgressEmittedAtMs.set(progressKey, nowMs);
+    this.assistantProgressEmittedAtMs.set(streamKey, nowMs);
   }
 
   private normalizeAssistantStreamText(text: string): string {
@@ -405,9 +404,9 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
   }
 
-  private resolveAssistantProgressKey(adminId: number, sessionID: string, partID: string): string {
-    /* Each assistant text part must own its own Telegram progress message to avoid cross-part merging. */
-    return `assistant:${adminId}:${sessionID}:${partID || "part"}`;
+  private buildAssistantStreamKey(adminId: number, sessionID: string): string {
+    /* Throttle live preview per session turn so rotated part ids do not fragment Telegram messages. */
+    return `assistant-stream:${adminId}:${sessionID}:live`;
   }
 
   private buildAssistantPartKey(adminId: number, sessionID: string, partID: string): string {

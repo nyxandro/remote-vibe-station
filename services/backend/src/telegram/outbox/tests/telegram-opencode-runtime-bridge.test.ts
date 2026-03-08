@@ -270,16 +270,17 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     expect(outbox.enqueueAssistantStreamDelta).toHaveBeenLastCalledWith(
       expect.objectContaining({
         sessionId: "session-delta",
-        text: "Первая часть и вторая",
-        progressKey: "assistant:10:session-delta:assistant-part-1"
+        text: "Первая часть и вторая"
       })
     );
     nowSpy.mockRestore();
   });
 
-  it("starts a fresh telegram progress key for each assistant text part", () => {
-    /* Separate assistant messages inside one OpenCode turn must not be merged into one Telegram live message. */
+  it("keeps one telegram progress message across assistant text parts in the same turn", () => {
+    /* Real OpenCode streams can rotate text part ids mid-reply, so Telegram live preview must stay on one message. */
     const { bridge, outbox } = makeBridge();
+    const nowSpy = jest.spyOn(Date, "now");
+    nowSpy.mockReturnValue(1_000);
 
     (bridge as any).handlePartUpdated({
       part: {
@@ -303,6 +304,8 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
         })
       }
     });
+
+    nowSpy.mockReturnValue(2_600);
 
     (bridge as any).handlePartUpdated({
       part: {
@@ -331,16 +334,17 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       1,
       expect.objectContaining({
         text: "Первое сообщение",
-        progressKey: "assistant:10:session-split:assistant-part-1"
+        sessionId: "session-split"
       })
     );
     expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        text: "Второе сообщение",
-        progressKey: "assistant:10:session-split:assistant-part-2"
+        text: "Первое сообщениеВторое сообщение",
+        sessionId: "session-split"
       })
     );
+    nowSpy.mockRestore();
   });
 
   it("throttles frequent assistant text deltas", () => {
