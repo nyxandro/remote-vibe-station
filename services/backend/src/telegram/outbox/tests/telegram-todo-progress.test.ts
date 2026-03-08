@@ -54,7 +54,7 @@ describe("telegram todo progress helper", () => {
       state: {
         metadata: {
           todos: [
-            { id: "1", content: "Проверить конфиг", status: "completed", priority: "high" },
+            { id: "1", content: "Проверить <конфиг>", status: "completed", priority: "high" },
             { id: "2", content: "Обновить сервер", status: "in_progress", priority: "high" },
             { id: "3", content: "Проверить Telegram", status: "pending", priority: "medium" }
           ]
@@ -63,14 +63,17 @@ describe("telegram todo progress helper", () => {
     });
 
     expect(todos).toEqual([
-      { id: "1", content: "Проверить конфиг", status: "completed", priority: "high" },
+      { id: "1", content: "Проверить <конфиг>", status: "completed", priority: "high" },
       { id: "2", content: "Обновить сервер", status: "in_progress", priority: "high" },
       { id: "3", content: "Проверить Telegram", status: "pending", priority: "medium" }
     ]);
-    expect(formatTelegramTodoProgressMessage(todos)).toContain("1 из 3 задач завершено");
-    expect(formatTelegramTodoProgressMessage(todos)).toContain("[x] Проверить конфиг");
-    expect(formatTelegramTodoProgressMessage(todos)).toContain("[-] Обновить сервер");
-    expect(formatTelegramTodoProgressMessage(todos)).toContain("[ ] Проверить Telegram");
+
+    const formatted = formatTelegramTodoProgressMessage(todos);
+    expect(formatted).toContain("<b>📋 Задачи</b>");
+    expect(formatted).toContain("<b>1 из 3 задач завершено</b>");
+    expect(formatted).toContain("✅ <s>Проверить &lt;конфиг&gt;</s>");
+    expect(formatted).toContain("⏳ Обновить сервер");
+    expect(formatted).toContain("⬜️ Проверить Telegram");
   });
 });
 
@@ -121,7 +124,8 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       expect.objectContaining({
         adminId: 10,
         progressKey: buildTodoProgressKey(10, "session-todo"),
-        text: expect.stringContaining("0 из 2 задач завершено")
+        parseMode: "HTML",
+        text: expect.stringContaining("<b>0 из 2 задач завершено</b>")
       })
     );
     expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
@@ -129,7 +133,8 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       expect.objectContaining({
         adminId: 10,
         progressKey: buildTodoProgressKey(10, "session-todo"),
-        text: expect.stringContaining("1 из 2 задач завершено")
+        parseMode: "HTML",
+        text: expect.stringContaining("✅ <s>Подключить сервер</s>")
       })
     );
   });

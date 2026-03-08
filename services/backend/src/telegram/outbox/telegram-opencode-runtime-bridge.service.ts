@@ -236,7 +236,8 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       this.outbox.enqueueProgressReplace({
         adminId: route.adminId,
         progressKey: buildTodoProgressKey(route.adminId, sessionID),
-        text
+        text,
+        parseMode: "HTML"
       });
       return;
     }

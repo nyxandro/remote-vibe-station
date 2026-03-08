@@ -19,6 +19,14 @@ export type TelegramTodoItem = {
 
 const MAX_TODO_LINES = 20;
 
+const escapeHtml = (value: string): string => {
+  /* Telegram HTML mode requires escaping dynamic todo content before wrapping it with markup tags. */
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+};
+
 const normalizeTodoStatus = (value: unknown): TodoStatus | null => {
   /* OpenCode stores todo status as short strings; ignore unknown states to avoid noisy Telegram output. */
   if (typeof value !== "string") {
@@ -69,21 +77,23 @@ const parseTodoItemsFromOutput = (value: unknown): TelegramTodoItem[] => {
   }
 };
 
-const toTodoMarker = (status: TodoStatus): string => {
-  /* Plain-text markers survive Telegram edits reliably and visually match the CLI todo list mental model. */
-  if (status === "completed") {
-    return "[x]";
+const formatTodoLine = (todo: TelegramTodoItem): string => {
+  /* Use Telegram-friendly status icons so the checklist reads like a native progress card instead of raw CLI output. */
+  const escapedContent = escapeHtml(todo.content);
+
+  if (todo.status === "completed") {
+    return `✅ <s>${escapedContent}</s>`;
   }
 
-  if (status === "in_progress") {
-    return "[-]";
+  if (todo.status === "in_progress") {
+    return `⏳ ${escapedContent}`;
   }
 
-  if (status === "cancelled") {
-    return "[~]";
+  if (todo.status === "cancelled") {
+    return `🚫 <s>${escapedContent}</s>`;
   }
 
-  return "[ ]";
+  return `⬜️ ${escapedContent}`;
 };
 
 export const buildTodoProgressKey = (adminId: number, sessionID: string): string => {
@@ -111,23 +121,23 @@ export const extractTodoItemsFromToolPart = (part: { state?: Record<string, unkn
 };
 
 export const formatTelegramTodoProgressMessage = (todos: TelegramTodoItem[]): string => {
-  /* Telegram should receive one compact checklist message that can be edited in place as task state changes. */
+  /* Telegram should receive one compact HTML checklist message that can be edited in place as task state changes. */
   const total = todos.length;
   const completed = todos.filter((todo) => todo.status === "completed").length;
-  const lines = [`📋 Задачи`, "", `${completed} из ${total} задач завершено`];
+  const lines = [`<b>📋 Задачи</b>`, "", `<b>${completed} из ${total} задач завершено</b>`];
 
   if (total === 0) {
-    lines.push("", "Список задач пока пуст.");
+    lines.push("", "<i>Список задач пока пуст.</i>");
     return lines.join("\n");
   }
 
   lines.push("");
   todos.slice(0, MAX_TODO_LINES).forEach((todo) => {
-    lines.push(`${toTodoMarker(todo.status)} ${todo.content}`);
+    lines.push(formatTodoLine(todo));
   });
 
   if (todos.length > MAX_TODO_LINES) {
-    lines.push(`...ещё ${todos.length - MAX_TODO_LINES}`);
+    lines.push(`<i>...ещё ${todos.length - MAX_TODO_LINES}</i>`);
   }
 
   return lines.join("\n");
