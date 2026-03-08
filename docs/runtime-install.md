@@ -27,6 +27,8 @@
   - allow 22, 80, 443
   - limit 22 (anti-bruteforce)
 - Настраивает `fail2ban` для `sshd`
+- Включает host-wide Docker log rotation (`json-file`, `10m`, `5` файлов)
+- Создает ежедневный maintenance timer, который чистит unused images, stopped containers, unused networks и build cache
 - Опционально авторизует GitHub CLI (`gh`) по токену
 - Поднимает стек через `docker compose`
 
@@ -86,6 +88,24 @@ sudo ./scripts/install-runtime.sh \
 - Образы backend/miniapp/bot/opencode должны быть заранее опубликованы в registry.
 - По умолчанию используются `ghcr.io/nyxandro/...:latest`; их можно переопределить флагами `--*-image`.
 - Если OpenCode/CLIProxy management интерфейсы не нужны публично, не публикуйте дополнительные порты в compose.
+- Авто-cleanup намеренно не трогает Docker volumes, чтобы не потерять данные проекта, OpenCode state и CLIProxy auth.
+
+## Обслуживание диска
+
+- После каждого deploy installer/runtime запускает безопасную очистку Docker-мусора.
+- Дополнительно systemd timer `remote-vibe-station-maintenance.timer` запускает такую же очистку ежедневно.
+- Ротация Docker логов включена на уровне daemon defaults и в runtime compose.
+
+Что очищается автоматически:
+
+- неиспользуемые образы;
+- остановленные контейнеры;
+- неиспользуемые сети;
+- build cache Docker.
+
+Что не очищается автоматически:
+
+- named volumes (`opencode_data`, `opencode_config`, `backend_data`, `cliproxy_auth` и т.д.).
 
 ## Опциональный VLESS после установки
 

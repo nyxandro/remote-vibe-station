@@ -25,6 +25,7 @@ import {
   DockerComposeConfig,
   inferDockerRuntimeTarget,
   inferServicePathPrefix,
+  resolveRouteServicePathPrefix,
   toDockerRouteProxyServiceName,
   toComposeProjectName
 } from "./project-deployment-runtime";
@@ -538,6 +539,7 @@ export class ProjectDeploymentService {
           routes: []
         }
       });
+      const inferredServicePathPrefix = inferServicePathPrefix(composeConfig.services?.[runtimeTarget.serviceName] ?? {});
       return {
         routeId: route.id,
         domain: buildProjectDomain(input.slug, this.config.publicDomain, route.subdomain),
@@ -545,7 +547,10 @@ export class ProjectDeploymentService {
         targetServiceName: runtimeTarget.serviceName,
         internalPort: runtimeTarget.internalPort,
         existingNetworks: runtimeTarget.existingNetworks,
-        servicePathPrefix: inferServicePathPrefix(composeConfig.services?.[runtimeTarget.serviceName] ?? {})
+        servicePathPrefix: resolveRouteServicePathPrefix({
+          routePathPrefix: route.pathPrefix,
+          inferredServicePathPrefix
+        })
       };
     });
 

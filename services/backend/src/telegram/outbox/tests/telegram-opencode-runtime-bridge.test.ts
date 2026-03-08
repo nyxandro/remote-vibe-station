@@ -349,6 +349,91 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     nowSpy.mockRestore();
   });
 
+  it("starts a fresh telegram text message after tool activity between assistant text blocks", () => {
+    /* Distinct assistant updates around tool execution must not keep accumulating into the very first Telegram text card. */
+    const { bridge, outbox } = makeBridge();
+    const nowSpy = jest.spyOn(Date, "now");
+    nowSpy.mockReturnValue(1_000);
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-1",
+        sessionID: "session-separated"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-separated",
+            partID: "assistant-part-1",
+            field: "text",
+            delta: "Понял задачу."
+          }
+        })
+      }
+    });
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "tool-part-1",
+        tool: "bash",
+        sessionID: "session-separated",
+        state: {
+          status: "running",
+          input: { command: "npm test" },
+          metadata: { output: "running" }
+        }
+      }
+    });
+
+    nowSpy.mockReturnValue(2_600);
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-2",
+        sessionID: "session-separated"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-separated",
+            partID: "assistant-part-2",
+            field: "text",
+            delta: "Нашел проблему в compose."
+          }
+        })
+      }
+    });
+
+    expect(outbox.closeAssistantProgress).toHaveBeenCalledWith({ sessionId: "session-separated" });
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        sessionId: "session-separated",
+        text: "Понял задачу."
+      })
+    );
+    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        sessionId: "session-separated",
+        text: "Нашел проблему в compose."
+      })
+    );
+    nowSpy.mockRestore();
+  });
+
   it("throttles frequent assistant text deltas", () => {
     /* Streaming updates should be coalesced so Telegram does not hit edit rate limits on every token burst. */
     const { bridge, outbox } = makeBridge();

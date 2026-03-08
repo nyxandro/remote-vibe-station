@@ -208,4 +208,62 @@ describe("TelegramEventsOutboxBridge", () => {
       }
     }
   });
+
+  test("uses finalText for Telegram reply when OpenCode transcript contains earlier streamed commentary", () => {
+    /* The final Telegram replace must contain only the true final assistant block instead of the whole accumulated transcript. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-bridge-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, true);
+
+      const outboxStore = new TelegramOutboxStore();
+      const outboxService = new TelegramOutboxService(streamStore, outboxStore);
+      const events = new EventsService(config as any);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      bridge.onModuleInit();
+
+      events.publish({
+        type: "opencode.message",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: 1,
+          sessionId: "session-1",
+          text: "Понял задачу.Сейчас проверю compose.Нашел проблему и исправил.",
+          finalText: "Нашел проблему и исправил.",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: "medium",
+          agent: "build",
+          tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+        }
+      });
+
+      const assistantItems = readOutboxItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(assistantItems[0].text).toContain("Нашел проблему и исправил.");
+      expect(assistantItems[0].text).not.toContain("Понял задачу.");
+      expect(assistantItems[0].text).not.toContain("Сейчас проверю compose.");
+    } finally {
+      process.chdir(prev);
+      try {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  });
 });

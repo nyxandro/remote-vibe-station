@@ -213,4 +213,47 @@ describe("PromptService", () => {
       })
     );
   });
+
+  test("dispatchPromptParts publishes final assistant text block separately from full text transcript", async () => {
+    /* Telegram should keep streamed intermediate updates separate and only replace the last live message with the real final block. */
+    const harness = createDispatchHarness();
+    harness.opencode.getModelContextLimit.mockResolvedValue(null);
+    harness.opencode.getModelDisplayName.mockResolvedValue(null);
+    harness.opencode.sendPromptParts.mockResolvedValue({
+      sessionId: "session-final-block",
+      responseText: "Понял задачу.Сейчас проверю compose.Нашел проблему и исправил.",
+      info: {
+        providerID: "cliproxy",
+        modelID: "gpt-5",
+        mode: "primary",
+        agent: "build",
+        tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+      },
+      parts: [
+        { type: "text", text: "Понял задачу." },
+        { type: "tool", tool: "bash", state: "completed" },
+        { type: "text", text: "Сейчас проверю compose." },
+        { type: "tool", tool: "bash", state: "completed" },
+        { type: "text", text: "Нашел проблему и исправил." }
+      ]
+    });
+
+    await harness.service.dispatchPromptParts({
+      adminId: 7,
+      projectSlug: "demo",
+      directory: "/tmp/demo",
+      promptTextForTelemetry: "fix compose",
+      parts: [{ type: "text", text: "fix compose" }]
+    });
+
+    expect(harness.events.publish).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "opencode.message",
+        data: expect.objectContaining({
+          text: "Понял задачу.Сейчас проверю compose.Нашел проблему и исправил.",
+          finalText: "Нашел проблему и исправил."
+        })
+      })
+    );
+  });
 });

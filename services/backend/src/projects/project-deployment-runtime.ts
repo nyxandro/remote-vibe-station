@@ -8,6 +8,7 @@
  * - buildMultiRouteOverrideConfig - builds compose override for multi-route shared-VDS deploys.
  * - buildStaticComposeConfig - builds compose config for static HTML mode.
  * - inferServicePathPrefix - extracts reusable legacy path prefixes from Traefik rules.
+ * - resolveRouteServicePathPrefix - applies inferred legacy prefixes only to compatible public routes.
  * - toComposeProjectName - normalizes slug for docker compose project names.
  * - toDockerRouteProxyServiceName - returns deterministic sidecar names for routed docker services.
  */
@@ -42,6 +43,24 @@ const normalizePathPrefix = (value: string | null): string | null => {
 
   const trimmed = value.endsWith("/") && value !== "/" ? value.replace(/\/+$/g, "") : value;
   return trimmed.length > 0 ? trimmed : null;
+};
+
+export const resolveRouteServicePathPrefix = (input: {
+  routePathPrefix: string | null | undefined;
+  inferredServicePathPrefix: string | null;
+}): string | null => {
+  /* Reuse legacy upstream path prefixes only when the public route matches that same prefix or has no explicit prefix. */
+  const normalizedInferred = normalizePathPrefix(input.inferredServicePathPrefix);
+  if (!normalizedInferred) {
+    return null;
+  }
+
+  const normalizedRoute = normalizePathPrefix(input.routePathPrefix ?? null);
+  if (!normalizedRoute) {
+    return normalizedInferred;
+  }
+
+  return normalizedRoute === normalizedInferred ? normalizedInferred : null;
 };
 
 const escapeNginxRegex = (value: string): string => {

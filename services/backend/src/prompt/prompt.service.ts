@@ -12,6 +12,7 @@ import { EventsService } from "../events/events.service";
 import { OpenCodeCommand, OpenCodeExecutionModel, OpenCodePromptInputPart } from "../open-code/opencode.types";
 import { OpenCodeClient, SessionResolution } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
+import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
 import { summarizeOpenCodeParts } from "../open-code/opencode-telemetry";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { ProjectsService } from "../projects/projects.service";
@@ -384,6 +385,7 @@ export class PromptService {
 
     /* Summarize parts into a compact telemetry payload for Telegram. */
     const telemetry = summarizeOpenCodeParts(result.parts);
+    const finalText = extractFinalOpenCodeText(result.parts) || result.responseText;
 
     /* Emit message event for downstream consumers. */
     this.events.publish({
@@ -395,6 +397,7 @@ export class PromptService {
         projectSlug: active.slug,
         directory: active.rootPath,
         adminId: context.adminId ?? null,
+        finalText,
         providerID: result.info.providerID,
         modelID: result.info.modelID,
         providerName: names?.providerName ?? null,

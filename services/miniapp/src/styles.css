@@ -724,7 +724,13 @@ html[data-theme="dark"] .project-deploy-link-url {
   display: flex;
   gap: 10px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.terminal-input-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
 }
 
 @media (max-width: 900px) {

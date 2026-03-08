@@ -8,6 +8,10 @@ set -euo pipefail
 DEFAULT_INSTALL_DIR="/opt/remote-vibe-station-runtime"
 DEFAULT_PROJECTS_ROOT="/srv/projects"
 DEFAULT_COMPOSE_PROJECT="remote-vibe-station"
+DOCKER_LOG_MAX_SIZE="10m"
+DOCKER_LOG_MAX_FILE="5"
+DOCKER_PRUNE_RESERVED_SPACE="512MB"
+DOCKER_IMAGE_PRUNE_UNTIL="168h"
 
 usage() {
   cat <<'EOF'
@@ -107,12 +111,11 @@ install_docker_if_missing() {
 }
 
 configure_ufw() {
-  # Restrict inbound traffic to SSH + HTTP(S) and rate-limit SSH brute force.
+  # Restrict inbound traffic to SSH + HTTP(S) while sshd itself allows only key-based logins.
   if ! ufw status | grep -q "Status: active"; then
     ufw --force default deny incoming
     ufw --force default allow outgoing
     ufw allow 22/tcp
-    ufw limit 22/tcp
     ufw allow 80/tcp
     ufw allow 443/tcp
     ufw --force enable
@@ -128,9 +131,43 @@ configure_ufw() {
   if ! ufw status | grep -qE '^443/tcp'; then
     ufw allow 443/tcp
   fi
-  if ! ufw status | grep -qE '^22/tcp\s+LIMIT'; then
-    ufw limit 22/tcp
+}
+
+configure_sshd_key_only() {
+  # Key-only SSH avoids dynamic-IP lockouts while still blocking password brute force entirely.
+  if ! has_any_authorized_ssh_key; then
+    echo "WARNING: no authorized SSH keys found; keeping current sshd auth settings unchanged" >&2
+    return
   fi
+
+  mkdir -p /etc/ssh/sshd_config.d
+  write_file /etc/ssh/sshd_config.d/99-remote-vibe-station.conf <<'EOF'
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password
+EOF
+
+  sshd -t
+  systemctl reload ssh
+}
+
+has_any_authorized_ssh_key() {
+  # Enforce key-only SSH only when the server already has at least one usable authorized key.
+  local key_files=(
+    /root/.ssh/authorized_keys
+    /home/*/.ssh/authorized_keys
+  )
+
+  local file
+  for file in "${key_files[@]}"; do
+    if [[ -f "$file" ]] && grep -q '^[[:space:]]*[^#[:space:]]' "$file"; then
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 configure_fail2ban() {
@@ -148,6 +185,49 @@ EOF
 
   systemctl enable fail2ban >/dev/null 2>&1 || true
   systemctl restart fail2ban
+}
+
+configure_docker_daemon() {
+  # Apply host-wide log rotation defaults so ad-hoc containers cannot grow unbounded logs.
+  mkdir -p /etc/docker
+  local daemon_path="/etc/docker/daemon.json"
+  local merged_json=""
+
+  if [[ -f "$daemon_path" ]]; then
+    cp "$daemon_path" "${daemon_path}.bak"
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "WARNING: jq is required to merge $daemon_path safely; keeping existing Docker daemon config unchanged" >&2
+      return
+    fi
+
+    if ! merged_json="$(jq \
+      --arg maxSize "$DOCKER_LOG_MAX_SIZE" \
+      --arg maxFile "$DOCKER_LOG_MAX_FILE" \
+      '. + {
+        "log-driver": "json-file",
+        "log-opts": ((.["log-opts"] // {}) + {
+          "max-size": $maxSize,
+          "max-file": $maxFile
+        })
+      }' \
+      "$daemon_path")"; then
+      echo "ERROR: existing $daemon_path is not valid JSON" >&2
+      return 1
+    fi
+
+    printf '%s\n' "$merged_json" | write_file "$daemon_path"
+    return
+  fi
+
+  write_file "$daemon_path" <<EOF
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "${DOCKER_LOG_MAX_SIZE}",
+    "max-file": "${DOCKER_LOG_MAX_FILE}"
+  }
+}
+EOF
 }
 
 generate_runtime_files() {
@@ -220,6 +300,25 @@ EOF
   cp "$(dirname "${BASH_SOURCE[0]}")/templates/vless-proxy.env" "$INSTALL_DIR/infra/vless/proxy.env"
   cp "$(dirname "${BASH_SOURCE[0]}")/templates/vless-xray.json" "$INSTALL_DIR/infra/vless/xray.json"
 
+  write_file "$INSTALL_DIR/runtime-maintenance.sh" <<EOF
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# Reclaim safe Docker garbage without touching named volumes or the newest rollback images.
+docker image prune -af --filter "until=${DOCKER_IMAGE_PRUNE_UNTIL}"
+docker container prune -f
+docker network prune -f
+
+# Older Docker releases may not support --reserved-space, so fall back gracefully.
+BUILDER_PRUNE_BASE=(docker builder prune -af)
+if docker builder prune --help 2>/dev/null | grep -q -- '--reserved-space'; then
+  BUILDER_PRUNE_BASE+=(--reserved-space ${DOCKER_PRUNE_RESERVED_SPACE})
+fi
+"${BUILDER_PRUNE_BASE[@]}"
+EOF
+  chmod +x "$INSTALL_DIR/runtime-maintenance.sh"
+
   write_file "$INSTALL_DIR/.env" <<EOF
 COMPOSE_PROJECT_NAME=${DEFAULT_COMPOSE_PROJECT}
 TELEGRAM_BOT_TOKEN=${BOT_TOKEN}
@@ -246,11 +345,46 @@ RVS_OPENCODE_IMAGE=${OPENCODE_IMAGE}
 RVS_CLIPROXY_IMAGE=${CLIPROXY_IMAGE}
 EOF
 }
+
+install_runtime_maintenance_timer() {
+  # Run Docker garbage collection daily so repeated deploys do not fill the server disk.
+  write_file /etc/systemd/system/remote-vibe-station-maintenance.service <<EOF
+[Unit]
+Description=Remote Vibe Station Docker maintenance
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=${INSTALL_DIR}/runtime-maintenance.sh
+EOF
+
+  write_file /etc/systemd/system/remote-vibe-station-maintenance.timer <<'EOF'
+[Unit]
+Description=Run Remote Vibe Station Docker maintenance daily
+
+[Timer]
+OnCalendar=*-*-* 04:25:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable --now remote-vibe-station-maintenance.timer >/dev/null 2>&1
+}
+
+run_runtime_maintenance_now() {
+  # Prune unused images right after a successful deploy while old images are no longer referenced.
+  "$INSTALL_DIR/runtime-maintenance.sh"
+}
+
 start_stack() {
   # Pull immutable runtime images and start services in detached mode.
   pushd "$INSTALL_DIR" >/dev/null
-  docker compose --env-file .env pull
-  docker compose --env-file .env up -d
+docker compose --env-file .env pull
+  docker compose --env-file .env up -d --remove-orphans
   popd >/dev/null
 }
 BOT_TOKEN=""
@@ -381,6 +515,7 @@ if [[ "$DRY_RUN" != "true" ]]; then
   ensure_root
 fi
 # Generate secrets once for generated runtime stack.
+BOT_BACKEND_AUTH_TOKEN="rvs-bot-$(random_alnum 56)"
 OPENCODE_SERVER_PASSWORD="$(random_alnum 48)"
 CLIPROXY_MANAGEMENT_PASSWORD="$(random_alnum 48)"
 CLIPROXY_API_KEY="sk-cliproxy-$(random_alnum 56)"
@@ -391,15 +526,19 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 install_system_dependencies
 install_docker_if_missing
+configure_docker_daemon
 systemctl enable docker >/dev/null 2>&1 || true
-systemctl start docker
+systemctl restart docker
 authenticate_github_cli
 # Validate runtime prerequisites before firewall changes and compose startup.
 if [[ "$SKIP_PREFLIGHT" != "true" ]]; then
   "$(dirname "${BASH_SOURCE[0]}")/install-runtime-preflight.sh" --install-dir "$INSTALL_DIR" --domain "$DOMAIN" --opencode-domain "$OPENCODE_DOMAIN" --projects-root "$PROJECTS_ROOT"
 fi
+configure_sshd_key_only
 configure_ufw
 configure_fail2ban
+install_runtime_maintenance_timer
 start_stack
+run_runtime_maintenance_now
 echo "Install completed. Runtime directory: $INSTALL_DIR"
 echo "Mini App URL: https://${DOMAIN}/miniapp | OpenCode URL: https://${OPENCODE_DOMAIN}"

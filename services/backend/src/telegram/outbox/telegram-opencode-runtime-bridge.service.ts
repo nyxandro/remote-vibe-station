@@ -162,6 +162,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       this.partIdsBySession.set(sessionID, sessionPartIds);
     }
 
+    /* OpenCode commentary between tools should become separate Telegram text messages, not one endless edited draft. */
+    if (partType !== "text") {
+      this.closeAssistantStreamSegment(route.adminId, sessionID);
+    }
+
     if (partType === "reasoning") {
       this.setThinking(route.adminId, sessionID, true);
     } else if (partType === "tool" || partType === "text") {
@@ -382,6 +387,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
   private clearSessionRuntimeState(sessionID: string): void {
     /* Drop cached stream text and part metadata once the OpenCode turn is fully idle. */
+    this.outbox.closeAssistantProgress({ sessionId: sessionID });
     this.assistantTextBySession.delete(sessionID);
     this.emittedSystemNotificationsBySession.delete(sessionID);
 
@@ -408,6 +414,24 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private buildAssistantStreamKey(adminId: number, sessionID: string): string {
     /* Throttle live preview per session turn so rotated part ids do not fragment Telegram messages. */
     return `assistant-stream:${adminId}:${sessionID}:live`;
+  }
+
+  private closeAssistantStreamSegment(adminId: number, sessionID: string): void {
+    /* Non-text runtime activity marks a new assistant commentary block, so the next text delta must start fresh. */
+    const streamKey = this.buildAssistantStreamKey(adminId, sessionID);
+    const hadBufferedText = (this.assistantTextBySession.get(sessionID) ?? "").length > 0;
+    this.outbox.closeAssistantProgress({ sessionId: sessionID });
+    if (!hadBufferedText && !this.assistantProgressEmittedAtMs.has(streamKey)) {
+      return;
+    }
+
+    this.assistantTextBySession.delete(sessionID);
+    this.assistantProgressEmittedAtMs.delete(streamKey);
+    for (const key of this.assistantTextByPart.keys()) {
+      if (key.includes(`:${sessionID}:`)) {
+        this.assistantTextByPart.delete(key);
+      }
+    }
   }
 
   private buildAssistantPartKey(adminId: number, sessionID: string, partID: string): string {
@@ -630,7 +654,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     /* Question pause means no active thinking spinner until user choice. */
     this.setThinking(route.adminId, sessionID, false);
-    this.outbox.closeAssistantProgress({ sessionId: sessionID });
+    this.closeAssistantStreamSegment(route.adminId, sessionID);
 
     /* Preserve the whole questionnaire because Telegram may need to walk through several consecutive steps. */
     const questions = Array.isArray(properties.questions)
@@ -718,7 +742,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     /* Permission pause means no active typing indicator until user choice. */
     this.setThinking(route.adminId, normalized.sessionID, false);
-    this.outbox.closeAssistantProgress({ sessionId: normalized.sessionID });
+    this.closeAssistantStreamSegment(route.adminId, normalized.sessionID);
 
     const routeID = `${normalized.sessionID}:${normalized.permissionID}`;
     const token = this.routes.bindPermission({

@@ -13,6 +13,7 @@ import {
   buildStaticComposeConfig,
   inferServicePathPrefix,
   inferDockerRuntimeTarget,
+  resolveRouteServicePathPrefix,
   toDockerRouteProxyServiceName,
   toComposeProjectName
 } from "../project-deployment-runtime";
@@ -238,5 +239,13 @@ describe("project-deployment-runtime helpers", () => {
         }
       })
     ).toBe("/dashboard");
+  });
+
+  test("applies inferred service path prefix only to matching route prefixes", () => {
+    /* One backend service may expose /api plus unrelated paths, so non-matching routes must not inherit /api rewrites. */
+    expect(resolveRouteServicePathPrefix({ routePathPrefix: null, inferredServicePathPrefix: "/api" })).toBe("/api");
+    expect(resolveRouteServicePathPrefix({ routePathPrefix: "/api", inferredServicePathPrefix: "/api" })).toBe("/api");
+    expect(resolveRouteServicePathPrefix({ routePathPrefix: "/generated-slides", inferredServicePathPrefix: "/api" })).toBeNull();
+    expect(resolveRouteServicePathPrefix({ routePathPrefix: "/socket.io", inferredServicePathPrefix: "/api" })).toBeNull();
   });
 });

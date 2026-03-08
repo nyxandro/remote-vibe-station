@@ -40,7 +40,7 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       this.outbox.enqueueAssistantReply({
         adminId,
         delivery: {
-          text: String(data?.text ?? ""),
+          text: String(data?.finalText ?? data?.text ?? ""),
           sessionId: typeof data?.sessionId === "string" ? data.sessionId : null,
           contextLimit: typeof data?.contextLimit === "number" ? data.contextLimit : null,
           providerID: String(data?.providerID ?? ""),

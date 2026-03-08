@@ -21,9 +21,10 @@ export const TerminalTab = (props: Props) => {
     <div className="terminal-shell">
       <pre className="log-box terminal-output">{props.buffer || "(no output yet)"}</pre>
 
+      {/* Keep the command field flexible so the send button stays on the same row on narrow screens. */}
       <div className="terminal-input-row">
         <input
-          className="input"
+          className="input terminal-input-field"
           placeholder="Type a command (e.g. ls)"
           value={props.input}
           onChange={(e) => props.onInputChange(e.target.value)}
