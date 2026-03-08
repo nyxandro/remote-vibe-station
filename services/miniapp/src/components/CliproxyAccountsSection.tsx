@@ -110,8 +110,7 @@ export const CliproxyAccountsSection = (props: Props) => {
 
       <div className="providers-list">
         {props.accounts?.accounts.map((account) => {
-          const usagePercent = getUsageActivityPercent(account);
-          const remainingPercent = getUsageRemainingPercent(account);
+          const limitPercent = getUsageRemainingPercent(account);
           return (
             <div key={`cliproxy-account:${account.id}`} className="providers-item-card">
               {/* Status badge must distinguish active, disabled and unavailable accounts at a glance. */}
@@ -141,23 +140,23 @@ export const CliproxyAccountsSection = (props: Props) => {
               {props.accounts?.usageTrackingEnabled ? (
                 <div className="providers-usage-block">
                   <div className="project-create-note">
-                    Относительная активность: {usagePercent}% от самого активного аккаунта
+                    Limit: {limitPercent}%
                   </div>
                   <div
                     className="providers-usage-meter"
                     role="progressbar"
-                    aria-label={`Относительная активность для ${account.name}`}
+                    aria-label={`Limit for ${account.name}`}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={usagePercent}
-                    aria-valuetext={`Активность ${usagePercent}%, осталось ${remainingPercent}%`}
+                    aria-valuenow={limitPercent}
+                    aria-valuetext={`Limit ${limitPercent}%`}
                   >
                     <div
                       className="providers-usage-meter-fill"
-                      style={{ width: `${usagePercent}%` }}
+                      style={{ width: `${limitPercent}%` }}
                     />
                     <span className="providers-usage-meter-text">
-                      Активность {usagePercent}% · осталось {remainingPercent}%
+                      Limit {limitPercent}%
                     </span>
                   </div>
                 </div>

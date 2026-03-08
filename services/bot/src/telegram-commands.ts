@@ -31,6 +31,7 @@ export const BOT_LOCAL_COMMANDS: TelegramMenuCommand[] = [
   /* Stream management commands required by product flow. */
   { command: "chat", description: "Включить стрим ответов" },
   { command: "end", description: "Выключить стрим ответов" },
+  { command: "stop", description: "Остановить текущий запрос" },
   { command: "new", description: "Начать новую сессию" },
   { command: "sessions", description: "Выбрать сессию" },
   { command: "repair", description: "Починить зависшие сессии" },

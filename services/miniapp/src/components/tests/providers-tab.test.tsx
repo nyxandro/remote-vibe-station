@@ -138,9 +138,9 @@ describe("ProvidersTab", () => {
     expect(screen.getByText("Запросы: 3")).toBeTruthy();
     expect(screen.getByText("Токены: 1,450")).toBeTruthy();
     expect(screen.getByText("Ошибки: 1")).toBeTruthy();
-    expect(screen.getByText(/Относительная активность:/)).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: /Относительная активность для codex-user@example.com/i })).toBeTruthy();
-    expect(screen.getByText("Активность 100% · осталось 0%")).toBeTruthy();
+    expect(screen.getByText("Limit: 0%")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: /Limit for codex-user@example.com/i })).toBeTruthy();
+    expect(screen.getByText("Limit 0%")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
 

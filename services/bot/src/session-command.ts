@@ -2,7 +2,7 @@
  * @fileoverview Telegram commands and callbacks for OpenCode session management.
  *
  * Exports:
- * - registerSessionCommands (L62) - Registers /new, /sessions and session picker callbacks.
+ * - registerSessionCommands (L62) - Registers /new, /stop, /sessions and session picker callbacks.
  */
 
 import { Markup, Telegraf } from "telegraf";
@@ -88,6 +88,34 @@ export const registerSessionCommands = (input: {
     const payload = (await response.json()) as { ok?: boolean; projectSlug?: string };
     const projectSlug = typeof payload.projectSlug === "string" ? payload.projectSlug : "unknown";
     await ctx.reply(`🆕 Начата новая сессия (проект: ${projectSlug}).`);
+  });
+
+  /* Register /stop command that aborts the current active OpenCode session run. */
+  input.bot.command("stop", async (ctx) => {
+    if (!input.isAdmin(ctx.from?.id)) {
+      await ctx.reply("Access denied");
+      return;
+    }
+
+    const response = await fetch(`${input.config.backendUrl}/api/telegram/session/stop`, {
+      method: "POST",
+      headers: buildBotBackendHeaders(input.config, Number(ctx.from?.id))
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      await ctx.reply(buildBackendErrorMessage(response.status, body));
+      return;
+    }
+
+    const payload = (await response.json()) as { ok?: boolean; projectSlug?: string; aborted?: boolean };
+    const projectSlug = typeof payload.projectSlug === "string" ? payload.projectSlug : "unknown";
+    if (payload.aborted === false) {
+      await ctx.reply(`⏹ В текущей сессии уже нет активной работы (проект: ${projectSlug}).`);
+      return;
+    }
+
+    await ctx.reply(`⏹ Остановил текущий запрос (проект: ${projectSlug}).`);
   });
 
   /* Register /sessions command that renders session picker via inline callback buttons. */

@@ -31,6 +31,7 @@ describe("buildTelegramMenuCommands", () => {
         "mode",
         "chat",
         "end",
+        "stop",
         "help",
         "review_changes",
         "bad_command"

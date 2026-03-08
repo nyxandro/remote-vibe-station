@@ -14,7 +14,7 @@
  * - gitSummary (L160) - Handler for GET /api/projects/:id/git-summary.
  */
 
-import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Headers, Logger, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
 import { AppAuthGuard } from "../security/app-auth.guard";
@@ -30,6 +30,8 @@ import { ProjectRuntimeSettingsPatch } from "./project-runtime.types";
 @Controller("api/projects")
 @UseGuards(AppAuthGuard)
 export class ProjectsController {
+  private readonly logger = new Logger(ProjectsController.name);
+
   public constructor(
     private readonly projects: ProjectsService,
     private readonly gitSummaryService: ProjectGitService,
@@ -56,8 +58,35 @@ export class ProjectsController {
 
   @Get()
   public async list() {
-    /* Return discovered projects (folder-based). */
-    return this.projects.list();
+    /* Return discovered projects enriched with deploy links for expandable Mini App cards. */
+    const items = await this.projects.list();
+
+    return Promise.all(
+      items.map(async (item) => {
+        /* Keep projects list resilient when one runtime snapshot is temporarily unavailable. */
+        try {
+          const runtime = await this.deployment.getRuntimeSnapshot(item.slug);
+          return {
+            ...item,
+            deploy: {
+              previewUrl: runtime.previewUrl,
+              deployed: runtime.deployed,
+              routes: runtime.routes.map((route) => ({
+                id: route.id,
+                previewUrl: route.previewUrl,
+                subdomain: route.subdomain,
+                pathPrefix: route.pathPrefix
+              }))
+            }
+          };
+        } catch (error) {
+          /* Log and keep the base project card usable instead of failing the whole response. */
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(`Failed to load deploy snapshot for project ${item.slug}: ${message}`);
+          return item;
+        }
+      })
+    );
   }
 
   @Get("active")

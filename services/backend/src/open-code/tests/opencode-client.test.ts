@@ -396,6 +396,29 @@ describe("OpenCodeClient command APIs", () => {
     );
   });
 
+  it("aborts selected session on explicit stop request", async () => {
+    /* Telegram /stop must hit OpenCode abort endpoint for the currently active session. */
+    const fetchMock = jest
+      .spyOn(global, "fetch" as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify(true)
+      } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+
+    const result = await client.abortSession({
+      directory: "/srv/projects/demo",
+      sessionID: "session-stop"
+    });
+
+    expect(result).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://opencode:4096/session/session-stop/abort?directory=%2Fsrv%2Fprojects%2Fdemo",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
   it("lists sessions with title and status merged from OpenCode endpoints", async () => {
     /* Session picker needs human-readable title plus runtime status per item. */
     const fetchMock = jest

@@ -409,6 +409,14 @@ export class OpenCodeClient {
     };
   }
 
+  public async abortSession(input: { directory: string; sessionID: string }): Promise<boolean> {
+    /* Explicit stop command must target one known session without rotating active selection. */
+    return this.request<boolean>(
+      `/session/${encodeURIComponent(input.sessionID)}/abort?directory=${encodeURIComponent(input.directory)}`,
+      { method: "POST" }
+    );
+  }
+
   public async listSessions(input: { directory: string; limit: number }): Promise<OpenCodeSessionSummary[]> {
     /* Delegate normalization logic to dedicated session-state helper module. */
     return listSessionsViaApi({

@@ -62,4 +62,39 @@ describe("TelegramOutboxService", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  test("starts a fresh streamed message after a blocking question pause", () => {
+    /* Question/permission pauses must close the old assistant stream slot so the resumed answer does not rewrite history. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, true);
+
+      const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
+
+      service.enqueueAssistantStreamDelta({
+        adminId: 1,
+        sessionId: "session-1",
+        text: "Первый фрагмент"
+      });
+      service.closeAssistantProgress({ sessionId: "session-1" });
+      service.enqueueAssistantStreamDelta({
+        adminId: 1,
+        sessionId: "session-1",
+        text: "Новый ответ после вопроса"
+      });
+
+      const assistantItems = readItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(2);
+      expect(assistantItems[0].progressKey).toBe("assistant:1:session-1:1");
+      expect(assistantItems[1].progressKey).toBe("assistant:1:session-1:2");
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });

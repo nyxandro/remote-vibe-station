@@ -33,6 +33,16 @@ export type ProjectRecord = {
   status: "running" | "stopped" | "unknown";
   domain?: string;
   lastStartedAt?: string;
+  deploy?: {
+    previewUrl: string;
+    deployed: boolean;
+    routes: Array<{
+      id: string;
+      previewUrl: string;
+      subdomain: string | null;
+      pathPrefix: string | null;
+    }>;
+  };
 };
 
 export type ProjectStatus = {

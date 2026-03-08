@@ -343,6 +343,11 @@ export class TelegramOutboxService {
     });
   }
 
+  public closeAssistantProgress(input: { sessionId: string | null }): void {
+    /* Blocking question/permission steps must force the next assistant continuation into a fresh Telegram message. */
+    this.clearAssistantProgressKey(input.sessionId);
+  }
+
   private resolveAssistantProgressKey(input: {
     adminId: number;
     sessionId: string;

@@ -12,6 +12,7 @@ import { EventEnvelope } from "../../events/events.types";
 import { EventsService } from "../../events/events.service";
 import { OpenCodeSessionRoutingStore } from "../../open-code/opencode-session-routing.store";
 import { TelegramDiffPreviewStore } from "../diff-preview/telegram-diff-preview.store";
+import { formatTelegramQuestionPrompt } from "../telegram-question-prompt";
 import { formatFileOperationMessageHtml } from "./telegram-file-event-message";
 import { TelegramOutboxService } from "./telegram-outbox.service";
 import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
@@ -629,18 +630,40 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     /* Question pause means no active thinking spinner until user choice. */
     this.setThinking(route.adminId, sessionID, false);
+    this.outbox.closeAssistantProgress({ sessionId: sessionID });
 
-    const questions = Array.isArray(properties.questions) ? properties.questions : [];
-    const first = questions[0] as any;
+    /* Preserve the whole questionnaire because Telegram may need to walk through several consecutive steps. */
+    const questions = Array.isArray(properties.questions)
+      ? properties.questions
+          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+          .map((item) => ({
+            header: String(item.header ?? "Question"),
+            question: String(item.question ?? ""),
+            options: Array.isArray(item.options)
+              ? item.options
+                  .filter((option): option is Record<string, unknown> => Boolean(option && typeof option === "object"))
+                  .map((option) => String(option.label ?? "").trim())
+                  .filter((label) => label.length > 0)
+              : [],
+            multiple: Boolean(item.multiple)
+          }))
+          .filter((item) => item.question.trim().length > 0)
+      : [];
+    const first = questions[0];
     if (!first || typeof first.question !== "string") {
       return;
     }
 
-    const options = Array.isArray(first.options) ? first.options.slice(0, 6) : [];
+    const options = Array.isArray(first.options) ? first.options : [];
     if (options.length === 0) {
       this.outbox.enqueueStreamNotification({
         adminId: route.adminId,
-        text: `Вопрос от OpenCode: ${first.question}`
+        text: formatTelegramQuestionPrompt({
+          header: first.header,
+          question: first.question,
+          index: 1,
+          total: questions.length
+        })
       });
       return;
     }
@@ -650,16 +673,20 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       sessionID,
       adminId: route.adminId,
       directory: route.directory,
-      options: options.map((option: any) => String(option?.label ?? ""))
+      questions
     });
 
-    const keyboard = options.map((option: any, index: number) => {
-      const label = String(option?.label ?? `Option ${index + 1}`);
-      const callbackData = `${QUESTION_CALLBACK_PREFIX}|${token}|${index}`;
+    const keyboard = options.map((label, index) => {
+      const callbackData = `${QUESTION_CALLBACK_PREFIX}|${token}|0|${index}`;
       return [{ text: label, callback_data: callbackData }];
     });
 
-    const text = `OpenCode спрашивает:\n${String(first.question)}`;
+    const text = formatTelegramQuestionPrompt({
+      header: first.header,
+      question: first.question,
+      index: 1,
+      total: questions.length
+    });
     this.outbox.enqueueProgressReplace({
       adminId: route.adminId,
       progressKey: `question:${route.adminId}:${requestID}`,
@@ -691,6 +718,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     /* Permission pause means no active typing indicator until user choice. */
     this.setThinking(route.adminId, normalized.sessionID, false);
+    this.outbox.closeAssistantProgress({ sessionId: normalized.sessionID });
 
     const routeID = `${normalized.sessionID}:${normalized.permissionID}`;
     const token = this.routes.bindPermission({

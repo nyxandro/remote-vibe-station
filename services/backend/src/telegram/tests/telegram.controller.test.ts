@@ -8,6 +8,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { Request } from "express";
 
+import { OpenCodeSessionRoutingStore } from "../../open-code/opencode-session-routing.store";
 import { TelegramController } from "../telegram.controller";
 
 const buildController = () => {
@@ -46,6 +47,7 @@ const buildController = () => {
   const sessionRouting = {
     resolveQuestionToken: jest.fn(),
     resolveQuestion: jest.fn(),
+    advanceQuestion: jest.fn(),
     consumeQuestion: jest.fn(),
     resolvePermissionToken: jest.fn(),
     resolvePermission: jest.fn(),
@@ -268,6 +270,108 @@ describe("TelegramController.replyPermission", () => {
       controller.replyPermission({ permissionToken: "missing", response: "once" }, { authAdminId: 649624756 } as any)
     ).rejects.toThrow(BadRequestException);
     expect(opencode.replyPermission).not.toHaveBeenCalled();
+  });
+});
+
+describe("TelegramController.replyQuestion", () => {
+  test("walks through multi-question OpenCode prompt step by step", async () => {
+    /* Telegram should collect every question from one OpenCode request instead of replying only to the first row. */
+    const opencode = {
+      listQuestions: jest.fn().mockResolvedValue([
+        {
+          id: "req-1",
+          sessionID: "session-1",
+          questions: [
+            {
+              header: "Confirm",
+              question: "Первый вопрос?",
+              options: [
+                { label: "Да", description: "" },
+                { label: "Нет", description: "" }
+              ],
+              multiple: false
+            },
+            {
+              header: "Scope",
+              question: "Второй вопрос?",
+              options: [
+                { label: "API", description: "" },
+                { label: "UI", description: "" }
+              ],
+              multiple: false
+            }
+          ]
+        }
+      ]),
+      replyQuestion: jest.fn().mockResolvedValue(undefined),
+      replyPermission: jest.fn()
+    };
+    const sessionRouting = new OpenCodeSessionRoutingStore();
+    const token = sessionRouting.bindQuestion({
+      requestID: "req-1",
+      sessionID: "session-1",
+      adminId: 649624756,
+      directory: "/home/nyx/projects/remote-vibe-station",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Первый вопрос?",
+          options: ["Да", "Нет"],
+          multiple: false
+        },
+        {
+          header: "Scope",
+          question: "Второй вопрос?",
+          options: ["API", "UI"],
+          multiple: false
+        }
+      ]
+    });
+
+    const controller = new TelegramController(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      opencode as never,
+      sessionRouting as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+
+    const first = await controller.replyQuestion(
+      { questionToken: token, optionIndex: 0 },
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(first).toEqual({
+      ok: true,
+      selected: "Да",
+      completed: false,
+      nextPrompt: {
+        text: "OpenCode спрашивает (2/2):\nScope\nВторой вопрос?",
+        questionIndex: 1,
+        options: ["API", "UI"]
+      }
+    });
+    expect(opencode.replyQuestion).not.toHaveBeenCalled();
+
+    const second = await controller.replyQuestion(
+      { questionToken: token, questionIndex: 1, optionIndex: 1 },
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(opencode.replyQuestion).toHaveBeenCalledWith({
+      directory: "/home/nyx/projects/remote-vibe-station",
+      requestID: "req-1",
+      answers: [["Да"], ["UI"]]
+    });
+    expect(second).toEqual({ ok: true, selected: "UI", completed: true });
+    expect(sessionRouting.resolveQuestionToken(token)).toBeNull();
   });
 });
 

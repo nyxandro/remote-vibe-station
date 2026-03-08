@@ -11,6 +11,22 @@ import { Container, GitCommitHorizontal, Plus } from "lucide-react";
 import { ProjectGitSummary, ProjectRecord, ProjectStatus } from "../types";
 import { deriveProjectContainerHealth } from "../utils/project-container-health";
 
+const formatDeployRouteLabel = (route: NonNullable<ProjectRecord["deploy"]>["routes"][number]): string => {
+  /* Surface stable route ids like web/admin/api because operators recognize them faster than raw hosts. */
+  const normalized = route.id.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : "open";
+};
+
+const formatDeployRouteHost = (previewUrl: string): string => {
+  /* Keep card copy compact by showing host/path instead of repeated protocol noise. */
+  try {
+    const parsed = new URL(previewUrl);
+    return `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`;
+  } catch {
+    return previewUrl;
+  }
+};
+
 type Props = {
   visibleProjects: ProjectRecord[];
   activeId: string | null;
@@ -183,6 +199,7 @@ export const ProjectsTab = (props: Props) => {
           const gitSummary = props.gitSummaryMap[project.id] ?? null;
           const isExpanded = expandedCardId === project.id;
           const isDeployed = project.status === "running";
+          const deployRoutes = project.deploy?.routes ?? [];
 
           return (
             <article
@@ -240,6 +257,24 @@ export const ProjectsTab = (props: Props) => {
                   className="project-actions"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {deployRoutes.length > 0 ? (
+                    <div className="project-deploy-links" aria-label="Deploy links">
+                      {deployRoutes.map((route) => (
+                        <a
+                          key={`${project.id}:${route.id}:${route.previewUrl}`}
+                          className="project-deploy-link"
+                          href={route.previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Open ${formatDeployRouteLabel(route)}`}
+                        >
+                          <span className="project-deploy-link-label">{formatDeployRouteLabel(route)}</span>
+                          <span className="project-deploy-link-url">{formatDeployRouteHost(route.previewUrl)}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+
                   <button
                     className={isDeployed ? "btn outline" : "btn primary"}
                     onClick={() => {

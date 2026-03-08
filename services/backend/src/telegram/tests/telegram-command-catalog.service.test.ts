@@ -29,6 +29,7 @@ describe("TelegramCommandCatalogService", () => {
         "mode",
         "chat",
         "end",
+        "stop",
         "new",
         "sessions",
         "repair",

@@ -22,6 +22,7 @@ const makeBridge = () => {
 
   const routes = {
     resolve: jest.fn(() => ({ adminId: 10, directory: "/tmp/demo" })),
+    bindQuestion: jest.fn(() => "question-token"),
     bindPermission: jest.fn(() => "perm-token")
   } as any;
 
@@ -30,7 +31,8 @@ const makeBridge = () => {
     enqueueProgressReplace: jest.fn(),
     enqueueThinkingControl: jest.fn(),
     enqueueStreamNotification: jest.fn(),
-    enqueueAdminNotification: jest.fn()
+    enqueueAdminNotification: jest.fn(),
+    closeAssistantProgress: jest.fn()
   } as any;
 
   const diffPreviews = {
@@ -644,5 +646,91 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
         progressKey: "permission:10:per-raw-1"
       })
     );
+  });
+
+  it("binds every question from one OpenCode request and shows the first step", () => {
+    /* Multi-question OpenCode prompts must preserve the full questionnaire instead of dropping everything after the first item. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "question.asked",
+          properties: {
+            id: "req-1",
+            sessionID: "session-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Первый вопрос?",
+                options: [{ label: "Да" }, { label: "Нет" }]
+              },
+              {
+                header: "Scope",
+                question: "Второй вопрос?",
+                options: [{ label: "API" }, { label: "UI" }]
+              }
+            ]
+          }
+        })
+      }
+    });
+
+    expect((bridge as any).routes.bindQuestion).toHaveBeenCalledWith({
+      requestID: "req-1",
+      sessionID: "session-1",
+      adminId: 10,
+      directory: "/tmp/demo",
+      questions: [
+        {
+          header: "Confirm",
+          question: "Первый вопрос?",
+          options: ["Да", "Нет"],
+          multiple: false
+        },
+        {
+          header: "Scope",
+          question: "Второй вопрос?",
+          options: ["API", "UI"],
+          multiple: false
+        }
+      ]
+    });
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progressKey: "question:10:req-1",
+        text: "OpenCode спрашивает (1/2):\nConfirm\nПервый вопрос?"
+      })
+    );
+  });
+
+  it("closes active assistant progress when a question pauses the run", () => {
+    /* After a blocking question, the resumed assistant answer must start in a fresh Telegram message. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "question.asked",
+          properties: {
+            id: "req-2",
+            sessionID: "session-1",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Продолжать?",
+                options: [{ label: "Да" }, { label: "Нет" }]
+              }
+            ]
+          }
+        })
+      }
+    });
+
+    expect(outbox.closeAssistantProgress).toHaveBeenCalledWith({ sessionId: "session-1" });
   });
 });

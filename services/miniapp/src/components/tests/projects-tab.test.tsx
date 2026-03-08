@@ -74,6 +74,7 @@ describe("ProjectsTab", () => {
       />
     );
 
+    fireEvent.click(screen.getByText("tvoc"));
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
 
     expect(onSelectProject).toHaveBeenCalledWith("tvoc");
@@ -193,8 +194,50 @@ describe("ProjectsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clone" }));
     expect(onCloneRepository).toHaveBeenCalledWith("https://github.com/acme/repo.git", undefined);
 
+    fireEvent.click(screen.getByText("tvoc"));
     fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
     expect(onDeployProject).toHaveBeenCalledWith("tvoc");
     expect(onStopProjectDeploy).not.toHaveBeenCalled();
+  });
+
+  it("renders deploy route links inside expanded project card", () => {
+    /* Expanded cards should expose every public deploy URL so operators can jump to web/admin surfaces. */
+    render(
+      <ProjectsTab
+        visibleProjects={[
+          buildProject({
+            status: "running",
+            deploy: {
+              previewUrl: "https://tvoc.dev.example.com",
+              deployed: true,
+              routes: [
+                { id: "web", previewUrl: "https://tvoc.dev.example.com", subdomain: null, pathPrefix: null },
+                { id: "admin", previewUrl: "https://admin.tvoc.dev.example.com", subdomain: "admin", pathPrefix: null }
+              ]
+            }
+          })
+        ]}
+        activeId="tvoc"
+        query=""
+        telegramStreamEnabled={false}
+        statusMap={{}}
+        gitSummaryMap={{}}
+        onQueryChange={vi.fn()}
+        onSelectProject={vi.fn()}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
+        onCreateProjectFolder={vi.fn()}
+        onCloneRepository={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText("tvoc"));
+    const webLink = screen.getByRole("link", { name: "Open web" });
+    const adminLink = screen.getByRole("link", { name: "Open admin" });
+
+    expect(webLink.getAttribute("href")).toBe("https://tvoc.dev.example.com");
+    expect(adminLink.getAttribute("href")).toBe("https://admin.tvoc.dev.example.com");
+    expect(screen.getByText("tvoc.dev.example.com")).toBeTruthy();
+    expect(screen.getByText("admin.tvoc.dev.example.com")).toBeTruthy();
   });
 });

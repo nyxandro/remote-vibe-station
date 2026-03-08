@@ -329,6 +329,38 @@ export class PromptService {
     };
   }
 
+  public async stopActiveSession(adminId?: number): Promise<{
+    projectSlug: string;
+    sessionID: string;
+    aborted: boolean;
+  }> {
+    /* /stop should interrupt the currently selected session for the active project only. */
+    const active = await this.projects.getActiveProject(adminId);
+    if (!active) {
+      throw new Error(ACTIVE_PROJECT_REQUIRED_MESSAGE);
+    }
+
+    /* Keep directory watcher active so session routing remains consistent after the abort. */
+    this.opencodeEvents.ensureDirectory(active.rootPath);
+    await this.opencodeEvents.waitUntilConnected(active.rootPath);
+
+    const sessionID = this.opencode.getSelectedSessionID(active.rootPath);
+    if (!sessionID) {
+      throw new Error("Активная сессия не найдена");
+    }
+
+    const aborted = await this.opencode.abortSession({
+      directory: active.rootPath,
+      sessionID
+    });
+
+    return {
+      projectSlug: active.slug,
+      sessionID,
+      aborted
+    };
+  }
+
   private async publishMessageResult(
     result: Awaited<ReturnType<OpenCodeClient["sendPrompt"]>>,
     context: {

@@ -18,6 +18,7 @@ import { ProjectsService } from "../projects/projects.service";
 import { AdminHeaderGuard } from "../security/admin-header.guard";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { TelegramDiffPreviewStore } from "./diff-preview/telegram-diff-preview.store";
+import { formatTelegramQuestionPrompt } from "./telegram-question-prompt";
 import { TelegramPromptQueueService } from "./prompt-queue/telegram-prompt-queue.service";
 import { TelegramCommandCatalogService } from "./telegram-command-catalog.service";
 import { TelegramPreferencesService } from "./preferences/telegram-preferences.service";
@@ -310,10 +311,7 @@ export class TelegramController {
 
   @UseGuards(AdminHeaderGuard)
   @Post("question/reply")
-  public async replyQuestion(
-    @Body() body: { questionToken?: string; optionIndex?: number },
-    @Req() req: Request
-  ) {
+  public async replyQuestion(@Body() body: { questionToken?: string; questionIndex?: number; optionIndex?: number }, @Req() req: Request) {
     /* Reply to pending OpenCode question from Telegram inline keyboard callback. */
     const adminId = (req as any).authAdminId as number | undefined;
     if (!adminId) {
@@ -321,9 +319,10 @@ export class TelegramController {
     }
 
     const questionToken = String(body?.questionToken ?? "").trim();
+    const questionIndex = Number.isInteger(body?.questionIndex) ? Number(body?.questionIndex) : 0;
     const optionIndex = Number(body?.optionIndex);
-    if (!questionToken || !Number.isInteger(optionIndex) || optionIndex < 0) {
-      throw new BadRequestException("questionToken and optionIndex are required");
+    if (!questionToken || !Number.isInteger(questionIndex) || questionIndex < 0 || !Number.isInteger(optionIndex) || optionIndex < 0) {
+      throw new BadRequestException("questionToken, questionIndex and optionIndex are required");
     }
 
     const requestID = this.sessionRouting.resolveQuestionToken(questionToken);
@@ -336,9 +335,51 @@ export class TelegramController {
       throw new BadRequestException("Question request not found");
     }
 
-    const selected = route.options[optionIndex];
+    /* Guard against stale callbacks so an old button cannot answer a newer question step by accident. */
+    if (route.currentIndex !== questionIndex) {
+      throw new BadRequestException("Question step is outdated");
+    }
+
+    const currentQuestion = route.questions[route.currentIndex];
+    if (!currentQuestion) {
+      this.sessionRouting.consumeQuestion(requestID);
+      throw new BadRequestException("Question is no longer pending");
+    }
+
+    const selected = currentQuestion.options[optionIndex];
     if (!selected) {
       throw new BadRequestException("Invalid option index");
+    }
+
+    /* Multi-step question requests should advance locally until the final reply is ready to send to OpenCode. */
+    const answers = route.answers.map((answer, index) => (index === route.currentIndex ? [selected] : [...answer]));
+    const isFinalQuestion = route.currentIndex >= route.questions.length - 1;
+    if (!isFinalQuestion) {
+      const advanced = this.sessionRouting.advanceQuestion({
+        requestID,
+        questionIndex,
+        answers: [selected]
+      });
+      const nextQuestion = advanced?.questions[advanced.currentIndex];
+      if (!advanced || !nextQuestion) {
+        throw new BadRequestException("Question state is no longer valid");
+      }
+
+      return {
+        ok: true,
+        selected,
+        completed: false,
+        nextPrompt: {
+          text: formatTelegramQuestionPrompt({
+            header: nextQuestion.header,
+            question: nextQuestion.question,
+            index: advanced.currentIndex + 1,
+            total: advanced.questions.length
+          }),
+          questionIndex: advanced.currentIndex,
+          options: nextQuestion.options
+        }
+      };
     }
 
     const questions = await this.opencode.listQuestions({ directory: route.directory });
@@ -347,8 +388,10 @@ export class TelegramController {
       this.sessionRouting.consumeQuestion(requestID);
       throw new BadRequestException("Question is no longer pending");
     }
+    if (request.questions.length !== answers.length) {
+      throw new BadRequestException("Question payload changed; please answer again");
+    }
 
-    const answers = request.questions.map((_, index) => (index === 0 ? [selected] : []));
     await this.opencode.replyQuestion({
       directory: route.directory,
       requestID,
@@ -356,7 +399,7 @@ export class TelegramController {
     });
 
     this.sessionRouting.consumeQuestion(requestID);
-    return { ok: true, selected };
+    return { ok: true, selected, completed: true };
   }
 
   @UseGuards(AdminHeaderGuard)
@@ -409,6 +452,24 @@ export class TelegramController {
 
     try {
       const result = await this.prompts.repair(adminId);
+      return { ok: true, ...result };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
+  }
+
+  @UseGuards(AdminHeaderGuard)
+  @Post("session/stop")
+  public async stopActiveSession(@Req() req: Request) {
+    /* Abort current OpenCode run for the active project session when Telegram issues /stop. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    try {
+      const result = await this.prompts.stopActiveSession(adminId);
       return { ok: true, ...result };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";

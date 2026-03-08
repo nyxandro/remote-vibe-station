@@ -19,6 +19,7 @@ describe("PromptService session management", () => {
       getModelContextLimit: jest.fn(),
       getModelDisplayName: jest.fn(),
       createSession: jest.fn().mockResolvedValue({ id: "session-new" }),
+      abortSession: jest.fn().mockResolvedValue(true),
       listSessions: jest.fn().mockResolvedValue([
         {
           id: "session-new",
@@ -156,6 +157,38 @@ describe("PromptService session management", () => {
     expect(result).toEqual({ projectSlug: "arena", sessionID: "session-archive" });
   });
 
+  test("aborts the currently selected session for /stop", async () => {
+    /* /stop should target the active project session without rotating chat context. */
+    const { service, opencode, opencodeEvents } = buildService({
+      slug: "arena",
+      rootPath: "/home/nyx/projects/arena"
+    });
+
+    const result = await service.stopActiveSession(649624756);
+
+    expect(opencodeEvents.ensureDirectory).toHaveBeenCalledWith("/home/nyx/projects/arena");
+    expect(opencode.abortSession).toHaveBeenCalledWith({
+      directory: "/home/nyx/projects/arena",
+      sessionID: "session-new"
+    });
+    expect(result).toEqual({
+      projectSlug: "arena",
+      sessionID: "session-new",
+      aborted: true
+    });
+  });
+
+  test("fails fast for /stop when no active session is selected", async () => {
+    /* Stop command must be explicit when there is nothing to abort in the current project. */
+    const { service, opencode } = buildService({
+      slug: "arena",
+      rootPath: "/home/nyx/projects/arena"
+    });
+    opencode.getSelectedSessionID.mockReturnValue(null);
+
+    await expect(service.stopActiveSession(649624756)).rejects.toThrow("Активная сессия не найдена");
+  });
+
   test("fails fast for session methods when project is not selected", async () => {
     /* Session lifecycle commands are project-bound and must not run in global context. */
     const { service } = buildService(null);
@@ -165,5 +198,6 @@ describe("PromptService session management", () => {
     await expect(service.selectSession({ adminId: 649624756, sessionID: "session-1" })).rejects.toThrow(
       "Проект не выбран"
     );
+    await expect(service.stopActiveSession(649624756)).rejects.toThrow("Проект не выбран");
   });
 });

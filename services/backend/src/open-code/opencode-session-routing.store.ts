@@ -19,7 +19,14 @@ type QuestionRoute = {
   sessionID: string;
   adminId: number;
   directory: string;
-  options: string[];
+  questions: Array<{
+    header: string;
+    question: string;
+    options: string[];
+    multiple: boolean;
+  }>;
+  currentIndex: number;
+  answers: string[][];
   updatedAtMs: number;
 };
 
@@ -79,12 +86,28 @@ export class OpenCodeSessionRoutingStore {
     sessionID: string;
     adminId: number;
     directory: string;
-    options: string[];
+    questions: Array<{
+      header: string;
+      question: string;
+      options: string[];
+      multiple?: boolean;
+    }>;
   }): string {
     /* Keep question routing metadata for callback replies. */
     this.prune(Date.now());
     this.questions.set(input.requestID, {
-      ...input,
+      requestID: input.requestID,
+      sessionID: input.sessionID,
+      adminId: input.adminId,
+      directory: input.directory,
+      questions: input.questions.map((question) => ({
+        header: question.header,
+        question: question.question,
+        options: [...question.options],
+        multiple: Boolean(question.multiple)
+      })),
+      currentIndex: 0,
+      answers: input.questions.map(() => []),
       updatedAtMs: Date.now()
     });
 
@@ -97,7 +120,14 @@ export class OpenCodeSessionRoutingStore {
     sessionID: string;
     adminId: number;
     directory: string;
-    options: string[];
+    questions: Array<{
+      header: string;
+      question: string;
+      options: string[];
+      multiple: boolean;
+    }>;
+    currentIndex: number;
+    answers: string[][];
   } | null {
     /* Resolve question request context for Telegram inline callback reply. */
     this.prune(Date.now());
@@ -106,12 +136,37 @@ export class OpenCodeSessionRoutingStore {
       return null;
     }
 
-    return {
-      sessionID: route.sessionID,
-      adminId: route.adminId,
-      directory: route.directory,
-      options: route.options
-    };
+    return this.snapshotQuestionRoute(route);
+  }
+
+  public advanceQuestion(input: {
+    requestID: string;
+    questionIndex: number;
+    answers: string[];
+  }): {
+    sessionID: string;
+    adminId: number;
+    directory: string;
+    questions: Array<{
+      header: string;
+      question: string;
+      options: string[];
+      multiple: boolean;
+    }>;
+    currentIndex: number;
+    answers: string[][];
+  } | null {
+    /* Persist one answered step so the next Telegram callback advances through the same OpenCode request. */
+    this.prune(Date.now());
+    const route = this.questions.get(input.requestID);
+    if (!route || route.currentIndex !== input.questionIndex) {
+      return null;
+    }
+
+    route.answers[input.questionIndex] = [...input.answers];
+    route.currentIndex += 1;
+    route.updatedAtMs = Date.now();
+    return this.snapshotQuestionRoute(route);
   }
 
   public consumeQuestion(requestID: string): void {
@@ -260,5 +315,34 @@ export class OpenCodeSessionRoutingStore {
         this.sessionTokens.delete(token);
       }
     }
+  }
+
+  private snapshotQuestionRoute(route: QuestionRoute): {
+    sessionID: string;
+    adminId: number;
+    directory: string;
+    questions: Array<{
+      header: string;
+      question: string;
+      options: string[];
+      multiple: boolean;
+    }>;
+    currentIndex: number;
+    answers: string[][];
+  } {
+    /* Return defensive copies so controller logic cannot mutate in-memory routing state accidentally. */
+    return {
+      sessionID: route.sessionID,
+      adminId: route.adminId,
+      directory: route.directory,
+      questions: route.questions.map((question) => ({
+        header: question.header,
+        question: question.question,
+        options: [...question.options],
+        multiple: question.multiple
+      })),
+      currentIndex: route.currentIndex,
+      answers: route.answers.map((answers) => [...answers])
+    };
   }
 }

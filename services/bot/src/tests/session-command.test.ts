@@ -1,5 +1,5 @@
 /**
- * @fileoverview Tests for /new and /sessions Telegram command wiring.
+ * @fileoverview Tests for /new, /stop and /sessions Telegram command wiring.
  *
  * Exports:
  * - (none)
@@ -66,6 +66,25 @@ describe("registerSessionCommands", () => {
     await handler!({ from: { id: 1 }, reply });
 
     expect(reply).toHaveBeenCalledWith("🆕 Начата новая сессия (проект: arena).");
+  });
+
+  it("handles /stop and confirms current request abort", async () => {
+    /* Telegram must provide one local escape hatch to stop a mistaken or runaway prompt. */
+    jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, projectSlug: "arena", sessionID: "session-new", aborted: true })
+    } as Response);
+
+    const mock = createBotMock();
+    registerSessionCommands({ bot: mock.bot, config, isAdmin: (id: number | undefined) => id === 1 });
+
+    const handler = mock.getCommand("stop");
+    expect(handler).toBeDefined();
+
+    const reply = jest.fn(async () => undefined);
+    await handler!({ from: { id: 1 }, reply });
+
+    expect(reply).toHaveBeenCalledWith("⏹ Остановил текущий запрос (проект: arena).");
   });
 
   it("handles /sessions and renders inline keyboard with titles", async () => {
