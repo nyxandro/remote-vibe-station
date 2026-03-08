@@ -8,8 +8,20 @@
 
 import { Telegraf } from "telegraf";
 
+import { buildBotBackendHeaders } from "./backend-auth";
 import { BotConfig } from "./config";
 import { OpenCodeWebAuthService } from "./opencode-web-auth";
+
+const CURRENT_LINK_FETCH_TIMEOUT_MS = 5000;
+
+type CurrentSessionLinkResponse = {
+  ok?: boolean;
+  context?: {
+    projectSlug?: string;
+    sessionID?: string;
+    redirectPath?: string;
+  } | null;
+};
 
 export type RegisterOpenCodeAccessCommandInput = {
   bot: Telegraf;
@@ -28,17 +40,26 @@ export const registerOpenCodeAccessCommand = (input: RegisterOpenCodeAccessComma
 
     try {
       const adminId = ctx.from.id;
-      const token = await input.webAuth.issueMagicLink({ adminId });
+      const currentLink = await fetchCurrentSessionLink(input.config, adminId);
+      const token = await input.webAuth.issueMagicLink({
+        adminId,
+        ...(currentLink ? { redirectPath: currentLink.redirectPath } : {})
+      });
       const url = new URL("/opencode-auth/exchange", input.config.opencodePublicBaseUrl);
       url.searchParams.set("token", token);
       const escapedUrl = escapeHtml(url.toString());
       const linkTtl = formatTtlRu(input.webAuth.getLinkTtlMs());
       const sessionTtl = formatTtlRu(input.webAuth.getSessionTtlMs());
+      const contextHint = currentLink
+        ? `\nОткроется текущая сессия проекта <b>${escapeHtml(currentLink.projectSlug)}</b>.\n`
+        : "\n";
 
       await ctx.reply(
         "🔐 <b>Ссылка для входа во внешний OpenCode:</b>\n" +
           `<a href="${escapedUrl}">Открыть OpenCode</a>\n` +
-          `<code>${escapedUrl}</code>\n\n` +
+          `<code>${escapedUrl}</code>\n` +
+          contextHint +
+          "\n" +
           `Ссылка одноразовая и живет ${linkTtl}. После входа срок браузерной сессии — ${sessionTtl}; она завершается после выхода из браузера.`,
         {
           parse_mode: "HTML",
@@ -53,6 +74,35 @@ export const registerOpenCodeAccessCommand = (input: RegisterOpenCodeAccessComma
       await ctx.reply("Не удалось создать ссылку доступа. Попробуйте еще раз.");
     }
   });
+};
+
+const fetchCurrentSessionLink = async (
+  config: Pick<BotConfig, "backendUrl" | "botBackendAuthToken">,
+  adminId: number
+): Promise<{ projectSlug: string; redirectPath: string } | null> => {
+  /* Best-effort read of current OpenCode context so /access opens the exact active thread. */
+  try {
+    const response = await fetch(`${config.backendUrl}/api/telegram/session/current-link`, {
+      method: "GET",
+      headers: buildBotBackendHeaders(config, adminId),
+      signal: AbortSignal.timeout(CURRENT_LINK_FETCH_TIMEOUT_MS)
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as CurrentSessionLinkResponse;
+    const projectSlug = String(payload.context?.projectSlug ?? "").trim();
+    const redirectPath = String(payload.context?.redirectPath ?? "").trim();
+    if (payload.ok !== true || !projectSlug || !redirectPath) {
+      return null;
+    }
+
+    return { projectSlug, redirectPath };
+  } catch {
+    /* Access link itself is still valid without deep-link context, so keep the command available. */
+    return null;
+  }
 };
 
 const escapeHtml = (value: string): string => {

@@ -10,6 +10,7 @@ import { Telegraf } from "telegraf";
 import { BotConfig } from "../config";
 import { registerOpenCodeAccessCommand } from "../opencode-access-command";
 import { OpenCodeWebAuthService } from "../opencode-web-auth";
+import { buildBotBackendHeaders } from "../backend-auth";
 
 describe("registerOpenCodeAccessCommand", () => {
   const config: BotConfig = {
@@ -38,6 +39,10 @@ describe("registerOpenCodeAccessCommand", () => {
     };
   };
 
+  beforeEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("returns one-time link for allowed admin", async () => {
     /* Admin gets a pre-signed exchange URL with explicit TTL guidance. */
     const webAuth = {
@@ -46,6 +51,18 @@ describe("registerOpenCodeAccessCommand", () => {
         getSessionTtlMs: jest.fn(() => 24 * 60 * 60 * 1000)
     } as unknown as OpenCodeWebAuthService;
     const mock = createBotMock();
+
+    jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        context: {
+          projectSlug: "arena",
+          sessionID: "session-1",
+          redirectPath: "/project/derived-project/session/session-1"
+        }
+      })
+    } as Response);
 
     registerOpenCodeAccessCommand({
       bot: mock.bot,
@@ -60,7 +77,17 @@ describe("registerOpenCodeAccessCommand", () => {
     const reply = jest.fn(async () => undefined);
     await handler!({ from: { id: 1 }, reply });
 
-    expect(webAuth.issueMagicLink).toHaveBeenCalledWith({ adminId: 1 });
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${config.backendUrl}/api/telegram/session/current-link`,
+      expect.objectContaining({
+        method: "GET",
+        headers: buildBotBackendHeaders(config, 1)
+      })
+    );
+    expect(webAuth.issueMagicLink).toHaveBeenCalledWith({
+      adminId: 1,
+      redirectPath: "/project/derived-project/session/session-1"
+    });
     expect(reply).toHaveBeenCalledWith(
       expect.stringContaining("Ссылка одноразовая и живет 5 минут"),
       expect.objectContaining({
@@ -78,6 +105,36 @@ describe("registerOpenCodeAccessCommand", () => {
       expect.stringContaining("После входа срок браузерной сессии — 1 день"),
       expect.anything()
     );
+  });
+
+  it("falls back to generic OpenCode entry when current session context is unavailable", async () => {
+    /* Access link should still work even if backend cannot resolve an active session deep-link. */
+    const webAuth = {
+      issueMagicLink: jest.fn(async () => "magic-token"),
+      getLinkTtlMs: jest.fn(() => 5 * 60 * 1000),
+      getSessionTtlMs: jest.fn(() => 24 * 60 * 60 * 1000)
+    } as unknown as OpenCodeWebAuthService;
+    const mock = createBotMock();
+
+    jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, context: null })
+    } as Response);
+
+    registerOpenCodeAccessCommand({
+      bot: mock.bot,
+      config,
+      webAuth,
+      isAdmin: (id) => id === 1
+    });
+
+    const handler = mock.getCommand("access");
+    expect(handler).toBeDefined();
+
+    const reply = jest.fn(async () => undefined);
+    await handler!({ from: { id: 1 }, reply });
+
+    expect(webAuth.issueMagicLink).toHaveBeenCalledWith({ adminId: 1 });
   });
 
   it("denies command for non-admin account", async () => {

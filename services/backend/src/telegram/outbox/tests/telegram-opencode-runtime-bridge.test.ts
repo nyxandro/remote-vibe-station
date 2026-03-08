@@ -28,6 +28,7 @@ const makeBridge = () => {
 
   const outbox = {
     enqueueAssistantStreamDelta: jest.fn(),
+    enqueueAssistantCommentary: jest.fn(),
     enqueueProgressReplace: jest.fn(),
     enqueueThinkingControl: jest.fn(),
     enqueueStreamNotification: jest.fn(),
@@ -215,8 +216,8 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
   });
 
-  it("streams assistant text part deltas", () => {
-    /* OpenCode emits final assistant text incrementally via message.part.delta on text parts. */
+  it("buffers assistant text part deltas until the text block boundary", () => {
+    /* Plain assistant text should not emit partial Telegram messages before the block is finished. */
     const { bridge, outbox } = makeBridge();
     const nowSpy = jest.spyOn(Date, "now");
     nowSpy.mockReturnValue(1_000);
@@ -263,23 +264,14 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: "session-delta",
-        text: "Первая часть"
-      })
-    );
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        sessionId: "session-delta",
-        text: "Первая часть и вторая"
-      })
-    );
+    expect(outbox.enqueueAssistantStreamDelta).not.toHaveBeenCalled();
+    expect(outbox.enqueueAssistantCommentary).not.toHaveBeenCalled();
+    expect((bridge as any).assistantTextBySession.get("session-delta")).toBe("Первая часть и вторая");
     nowSpy.mockRestore();
   });
 
-  it("keeps one telegram progress message across assistant text parts in the same turn", () => {
-    /* Real OpenCode streams can rotate text part ids mid-reply, so Telegram live preview must stay on one message. */
+  it("keeps one buffered transcript across assistant text parts in the same turn", () => {
+    /* Real OpenCode streams can rotate text part ids mid-reply, so final buffered text must stay continuous. */
     const { bridge, outbox } = makeBridge();
     const nowSpy = jest.spyOn(Date, "now");
     nowSpy.mockReturnValue(1_000);
@@ -332,25 +324,14 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        text: "Первое сообщение",
-        sessionId: "session-split"
-      })
-    );
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        text: "Первое сообщениеВторое сообщение",
-        sessionId: "session-split"
-      })
-    );
+    expect(outbox.enqueueAssistantStreamDelta).not.toHaveBeenCalled();
+    expect(outbox.enqueueAssistantCommentary).not.toHaveBeenCalled();
+    expect((bridge as any).assistantTextBySession.get("session-split")).toBe("Первое сообщениеВторое сообщение");
     nowSpy.mockRestore();
   });
 
-  it("starts a fresh telegram text message after tool activity between assistant text blocks", () => {
-    /* Distinct assistant updates around tool execution must not keep accumulating into the very first Telegram text card. */
+  it("sends a fresh Telegram message for text before and after tool activity", () => {
+    /* Distinct assistant updates around tool execution must become separate chat messages. */
     const { bridge, outbox } = makeBridge();
     const nowSpy = jest.spyOn(Date, "now");
     nowSpy.mockReturnValue(1_000);
@@ -417,25 +398,76 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     });
 
     expect(outbox.closeAssistantProgress).toHaveBeenCalledWith({ sessionId: "session-separated" });
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
+    expect(outbox.enqueueAssistantCommentary).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        sessionId: "session-separated",
+        adminId: 10,
         text: "Понял задачу."
       })
     );
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        sessionId: "session-separated",
-        text: "Нашел проблему в compose."
-      })
-    );
+    expect(outbox.enqueueAssistantStreamDelta).not.toHaveBeenCalled();
+    expect((bridge as any).assistantTextBySession.get("session-separated")).toBe("Нашел проблему в compose.");
     nowSpy.mockRestore();
   });
 
-  it("throttles frequent assistant text deltas", () => {
-    /* Streaming updates should be coalesced so Telegram does not hit edit rate limits on every token burst. */
+  it("flushes buffered assistant text before a blocking question", () => {
+    /* If OpenCode asks a question after commentary, the commentary must appear as its own Telegram message first. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-question",
+        sessionID: "session-question"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-question",
+            partID: "assistant-part-question",
+            field: "text",
+            delta: "Нужно уточнение перед продолжением."
+          }
+        })
+      }
+    });
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "question.asked",
+          properties: {
+            id: "req-q-1",
+            sessionID: "session-question",
+            questions: [
+              {
+                header: "Confirm",
+                question: "Продолжаем?",
+                options: [{ label: "Да" }, { label: "Нет" }]
+              }
+            ]
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantCommentary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 10,
+        text: "Нужно уточнение перед продолжением."
+      })
+    );
+  });
+
+  it("buffers full assistant text across frequent deltas", () => {
+    /* Disabling editable previews must not drop later text chunks that arrive quickly. */
     const { bridge, outbox } = makeBridge();
     const nowSpy = jest.spyOn(Date, "now");
     nowSpy.mockReturnValue(1_000);
@@ -481,8 +513,6 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenCalledTimes(1);
-
     nowSpy.mockReturnValue(2_500);
     (bridge as any).onEvent({
       type: "opencode.event",
@@ -500,10 +530,8 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenCalledTimes(2);
-    expect(outbox.enqueueAssistantStreamDelta).toHaveBeenLastCalledWith(
-      expect.objectContaining({ text: "Первая вторая третья" })
-    );
+    expect(outbox.enqueueAssistantStreamDelta).not.toHaveBeenCalled();
+    expect((bridge as any).assistantTextBySession.get("session-throttle")).toBe("Первая вторая третья");
     nowSpy.mockRestore();
   });
 

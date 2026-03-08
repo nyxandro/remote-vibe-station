@@ -2,13 +2,14 @@
  * @fileoverview Telegram endpoints for OpenCode session lifecycle actions.
  *
  * Exports:
- * - TelegramSessionController (L16) - Handles /new, /sessions and session selection callbacks.
+ * - TelegramSessionController (L17) - Handles /new, /sessions, current-link and session selection callbacks.
  */
 
 import { BadRequestException, Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
+import { OpenCodeWebLinkService } from "../open-code/opencode-web-link.service";
 import { PromptService } from "../prompt/prompt.service";
 import { AdminHeaderGuard } from "../security/admin-header.guard";
 
@@ -16,7 +17,8 @@ import { AdminHeaderGuard } from "../security/admin-header.guard";
 export class TelegramSessionController {
   public constructor(
     private readonly prompts: PromptService,
-    private readonly sessionRouting: OpenCodeSessionRoutingStore
+    private readonly sessionRouting: OpenCodeSessionRoutingStore,
+    private readonly sessionLinks: OpenCodeWebLinkService
   ) {}
 
   @UseGuards(AdminHeaderGuard)
@@ -61,6 +63,26 @@ export class TelegramSessionController {
       }));
 
       return { ok: true, projectSlug: result.projectSlug, sessions };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new BadRequestException(message);
+    }
+  }
+
+  @UseGuards(AdminHeaderGuard)
+  @Get("session/current-link")
+  public async getCurrentSessionLink(@Req() req: Request) {
+    /* Return best-effort OpenCode UI deep-link for the currently selected project session. */
+    const adminId = (req as any).authAdminId as number | undefined;
+    if (!adminId) {
+      throw new BadRequestException("Admin identity missing");
+    }
+
+    try {
+      return {
+        ok: true,
+        context: await this.sessionLinks.getCurrentSessionLink(adminId)
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       throw new BadRequestException(message);

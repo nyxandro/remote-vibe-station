@@ -24,8 +24,6 @@ type OpenCodeBusEvent = {
 
 const BASH_PROGRESS_MAX_CHARS = 2600;
 const BASH_PROGRESS_MIN_INTERVAL_MS = 1000;
-const TEXT_DRAFT_MAX_CHARS = 3900;
-const TEXT_PROGRESS_MIN_INTERVAL_MS = 1400;
 const BASH_NOISE_PROBE_COMMAND = /^(node|npm|pnpm|yarn|bun|python|python3)\s+(-v|--version)$/i;
 const QUESTION_CALLBACK_PREFIX = "q";
 const PERMISSION_CALLBACK_PREFIX = "perm";
@@ -62,7 +60,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressEmittedAtMs = new Map<string, number>();
   private readonly bashProgressKeyByPart = new Map<string, string>();
   private readonly assistantTextByPart = new Map<string, string>();
-  private readonly assistantProgressEmittedAtMs = new Map<string, number>();
   private readonly assistantTextBySession = new Map<string, string>();
   private readonly partTypeById = new Map<string, string>();
   private readonly partIdsBySession = new Map<string, Set<string>>();
@@ -103,8 +100,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     const eventType = String(parsed.type ?? eventName ?? "");
-    // eslint-disable-next-line no-console
-    console.log(`[telegram-bridge] eventType=${eventType || "<empty>"}`);
     const properties =
       parsed.properties && typeof parsed.properties === "object"
         ? (parsed.properties as Record<string, unknown>)
@@ -164,7 +159,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     /* OpenCode commentary between tools should become separate Telegram text messages, not one endless edited draft. */
     if (partType !== "text") {
-      this.closeAssistantStreamSegment(route.adminId, sessionID);
+      this.closeAssistantStreamSegment(sessionID);
     }
 
     if (partType === "reasoning") {
@@ -255,7 +250,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   }
 
   private handleMessagePartDelta(properties: Record<string, unknown>): void {
-    /* Stream only assistant text-part deltas; ignore reasoning/tool and unrelated fields. */
+    /* Buffer only assistant text-part deltas; final plain messages are delivered via opencode.message event. */
     const sessionID = String(properties.sessionID ?? "").trim();
     if (!sessionID) {
       return;
@@ -281,37 +276,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     const partKey = this.buildAssistantPartKey(route.adminId, sessionID, partID);
     const nextPartText = `${this.assistantTextByPart.get(partKey) ?? ""}${delta}`;
     const sessionText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
-    const normalizedSessionText = this.normalizeAssistantStreamText(sessionText);
-    const streamKey = this.buildAssistantStreamKey(route.adminId, sessionID);
-    const nowMs = Date.now();
-    const lastEmittedAtMs = this.assistantProgressEmittedAtMs.get(streamKey) ?? 0;
-    const shouldEmit = lastEmittedAtMs === 0 || nowMs - lastEmittedAtMs >= TEXT_PROGRESS_MIN_INTERVAL_MS;
-
     /* Forward important runtime/system notices even when stream mode is disabled. */
     this.enqueueSystemNotifications({ sessionID, adminId: route.adminId, text: sessionText });
 
     this.assistantTextByPart.set(partKey, nextPartText);
     this.assistantTextBySession.set(sessionID, sessionText);
-
-    if (!shouldEmit) {
-      return;
-    }
-
-    this.outbox.enqueueAssistantStreamDelta({
-      adminId: route.adminId,
-      sessionId: sessionID,
-      text: normalizedSessionText
-    });
-    this.assistantProgressEmittedAtMs.set(streamKey, nowMs);
-  }
-
-  private normalizeAssistantStreamText(text: string): string {
-    /* Keep streamed preview within Telegram text limits while preserving the newest output tail. */
-    if (text.length <= TEXT_DRAFT_MAX_CHARS) {
-      return text;
-    }
-
-    return `...\n${text.slice(text.length - (TEXT_DRAFT_MAX_CHARS - 4))}`;
   }
 
   private resolveBashProgressKey(input: {
@@ -404,34 +373,41 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       this.partIdsBySession.delete(sessionID);
     }
 
-    for (const key of this.assistantProgressEmittedAtMs.keys()) {
-      if (key.includes(`:${sessionID}:`)) {
-        this.assistantProgressEmittedAtMs.delete(key);
-      }
-    }
   }
 
-  private buildAssistantStreamKey(adminId: number, sessionID: string): string {
-    /* Throttle live preview per session turn so rotated part ids do not fragment Telegram messages. */
-    return `assistant-stream:${adminId}:${sessionID}:live`;
-  }
-
-  private closeAssistantStreamSegment(adminId: number, sessionID: string): void {
-    /* Non-text runtime activity marks a new assistant commentary block, so the next text delta must start fresh. */
-    const streamKey = this.buildAssistantStreamKey(adminId, sessionID);
+  private closeAssistantStreamSegment(sessionID: string): void {
+    /* Non-text runtime activity marks a new assistant commentary block, so flush buffered text and restart. */
+    this.flushAssistantCommentarySegment(sessionID);
     const hadBufferedText = (this.assistantTextBySession.get(sessionID) ?? "").length > 0;
     this.outbox.closeAssistantProgress({ sessionId: sessionID });
-    if (!hadBufferedText && !this.assistantProgressEmittedAtMs.has(streamKey)) {
+    if (!hadBufferedText) {
       return;
     }
 
     this.assistantTextBySession.delete(sessionID);
-    this.assistantProgressEmittedAtMs.delete(streamKey);
     for (const key of this.assistantTextByPart.keys()) {
       if (key.includes(`:${sessionID}:`)) {
         this.assistantTextByPart.delete(key);
       }
     }
+  }
+
+  private flushAssistantCommentarySegment(sessionID: string): void {
+    /* Intermediate assistant text must be delivered as its own Telegram message before tools/questions continue. */
+    const buffered = String(this.assistantTextBySession.get(sessionID) ?? "");
+    if (!buffered.trim()) {
+      return;
+    }
+
+    const route = this.routes.resolve(sessionID);
+    if (!route) {
+      return;
+    }
+
+    this.outbox.enqueueAssistantCommentary({
+      adminId: route.adminId,
+      text: buffered
+    });
   }
 
   private buildAssistantPartKey(adminId: number, sessionID: string, partID: string): string {
@@ -654,7 +630,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     /* Question pause means no active thinking spinner until user choice. */
     this.setThinking(route.adminId, sessionID, false);
-    this.closeAssistantStreamSegment(route.adminId, sessionID);
+    this.closeAssistantStreamSegment(sessionID);
 
     /* Preserve the whole questionnaire because Telegram may need to walk through several consecutive steps. */
     const questions = Array.isArray(properties.questions)
@@ -726,11 +702,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    // eslint-disable-next-line no-console
-    console.log(
-      `[telegram-permission] received permission event session=${normalized.sessionID} permission=${normalized.permissionID}`
-    );
-
     const route = this.routes.resolve(normalized.sessionID);
     if (!route) {
       // eslint-disable-next-line no-console
@@ -742,7 +713,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     /* Permission pause means no active typing indicator until user choice. */
     this.setThinking(route.adminId, normalized.sessionID, false);
-    this.closeAssistantStreamSegment(route.adminId, normalized.sessionID);
+    this.closeAssistantStreamSegment(normalized.sessionID);
 
     const routeID = `${normalized.sessionID}:${normalized.permissionID}`;
     const token = this.routes.bindPermission({
@@ -774,10 +745,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       replyMarkup: { inlineKeyboard: keyboard }
     });
 
-    // eslint-disable-next-line no-console
-    console.log(
-      `[telegram-permission] enqueued admin=${route.adminId} session=${normalized.sessionID} permission=${normalized.permissionID}`
-    );
   }
 
   private normalizePermissionPayload(properties: Record<string, unknown>): {

@@ -211,6 +211,26 @@ export class TelegramOutboxService {
     this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
   }
 
+  public enqueueAssistantCommentary(input: { adminId: number; text: string }): void {
+    /* Commentary blocks between tools should appear as fresh chat messages, not progress edits. */
+    const binding = this.streamStore.get(input.adminId);
+    if (!binding) {
+      return;
+    }
+
+    const chunks = splitTelegramTextWithFooter(input.text, "");
+    chunks.forEach((chunk) => {
+      /* Keep commentary silent because it is operational stream output, not a direct mention-worthy ping. */
+      this.outbox.enqueue({
+        adminId: input.adminId,
+        chatId: binding.chatId,
+        text: renderTelegramHtmlFromMarkdown(chunk),
+        parseMode: "HTML",
+        disableNotification: true
+      });
+    });
+  }
+
   public enqueueAssistantStreamDelta(input: { adminId: number; sessionId: string; text: string; progressKey?: string }): void {
     /* Route one assistant delta into the currently active live Telegram message for this response. */
     const progressKey = this.resolveAssistantProgressKey({

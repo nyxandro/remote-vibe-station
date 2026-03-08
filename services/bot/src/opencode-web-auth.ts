@@ -6,6 +6,7 @@
  * - IssueMagicLinkInput (L41) - Input for short-lived Telegram-issued link generation.
  * - ExchangeMagicLinkInput (L45) - Input for link exchange into device session.
  * - VerifySessionInput (L50) - Input for cookie session validation.
+ * - ExchangeMagicLinkResult (L64) - Session payload returned after successful token exchange.
  * - ACTIVE_SESSION_GRACE_MS (L67) - Post-expiry grace while an active browser keeps sending traffic.
  * - OpenCodeWebAuthService (L67) - Persistent auth state service (tokens + sessions).
  */
@@ -25,6 +26,7 @@ type WebAuthTokenRecord = {
   adminId: number;
   expiresAt: number;
   usedAt?: number;
+  redirectPath?: string;
 };
 
 type WebAuthSessionRecord = {
@@ -49,6 +51,7 @@ export type OpenCodeWebAuthServiceOptions = {
 
 export type IssueMagicLinkInput = {
   adminId: number;
+  redirectPath?: string;
 };
 
 export type ExchangeMagicLinkInput = {
@@ -64,7 +67,10 @@ export type VerifySessionInput = {
 export type ExchangeMagicLinkResult = {
   sessionId: string;
   adminId: number;
+  redirectPath: string | null;
 };
+
+const SAFE_REDIRECT_PATH_REGEX = /^\/[A-Za-z0-9/_-]*$/;
 
 const EMPTY_STATE: WebAuthState = {
   tokens: [],
@@ -100,13 +106,15 @@ export class OpenCodeWebAuthService {
     const token = this.generateOpaqueToken();
     const tokenHash = this.hashValue(token);
     const nowMs = this.now();
+    const redirectPath = this.normalizeRedirectPath(input.redirectPath);
 
     await this.withLockedState(async (state) => {
       this.pruneExpiredState(state, nowMs);
       state.tokens.push({
         tokenHash,
         adminId: input.adminId,
-        expiresAt: nowMs + this.linkTtlMs
+        expiresAt: nowMs + this.linkTtlMs,
+        ...(redirectPath ? { redirectPath } : {})
       });
     });
 
@@ -152,7 +160,8 @@ export class OpenCodeWebAuthService {
 
       return {
         sessionId,
-        adminId: tokenRecord.adminId
+        adminId: tokenRecord.adminId,
+        redirectPath: this.normalizeRedirectPath(tokenRecord.redirectPath)
       };
     });
   }
@@ -272,5 +281,23 @@ export class OpenCodeWebAuthService {
   private generateOpaqueToken(): string {
     /* Generate URL-safe random identifiers for links and sessions. */
     return crypto.randomBytes(TOKEN_BYTE_LENGTH).toString("base64url");
+  }
+
+  private normalizeRedirectPath(rawPath?: string): string | null {
+    /* Persist only same-origin absolute paths so exchange cannot become an open redirect. */
+    if (typeof rawPath !== "string") {
+      return null;
+    }
+
+    const trimmed = rawPath.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (!SAFE_REDIRECT_PATH_REGEX.test(trimmed) || trimmed.startsWith("//")) {
+      return null;
+    }
+
+    return trimmed;
   }
 }

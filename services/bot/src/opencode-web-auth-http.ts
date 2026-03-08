@@ -52,7 +52,8 @@ export const registerOpenCodeWebAuthHttp = (options: OpenCodeWebAuthHttpOptions)
         cookieDomain: options.cookieDomain
       });
 
-      response.redirect(302, DEFAULT_REDIRECT_PATH);
+      /* Deep-link into the exact OpenCode thread when Telegram issued contextual access token. */
+      response.redirect(302, session.redirectPath ?? DEFAULT_REDIRECT_PATH);
     } catch {
       response.status(401).send("Magic link is invalid or expired");
     }

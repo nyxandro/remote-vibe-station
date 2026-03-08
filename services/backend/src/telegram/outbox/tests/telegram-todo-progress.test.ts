@@ -31,6 +31,7 @@ const makeBridge = () => {
   const outbox = {
     enqueueAssistantStreamDelta: jest.fn(),
     enqueueProgressReplace: jest.fn(),
+    closeAssistantProgress: jest.fn(),
     enqueueThinkingControl: jest.fn(),
     enqueueStreamNotification: jest.fn(),
     enqueueAdminNotification: jest.fn()

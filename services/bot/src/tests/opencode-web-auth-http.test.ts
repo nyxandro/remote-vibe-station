@@ -14,7 +14,11 @@ describe("registerOpenCodeWebAuthHttp", () => {
     registerOpenCodeWebAuthHttp({
       app,
       service: {
-        exchangeMagicLink: jest.fn(async () => ({ sessionId: "sid-1", adminId: 7 })),
+        exchangeMagicLink: jest.fn(async () => ({
+          sessionId: "sid-1",
+          adminId: 7,
+          redirectPath: "/project/demo/session/session-1"
+        })),
         verifySession: jest.fn()
       } as unknown as OpenCodeWebAuthService,
       cookieName: "opencode_sid",
@@ -32,12 +36,43 @@ describe("registerOpenCodeWebAuthHttp", () => {
       });
 
       expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe("/project/demo/session/session-1");
       const cookie = response.headers.get("set-cookie") ?? "";
       expect(cookie).toContain("HttpOnly");
       expect(cookie).toContain("Secure");
       expect(cookie).toContain("SameSite=Strict");
       expect(cookie).toContain("Domain=code.example.com");
       expect(cookie).not.toContain("Max-Age");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  test("falls back to root redirect when exchange returns no session path", async () => {
+    /* Legacy tokens without session context must still open the OpenCode home page. */
+    const app = express();
+    registerOpenCodeWebAuthHttp({
+      app,
+      service: {
+        exchangeMagicLink: jest.fn(async () => ({ sessionId: "sid-1", adminId: 7, redirectPath: null })),
+        verifySession: jest.fn()
+      } as unknown as OpenCodeWebAuthService,
+      cookieName: "opencode_sid",
+      cookieDomain: "code.example.com"
+    });
+
+    const server = app.listen(0);
+    const port = (server.address() as any).port as number;
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/opencode-auth/exchange?token=t1`, {
+        headers: {
+          "user-agent": "jest-agent"
+        },
+        redirect: "manual"
+      });
+
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe("/");
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

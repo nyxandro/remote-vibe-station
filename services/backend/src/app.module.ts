@@ -14,6 +14,7 @@ import { OpenCodeClient } from "./open-code/opencode-client";
 import { OpenCodeEventsService } from "./open-code/opencode-events.service";
 import { OpenCodeProviderAuthClient } from "./open-code/opencode-provider-auth.client";
 import { OpenCodeSessionRoutingStore } from "./open-code/opencode-session-routing.store";
+import { OpenCodeWebLinkService } from "./open-code/opencode-web-link.service";
 import { OpenCodeController } from "./opencode/opencode.controller";
 import { OpenCodeProjectSyncService } from "./opencode/opencode-project-sync.service";
 import { OpenCodeSettingsService } from "./opencode/opencode-settings.service";
@@ -93,6 +94,7 @@ import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
     OpenCodeProviderAuthClient,
     OpenCodeEventsService,
     OpenCodeSessionRoutingStore,
+    OpenCodeWebLinkService,
     PromptService,
     ProjectsService,
     ProjectRegistry,

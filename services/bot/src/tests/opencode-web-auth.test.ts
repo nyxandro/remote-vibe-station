@@ -48,7 +48,10 @@ describe("OpenCodeWebAuthService", () => {
   it("issues one-time magic link and consumes it exactly once", async () => {
     /* Link should be valid for first exchange and rejected on replay. */
     const service = createService();
-    const token = await service.issueMagicLink({ adminId: 777 });
+    const token = await service.issueMagicLink({
+      adminId: 777,
+      redirectPath: "/project/demo/session/session-1"
+    });
 
     const session = await service.exchangeMagicLink({
       token,
@@ -56,6 +59,7 @@ describe("OpenCodeWebAuthService", () => {
     });
 
     expect(session.adminId).toBe(777);
+    expect(session.redirectPath).toBe("/project/demo/session/session-1");
     await expect(
       service.exchangeMagicLink({
         token,
@@ -150,5 +154,21 @@ describe("OpenCodeWebAuthService", () => {
       fingerprint: "Mozilla/5.0|203.0.113"
     });
     expect(expiredAfterSilence).toBeNull();
+  });
+
+  it("drops unsafe redirect path and falls back to root redirect", async () => {
+    /* Absolute URLs must never survive token exchange to avoid open redirects. */
+    const service = createService();
+    const token = await service.issueMagicLink({
+      adminId: 777,
+      redirectPath: "https://evil.example.com/phish"
+    });
+
+    const session = await service.exchangeMagicLink({
+      token,
+      fingerprint: "Mozilla/5.0|203.0.113"
+    });
+
+    expect(session.redirectPath).toBeNull();
   });
 });

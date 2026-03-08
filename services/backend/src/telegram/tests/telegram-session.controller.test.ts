@@ -30,6 +30,14 @@ describe("TelegramSessionController", () => {
       selectSession: jest.fn().mockResolvedValue({ projectSlug: "arena", sessionID: "session-1" })
     };
 
+    const sessionLinks = {
+      getCurrentSessionLink: jest.fn().mockResolvedValue({
+        projectSlug: "arena",
+        sessionID: "session-1",
+        redirectPath: "/project/derived-project/session/session-1"
+      })
+    };
+
     const sessionRouting = {
       bindSession: jest.fn().mockReturnValue("tok-1"),
       resolveSessionToken: jest.fn().mockReturnValue({
@@ -40,8 +48,8 @@ describe("TelegramSessionController", () => {
       consumeSessionToken: jest.fn()
     };
 
-    const controller = new TelegramSessionController(prompts as never, sessionRouting as never);
-    return { controller, prompts, sessionRouting };
+    const controller = new TelegramSessionController(prompts as never, sessionRouting as never, sessionLinks as never);
+    return { controller, prompts, sessionRouting, sessionLinks };
   };
 
   test("starts new session", async () => {
@@ -94,5 +102,22 @@ describe("TelegramSessionController", () => {
     expect(prompts.selectSession).toHaveBeenCalledWith({ adminId: 649624756, sessionID: "session-1" });
     expect(sessionRouting.consumeSessionToken).toHaveBeenCalledWith("tok-1");
     expect(result).toEqual({ ok: true, projectSlug: "arena", sessionID: "session-1" });
+  });
+
+  test("returns current deep-link context for active project session", async () => {
+    /* Bot /access should be able to request one URL that opens the exact current thread. */
+    const { controller, sessionLinks } = buildController();
+
+    const result = await controller.getCurrentSessionLink({ authAdminId: 649624756 } as unknown as Request);
+
+    expect(sessionLinks.getCurrentSessionLink).toHaveBeenCalledWith(649624756);
+    expect(result).toEqual({
+      ok: true,
+      context: {
+        projectSlug: "arena",
+        sessionID: "session-1",
+        redirectPath: "/project/derived-project/session/session-1"
+      }
+    });
   });
 });

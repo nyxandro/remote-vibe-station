@@ -19,6 +19,33 @@ const readItems = (): any[] => {
 };
 
 describe("TelegramOutboxService", () => {
+  test("sends assistant commentary as a fresh Telegram message without progress replace", () => {
+    /* Commentary between tools must create a new chat message instead of editing the previous one. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, true);
+
+      const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
+      service.enqueueAssistantCommentary({ adminId: 1, text: "**Готово**\n\nПроверил конфиг." });
+
+      const assistantItems = readItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(assistantItems[0].mode).toBeUndefined();
+      expect(assistantItems[0].progressKey).toBeUndefined();
+      expect(assistantItems[0].parseMode).toBe("HTML");
+      expect(assistantItems[0].text).toContain("Готово");
+      expect(assistantItems[0].text).toContain("Проверил конфиг.");
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test("reuses explicit stream progress key for final assistant reply", () => {
     /* Final answer must replace the latest streamed part message instead of reopening an older session-wide one. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
