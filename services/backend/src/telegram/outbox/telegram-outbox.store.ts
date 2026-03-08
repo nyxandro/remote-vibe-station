@@ -106,28 +106,35 @@ export class TelegramOutboxStore {
       );
 
       if (existing) {
-        existing.text = input.text;
-        existing.parseMode = input.parseMode;
-        existing.disableNotification = input.disableNotification;
-        existing.control = input.control;
-        existing.replyMarkup = input.replyMarkup;
-        existing.inFlightBy = undefined;
-        existing.inFlightUntil = undefined;
-        existing.nextAttemptAt = now;
+        const existingLeaseMs = parseIso(existing.inFlightUntil);
+        const existingInFlight = existingLeaseMs > nowMs;
 
-        /* Drop older duplicate pending snapshots for the same live progress slot. */
-        file.items = file.items.filter(
-          (item) =>
-            item.id === existing.id ||
-            item.status !== "pending" ||
-            item.adminId !== input.adminId ||
-            item.chatId !== input.chatId ||
-            item.mode !== input.mode ||
-            item.progressKey !== input.progressKey
-        );
+        /* Once a worker already pulled the old snapshot, preserve that id and queue a fresh pending update separately. */
+        if (!existingInFlight) {
+          existing.text = input.text;
+          existing.parseMode = input.parseMode;
+          existing.disableNotification = input.disableNotification;
+          existing.control = input.control;
+          existing.replyMarkup = input.replyMarkup;
+          existing.inFlightBy = undefined;
+          existing.inFlightUntil = undefined;
+          existing.nextAttemptAt = now;
 
-        this.writeAll(file);
-        return existing;
+          /* Drop older duplicate pending snapshots for the same live progress slot. */
+          file.items = file.items.filter(
+            (item) =>
+              item.id === existing.id ||
+              item.status !== "pending" ||
+              item.adminId !== input.adminId ||
+              item.chatId !== input.chatId ||
+              item.mode !== input.mode ||
+              item.progressKey !== input.progressKey ||
+              parseIso(item.inFlightUntil) > nowMs
+          );
+
+          this.writeAll(file);
+          return existing;
+        }
       }
     }
 

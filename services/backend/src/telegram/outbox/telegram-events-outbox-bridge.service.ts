@@ -110,6 +110,24 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       this.outbox.enqueueAdminNotification({ adminId, text: lines.join("\n") });
       return;
     }
+
+    if (event.type === "opencode.session.started") {
+      /* Auto-started sessions must be explicit in Telegram to prevent writing into the wrong thread by mistake. */
+      const adminId = this.extractAdminId(event);
+      if (!adminId) {
+        return;
+      }
+
+      const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
+      if (!projectSlug) {
+        return;
+      }
+
+      this.outbox.enqueueAdminNotification({
+        adminId,
+        text: `🆕 Начата новая сессия (проект: ${projectSlug}).`
+      });
+    }
   }
 
   private extractAdminId(event: EventEnvelope): number | null {

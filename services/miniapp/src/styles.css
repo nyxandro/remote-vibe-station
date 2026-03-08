@@ -628,9 +628,26 @@ html[data-theme="dark"] .project-card.active {
 .file-name {
   font-size: 13px;
   color: #1c2230;
+   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-width: fit-content;
+  margin-left: auto;
+}
+
+.file-size {
+  font-size: 12px;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 

@@ -139,10 +139,39 @@ describe("ProvidersTab", () => {
     expect(screen.getByText("Токены: 1,450")).toBeTruthy();
     expect(screen.getByText("Ошибки: 1")).toBeTruthy();
     expect(screen.getByText(/Относительная активность:/)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: /Относительная активность для codex-user@example.com/i })).toBeTruthy();
+    expect(screen.getByText("Активность 100% · осталось 0%")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
 
     expect(props.onStartCliproxyAuth).toHaveBeenCalledWith("codex");
+  });
+
+  it("marks long CLIProxy detail lines as wrapping-safe content", () => {
+    /* Long provider diagnostics must stay inside the card instead of stretching the layout horizontally. */
+    const longDetail =
+      '{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"free","resets_at":1773387976}}';
+
+    renderProvidersTab({
+      selected: {
+        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+        thinking: "high",
+        agent: "build"
+      },
+      cliproxyAccounts: {
+        ...cliproxyAccountsFixture,
+        accounts: [
+          {
+            ...cliproxyAccountsFixture.accounts[0],
+            statusMessage: longDetail
+          }
+        ]
+      },
+      proxySnapshot: proxySnapshotFixture
+    });
+
+    const detail = screen.getByText(longDetail);
+    expect(detail.className).toContain("providers-account-detail");
   });
 
   it("shows activate action for disabled CLIProxy account and forwards selection", () => {

@@ -37,6 +37,7 @@
   padding: 10px;
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 /* Place provider name and connection badge in one line. */
@@ -50,6 +51,57 @@
 /* Prioritize provider name readability over secondary elements. */
 .providers-item-name {
   font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Long account diagnostics must wrap inside the card on narrow mobile widths. */
+.providers-account-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Usage block groups the explanatory line and the custom progress meter. */
+.providers-usage-block {
+  display: grid;
+  gap: 6px;
+}
+
+/* Native progress styling differs by browser/theme, so render one deterministic full-width meter. */
+.providers-usage-meter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid #b7c8ee;
+  background: linear-gradient(180deg, #e8f0ff 0%, #d7e5ff 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* Fill grows across the full card width and stays visually consistent for every account row. */
+.providers-usage-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(135deg, #2f7cff 0%, #1247b8 100%);
+  border-radius: inherit;
+}
+
+/* Center the activity summary above the fill so the percentage stays readable at any width. */
+.providers-usage-meter-text {
+  position: relative;
+  z-index: 1;
+  padding: 0 14px;
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #0d1b39;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 /* Default badge palette for disconnected state. */
@@ -143,4 +195,21 @@ html[data-theme="dark"] .providers-badge.connected {
   border-color: #1d5f4c;
   background: #113128;
   color: #9ff0ce;
+}
+
+/* Dark theme keeps the custom meter saturated and the label readable above the fill. */
+html[data-theme="dark"] .providers-usage-meter {
+  border-color: #355284;
+  background: linear-gradient(180deg, #1b2740 0%, #18243a 100%);
+}
+
+/* Brighter fill preserves contrast against the dark card background. */
+html[data-theme="dark"] .providers-usage-meter-fill {
+  background: linear-gradient(135deg, #5ea1ff 0%, #2a67e0 100%);
+}
+
+/* Light text keeps the meter label readable in dark theme regardless of fill width. */
+html[data-theme="dark"] .providers-usage-meter-text {
+  color: #eef4ff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }

@@ -124,8 +124,6 @@ describe("TelegramOutboxStore", () => {
       nowMs: t0
     });
 
-    store.pull({ adminId: 5, limit: 1, workerId: "w5", nowMs: t0 });
-
     const second = store.enqueue({
       adminId: 5,
       chatId: 50,
@@ -141,6 +139,41 @@ describe("TelegramOutboxStore", () => {
     expect(json.items[0].text).toBe("two");
     expect(json.items[0].inFlightBy).toBeUndefined();
     expect(second.id).toBe(first.id);
+  });
+
+  it("keeps a fresh pending replace snapshot when previous progress item is already in flight", () => {
+    /* Stream updates that arrive after pull must not be overwritten by the first successful report. */
+    const store = new TelegramOutboxStore();
+    const t0 = Date.parse("2026-02-05T00:00:00.000Z");
+
+    const first = store.enqueue({
+      adminId: 6,
+      chatId: 60,
+      text: "H",
+      mode: "replace",
+      progressKey: "assistant:6:session-1:1",
+      nowMs: t0
+    });
+
+    store.pull({ adminId: 6, limit: 1, workerId: "w6", nowMs: t0 });
+
+    const second = store.enqueue({
+      adminId: 6,
+      chatId: 60,
+      text: "Hello, world",
+      mode: "replace",
+      progressKey: "assistant:6:session-1:1",
+      nowMs: t0 + 1
+    });
+
+    const json = readFileJson();
+    expect(json.items).toHaveLength(2);
+    expect(first.id).not.toBe(second.id);
+    expect(json.items[0].id).toBe(first.id);
+    expect(json.items[0].inFlightBy).toBe("w6");
+    expect(json.items[1].id).toBe(second.id);
+    expect(json.items[1].text).toBe("Hello, world");
+    expect(json.items[1].inFlightBy).toBeUndefined();
   });
 
   it("prunes delivered history and old dead letters", () => {

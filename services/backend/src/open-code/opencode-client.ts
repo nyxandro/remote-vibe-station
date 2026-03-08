@@ -56,6 +56,12 @@ type OpenCodeProvidersResponse = {
   connected?: string[];
   default?: Record<string, string>;
 };
+
+export type SessionResolution = {
+  sessionID: string;
+  isNew: boolean;
+  reason: "existing" | "missing" | "busy-rotated";
+};
 @Injectable()
 export class OpenCodeClient {
   private readonly sessionIdsByDirectory = new Map<string, string>();
@@ -70,7 +76,7 @@ export class OpenCodeClient {
       directory: string;
       model?: OpenCodeExecutionModel;
       agent?: string | null;
-      onSessionResolved?: (sessionID: string) => void;
+      onSessionResolved?: (sessionID: string, resolution: SessionResolution) => void;
     }
   ): Promise<PromptResult> {
     /* Delegate simple text prompts to the general multipart sender. */
@@ -83,7 +89,7 @@ export class OpenCodeClient {
       directory: string;
       model?: OpenCodeExecutionModel;
       agent?: string | null;
-      onSessionResolved?: (sessionID: string) => void;
+      onSessionResolved?: (sessionID: string, resolution: SessionResolution) => void;
     }
   ): Promise<PromptResult> {
     /* Fail fast before touching session state when caller produced an empty multipart payload. */
@@ -92,15 +98,15 @@ export class OpenCodeClient {
     }
 
     /* Ensure a session exists for the target directory. */
-    const sessionId = await this.ensureSession(input.directory);
-    input.onSessionResolved?.(sessionId);
+    const session = await this.ensureSession(input.directory);
+    input.onSessionResolved?.(session.sessionID, session);
 
     /* Use synchronous message endpoint to get parts in one HTTP response. */
     const model = input.model ?? (await this.getDefaultModel());
     const agent = input.agent ?? "build";
 
     const response = await this.request<OpenCodeMessageResponse>(
-      `/session/${sessionId}/message?directory=${encodeURIComponent(input.directory)}`,
+      `/session/${session.sessionID}/message?directory=${encodeURIComponent(input.directory)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -115,7 +121,7 @@ export class OpenCodeClient {
     /* Some multipart prompt flows return 204/empty body while the real answer arrives via runtime events. */
     if (!response) {
       return {
-        sessionId,
+          sessionId: session.sessionID,
         responseText: "",
         emptyResponse: true,
         info: {
@@ -136,7 +142,7 @@ export class OpenCodeClient {
 
     const responseText = this.extractText(response);
     return {
-      sessionId,
+      sessionId: session.sessionID,
       responseText,
       info: {
         providerID: response.info.providerID,
@@ -167,13 +173,16 @@ export class OpenCodeClient {
 
   public async executeCommand(
     input: { command: string; arguments: string[] },
-    context: { directory: string; onSessionResolved?: (sessionID: string) => void }
+    context: {
+      directory: string;
+      onSessionResolved?: (sessionID: string, resolution: SessionResolution) => void;
+    }
   ): Promise<PromptResult> {
     /* Use same directory session map as prompts to keep one conversation history. */
-    const sessionId = await this.ensureSession(context.directory);
-    context.onSessionResolved?.(sessionId);
+    const session = await this.ensureSession(context.directory);
+    context.onSessionResolved?.(session.sessionID, session);
     const response = await this.request<OpenCodeMessageResponse>(
-      `/session/${sessionId}/command?directory=${encodeURIComponent(context.directory)}`,
+      `/session/${session.sessionID}/command?directory=${encodeURIComponent(context.directory)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -186,7 +195,7 @@ export class OpenCodeClient {
 
     const responseText = this.extractText(response);
     return {
-      sessionId,
+      sessionId: session.sessionID,
       responseText,
       info: {
         providerID: response.info.providerID,
@@ -474,14 +483,18 @@ export class OpenCodeClient {
     return this.cachedProvidersResponse;
   }
 
-  private async ensureSession(directory: string): Promise<string> {
+  private async ensureSession(directory: string): Promise<SessionResolution> {
     /* Reuse per-directory session because OpenCode binds workspace to directory. */
     const existing = this.sessionIdsByDirectory.get(directory);
     if (existing) {
       /* Rotate away from stuck busy session to avoid blocking all future prompts. */
       const busy = await this.isSessionBusy(existing, directory);
       if (!busy) {
-        return existing;
+        return {
+          sessionID: existing,
+          isNew: false,
+          reason: "existing"
+        };
       }
 
       await this.request<boolean>(
@@ -489,11 +502,23 @@ export class OpenCodeClient {
         { method: "POST" }
       );
       this.sessionIdsByDirectory.delete(directory);
+
+      /* Return explicit reason so upstream can notify Telegram about the thread reset. */
+      const rotated = await this.createSession({ directory });
+      return {
+        sessionID: rotated.id,
+        isNew: true,
+        reason: "busy-rotated"
+      };
     }
 
     /* Create and cache fresh session when no reusable id exists. */
     const created = await this.createSession({ directory });
-    return created.id;
+    return {
+      sessionID: created.id,
+      isNew: true,
+      reason: "missing"
+    };
   }
 
   private async isSessionBusy(sessionID: string, directory: string): Promise<boolean> {

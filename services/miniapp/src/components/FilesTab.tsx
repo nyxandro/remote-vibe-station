@@ -21,6 +21,40 @@ type Props = {
   onOpenEntry: (nextPath: string, kind: "file" | "dir") => void;
 };
 
+const BYTE_UNIT = 1;
+const KILOBYTE_UNIT = 1024;
+const MEGABYTE_UNIT = 1024 * 1024;
+const GIGABYTE_UNIT = 1024 * 1024 * 1024;
+
+const formatFileSize = (sizeBytes?: number): string | null => {
+  /* Directory rows and unknown metadata should keep the trailing slot empty. */
+  if (!Number.isFinite(sizeBytes) || typeof sizeBytes !== "number" || sizeBytes < 0) {
+    return null;
+  }
+
+  /* Byte values stay integer to avoid noisy decimals for tiny files. */
+  if (sizeBytes < KILOBYTE_UNIT) {
+    return `${Math.round(sizeBytes / BYTE_UNIT)} B`;
+  }
+
+  /* Format larger units with at most one decimal so the list stays compact on mobile. */
+  const formatCompactUnit = (value: number, unit: "KB" | "MB" | "GB"): string => {
+    const rounded = Math.round(value * 10) / 10;
+    const normalized = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    return `${normalized} ${unit}`;
+  };
+
+  if (sizeBytes < MEGABYTE_UNIT) {
+    return formatCompactUnit(sizeBytes / KILOBYTE_UNIT, "KB");
+  }
+
+  if (sizeBytes < GIGABYTE_UNIT) {
+    return formatCompactUnit(sizeBytes / MEGABYTE_UNIT, "MB");
+  }
+
+  return formatCompactUnit(sizeBytes / GIGABYTE_UNIT, "GB");
+};
+
 export const FilesTab = (props: Props) => {
   /* Disable parent navigation when explorer is already at project root. */
   const normalizedPath = props.filePath.trim().replace(/^\/+|\/+$/g, "");
@@ -61,6 +95,7 @@ export const FilesTab = (props: Props) => {
                 key={`${e.kind}:${e.name}`}
                 className={e.kind === "dir" ? "file-item dir" : "file-item"}
                 onClick={() => {
+                  /* Compose next path without duplicating slashes when navigating deep folders. */
                   const base = props.filePath.trim();
                   const next = !base ? e.name : base === "/" ? `/${e.name}` : `${base.replace(/\/+$/, "")}/${e.name}`;
                   props.onOpenEntry(next, e.kind);
@@ -68,7 +103,10 @@ export const FilesTab = (props: Props) => {
               >
                 <span className="file-icon">{props.iconForEntry(e.name, e.kind)}</span>
                 <span className="file-name">{e.name}</span>
-                {e.kind === "dir" ? <FolderOpen size={16} className="icon hint" /> : null}
+                <span className="file-trailing">
+                  {e.kind === "file" ? <span className="file-size">{formatFileSize(e.sizeBytes)}</span> : null}
+                  {e.kind === "dir" ? <FolderOpen size={16} className="icon hint" /> : null}
+                </span>
               </button>
             ))
           ) : (

@@ -266,6 +266,7 @@ export type OpenCodeVersionUpdateResult = {
 export type FileEntry = {
   name: string;
   kind: "file" | "dir";
+  sizeBytes?: number;
 };
 
 export type FileListResponse = {

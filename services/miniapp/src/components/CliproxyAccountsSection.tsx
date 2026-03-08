@@ -83,6 +83,11 @@ export const CliproxyAccountsSection = (props: Props) => {
     return Math.max(0, Math.min(100, Math.round((account.usage.tokenCount / maxTrackedTokens) * 100)));
   };
 
+  const getUsageRemainingPercent = (account: CliproxyAccountState["accounts"][number]): number => {
+    /* We show the remaining gap to the busiest account because Mini App has no real provider quota limit. */
+    return Math.max(0, 100 - getUsageActivityPercent(account));
+  };
+
   return (
     <div className="providers-auth-card">
       {/* CLIProxy onboarding and account steering stay together so operators manage one pool in one place. */}
@@ -106,6 +111,7 @@ export const CliproxyAccountsSection = (props: Props) => {
       <div className="providers-list">
         {props.accounts?.accounts.map((account) => {
           const usagePercent = getUsageActivityPercent(account);
+          const remainingPercent = getUsageRemainingPercent(account);
           return (
             <div key={`cliproxy-account:${account.id}`} className="providers-item-card">
               {/* Status badge must distinguish active, disabled and unavailable accounts at a glance. */}
@@ -117,7 +123,7 @@ export const CliproxyAccountsSection = (props: Props) => {
               </div>
 
               {getCliproxyAccountDetails(account).map((detail) => (
-                <div key={`${account.id}:${detail}`} className="project-create-note">
+                <div key={`${account.id}:${detail}`} className="project-create-note providers-account-detail">
                   {detail}
                 </div>
               ))}
@@ -133,12 +139,28 @@ export const CliproxyAccountsSection = (props: Props) => {
                 <div className="project-create-note">Модели: {account.usage.models.join(", ")}</div>
               ) : null}
               {props.accounts?.usageTrackingEnabled ? (
-                <>
+                <div className="providers-usage-block">
                   <div className="project-create-note">
                     Относительная активность: {usagePercent}% от самого активного аккаунта
                   </div>
-                  <progress max={100} value={usagePercent} />
-                </>
+                  <div
+                    className="providers-usage-meter"
+                    role="progressbar"
+                    aria-label={`Относительная активность для ${account.name}`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={usagePercent}
+                    aria-valuetext={`Активность ${usagePercent}%, осталось ${remainingPercent}%`}
+                  >
+                    <div
+                      className="providers-usage-meter-fill"
+                      style={{ width: `${usagePercent}%` }}
+                    />
+                    <span className="providers-usage-meter-text">
+                      Активность {usagePercent}% · осталось {remainingPercent}%
+                    </span>
+                  </div>
+                </div>
               ) : null}
 
               {/* Account actions stay explicit because activation disables same-provider siblings on the backend. */}

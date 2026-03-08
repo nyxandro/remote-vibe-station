@@ -19,6 +19,7 @@ const MAX_TEXT_BYTES = 256 * 1024;
 export type FileEntry = {
   name: string;
   kind: "file" | "dir";
+  sizeBytes?: number;
 };
 
 @Injectable()
@@ -49,6 +50,14 @@ export class ProjectFilesService {
       .map((e): FileEntry => {
         /* Keep literal union type for kind to satisfy TS. */
         const kind: FileEntry["kind"] = e.isDirectory() ? "dir" : "file";
+
+        /* File list rows expose byte size only for files so Mini App can render human-readable sizes. */
+        if (kind === "file") {
+          const entryPath = path.join(abs, e.name);
+          const entryStat = fs.statSync(entryPath);
+          return { name: e.name, kind, sizeBytes: entryStat.size };
+        }
+
         return { name: e.name, kind };
       })
       .sort((a, b) => {

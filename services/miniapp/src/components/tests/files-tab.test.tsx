@@ -74,4 +74,37 @@ describe("FilesTab", () => {
     expect(screen.getByText("src/App.tsx")).toBeTruthy();
     expect(container.querySelector(".files-preview-body .codebox")).toBeTruthy();
   });
+
+  it("renders human-readable file sizes for files only", () => {
+    /* Explorer rows should expose compact sizes without showing fake sizes for directories. */
+    render(
+      <FilesTab
+        activeId="demo"
+        filePath="docs"
+        fileList={{
+          rootPath: "/workspace/demo",
+          path: "docs",
+          entries: [
+            { name: "guides", kind: "dir" },
+            { name: "tiny.txt", kind: "file", sizeBytes: 999 },
+            { name: "notes.md", kind: "file", sizeBytes: 1536 },
+            { name: "spec.pdf", kind: "file", sizeBytes: 2_621_440 },
+            { name: "archive.tar", kind: "file", sizeBytes: 3_221_225_472 }
+          ]
+        }}
+        filePreview={null}
+        filePreviewHtml=""
+        iconForEntry={() => <span />}
+        onUp={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenEntry={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("guides")).toBeTruthy();
+    expect(screen.queryByText("999 B")).toBeTruthy();
+    expect(screen.queryByText("1.5 KB")).toBeTruthy();
+    expect(screen.queryByText("2.5 MB")).toBeTruthy();
+    expect(screen.queryByText("3 GB")).toBeTruthy();
+  });
 });

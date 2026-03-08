@@ -162,4 +162,55 @@ describe("PromptService", () => {
       expect.objectContaining({ type: "opencode.prompt" })
     );
   });
+
+  test("dispatchPromptParts publishes auto session start event when OpenCode creates a new session implicitly", async () => {
+    /* Telegram must warn when a prompt silently lands in a fresh thread instead of the previous session. */
+    const harness = createDispatchHarness();
+    harness.opencode.getModelContextLimit.mockResolvedValue(null);
+    harness.opencode.getModelDisplayName.mockResolvedValue(null);
+    harness.opencode.sendPromptParts.mockImplementation(
+      async (
+        _parts: unknown,
+        options: {
+          onSessionResolved?: (sessionID: string, resolution: { isNew: boolean; reason: string }) => void;
+        }
+      ) => {
+        options.onSessionResolved?.("session-auto", { isNew: true, reason: "busy-rotated" });
+        return {
+          sessionId: "session-auto",
+          responseText: "Готово",
+          info: {
+            providerID: "cliproxy",
+            modelID: "gpt-5",
+            mode: "primary",
+            agent: "build",
+            tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+          },
+          parts: [{ type: "text", text: "Готово" }]
+        };
+      }
+    );
+
+    const result = await harness.service.dispatchPromptParts({
+      adminId: 7,
+      projectSlug: "carousel",
+      directory: "/tmp/carousel",
+      promptTextForTelemetry: "hello",
+      parts: [{ type: "text", text: "hello" }]
+    });
+
+    expect(result.responseText).toBe("Готово");
+    expect(harness.events.publish).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: "opencode.session.started",
+        data: expect.objectContaining({
+          adminId: 7,
+          projectSlug: "carousel",
+          trigger: "busy-rotated",
+          sessionId: "session-auto"
+        })
+      })
+    );
+  });
 });

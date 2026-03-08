@@ -10,7 +10,7 @@ import { Injectable } from "@nestjs/common";
 
 import { EventsService } from "../events/events.service";
 import { OpenCodeCommand, OpenCodeExecutionModel, OpenCodePromptInputPart } from "../open-code/opencode.types";
-import { OpenCodeClient } from "../open-code/opencode-client";
+import { OpenCodeClient, SessionResolution } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
 import { summarizeOpenCodeParts } from "../open-code/opencode-telemetry";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
@@ -124,11 +124,20 @@ export class PromptService {
       directory: input.directory,
       model: execution.model,
       agent: execution.agent,
-      onSessionResolved: (sessionID) => {
+      onSessionResolved: (sessionID, sessionResolution: SessionResolution) => {
         if (input.adminId) {
           this.sessionRouting.bind(sessionID, { adminId: input.adminId, directory: input.directory });
           this.opencodeEvents.watchPermissionOnce({ directory: input.directory, sessionID });
         }
+
+        /* Notify Telegram when OpenCode had to create a fresh session outside explicit /new flow. */
+        this.publishAutoSessionStarted({
+          adminId: input.adminId,
+          projectSlug: input.projectSlug,
+          directory: input.directory,
+          sessionID,
+          resolution: sessionResolution
+        });
       }
     });
 
@@ -195,11 +204,20 @@ export class PromptService {
 
     const result = await this.opencode.executeCommand(input, {
       directory: active.rootPath,
-      onSessionResolved: (sessionID) => {
+      onSessionResolved: (sessionID, sessionResolution: SessionResolution) => {
         if (adminId) {
           this.sessionRouting.bind(sessionID, { adminId, directory: active.rootPath });
           this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID });
         }
+
+        /* Command execution must surface the same session reset warning as plain prompts. */
+        this.publishAutoSessionStarted({
+          adminId,
+          projectSlug: active.slug,
+          directory: active.rootPath,
+          sessionID,
+          resolution: sessionResolution
+        });
       }
     });
     return this.publishMessageResult(result, {
@@ -376,5 +394,30 @@ export class PromptService {
         reasoning: result.info.tokens?.reasoning ?? 0
       }
     };
+  }
+
+  private publishAutoSessionStarted(input: {
+    adminId?: number;
+    projectSlug: string;
+    directory: string;
+    sessionID: string;
+    resolution: SessionResolution;
+  }): void {
+    /* Emit only for implicit fresh sessions so /new keeps a single direct confirmation from the bot. */
+    if (!input.adminId || !input.resolution.isNew) {
+      return;
+    }
+
+    this.events.publish({
+      type: "opencode.session.started",
+      ts: new Date().toISOString(),
+      data: {
+        adminId: input.adminId,
+        projectSlug: input.projectSlug,
+        directory: input.directory,
+        sessionId: input.sessionID,
+        trigger: input.resolution.reason
+      }
+    });
   }
 }
