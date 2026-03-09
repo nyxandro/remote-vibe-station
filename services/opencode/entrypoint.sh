@@ -30,6 +30,13 @@ mkdir -p \
   /toolbox/python-user \
   /toolbox/uv/tools
 
+# Refresh login-shell visibility for toolbox CLIs after persistent volume mounts.
+for target in /toolbox/bin/* /toolbox/npm-global/bin/*; do
+  if [ -f "$target" ] || [ -L "$target" ]; then
+    ln -sf "$target" "/usr/local/bin/$(basename "$target")"
+  fi
+done
+
 # Seed the temp file with the existing config so the generator can merge instead
 # of replacing unrelated user-managed keys like MCP server definitions.
 if [ -f "$CONFIG_PATH" ]; then

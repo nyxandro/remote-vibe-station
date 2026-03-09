@@ -40,6 +40,8 @@ test("opencode Dockerfile installs git docker ssh and gh tooling", () => {
   assert.match(dockerfile, /PIP_CACHE_DIR=\/toolbox\/cache\/pip/);
   assert.match(dockerfile, /PYTHONUSERBASE=\/toolbox\/python-user/);
   assert.match(dockerfile, /UV_CACHE_DIR=\/toolbox\/cache\/uv/);
+  assert.match(dockerfile, /NODE_PATH=\/toolbox\/npm-global\/lib\/node_modules/);
+  assert.match(dockerfile, /COPY toolbox-profile\.sh \/etc\/profile\.d\/toolbox\.sh/);
   assert.match(dockerfile, /docker-wrapper\.sh/);
 });
 

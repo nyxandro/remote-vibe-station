@@ -17,6 +17,7 @@ ENV TOOLBOX_ROOT=/toolbox \
   UV_TOOL_BIN_DIR=/toolbox/bin \
   UV_TOOL_DIR=/toolbox/uv/tools \
   UV_CACHE_DIR=/toolbox/cache/uv \
+  NODE_PATH=/toolbox/npm-global/lib/node_modules \
   PATH=/toolbox/bin:/toolbox/npm-global/bin:/toolbox/pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN apt-get update \
@@ -105,6 +106,7 @@ WORKDIR /srv/projects
 COPY --chmod=755 entrypoint.sh /usr/local/bin/opencode-entrypoint.sh
 COPY cliproxy-provider-config.js /usr/local/bin/cliproxy-provider-config.js
 COPY --chmod=755 docker-wrapper.sh /usr/local/bin/docker
+COPY toolbox-profile.sh /etc/profile.d/toolbox.sh
 
 ENTRYPOINT ["/usr/local/bin/opencode-entrypoint.sh"]
 CMD ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
