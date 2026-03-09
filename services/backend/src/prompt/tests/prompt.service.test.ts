@@ -51,6 +51,7 @@ const createDispatchHarness = () => {
     getDefaultModel: jest.fn().mockResolvedValue({ providerID: "cliproxy", modelID: "gpt-5" }),
     sendPrompt: jest.fn(),
     sendPromptParts: jest.fn(),
+    waitForSessionToSettle: jest.fn(),
     executeCommand: jest.fn(),
     listCommands: jest.fn(),
     getModelContextLimit: jest.fn(),
@@ -254,6 +255,50 @@ describe("PromptService", () => {
           finalText: "Нашел проблему и исправил."
         })
       })
+    );
+  });
+
+  test("dispatchPromptParts suppresses fetch failed when session settles via runtime events", async () => {
+    /* Queue-backed prompts should not emit a false transport error when OpenCode already finishes over SSE. */
+    const harness = createDispatchHarness();
+    harness.opencode.sendPromptParts.mockImplementation(
+      async (
+        _parts: unknown,
+        options: {
+          onSessionResolved?: (sessionID: string, resolution: { isNew: boolean; reason: string }) => void;
+        }
+      ) => {
+        options.onSessionResolved?.("session-runtime", { isNew: false, reason: "existing" });
+        throw new Error("fetch failed");
+      }
+    );
+    harness.opencode.waitForSessionToSettle.mockResolvedValue(true);
+
+    const result = await harness.service.dispatchPromptParts({
+      adminId: 7,
+      projectSlug: "demo",
+      directory: "/tmp/demo",
+      promptTextForTelemetry: "проверь сервер",
+      parts: [{ type: "text", text: "проверь сервер" }],
+      allowEmptyResponse: true
+    });
+
+    expect(result).toEqual({
+      sessionId: "session-runtime",
+      responseText: "",
+      model: { providerID: "cliproxy", modelID: "gpt-5" },
+      mode: "primary",
+      agent: "build",
+      tokens: { input: 0, output: 0, reasoning: 0 }
+    });
+    expect(harness.opencode.waitForSessionToSettle).toHaveBeenCalledWith({
+      directory: "/tmp/demo",
+      sessionID: "session-runtime",
+      timeoutMs: 30_000
+    });
+    expect(harness.events.publish).toHaveBeenCalledTimes(1);
+    expect(harness.events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "opencode.prompt" })
     );
   });
 });

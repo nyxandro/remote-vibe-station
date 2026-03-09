@@ -13,7 +13,8 @@ import {
   isSessionBusyViaApi,
   listSessionsViaApi,
   OpenCodeSessionSummary,
-  selectSessionViaApi
+  selectSessionViaApi,
+  waitForSessionToSettleViaApi
 } from "./opencode-session-state";
 import { formatOpenCodeHttpError } from "./opencode-http-error";
 import {
@@ -415,6 +416,21 @@ export class OpenCodeClient {
       `/session/${encodeURIComponent(input.sessionID)}/abort?directory=${encodeURIComponent(input.directory)}`,
       { method: "POST" }
     );
+  }
+
+  public async waitForSessionToSettle(input: {
+    directory: string;
+    sessionID: string;
+    timeoutMs: number;
+  }): Promise<boolean> {
+    /* Give runtime SSE a short window to finish after the synchronous HTTP request crashes mid-flight. */
+    return waitForSessionToSettleViaApi({
+      request: (path, init) => this.request(path, init),
+      directory: input.directory,
+      sessionID: input.sessionID,
+      timeoutMs: input.timeoutMs,
+      pollIntervalMs: 1_000
+    });
   }
 
   public async listSessions(input: { directory: string; limit: number }): Promise<OpenCodeSessionSummary[]> {

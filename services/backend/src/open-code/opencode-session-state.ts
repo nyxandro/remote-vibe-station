@@ -7,6 +7,7 @@
  * - createSessionViaApi - Creates and stores active session id for directory.
  * - selectSessionViaApi - Validates and sets selected active session id.
  * - isSessionBusyViaApi - Checks busy state for cached session.
+ * - waitForSessionToSettleViaApi - Waits until a session leaves busy state after transport errors.
  */
 
 export type OpenCodeSessionSummary = {
@@ -126,4 +127,30 @@ export const isSessionBusyViaApi = async (input: {
 
   const status = statuses?.[input.sessionID];
   return status?.type === "busy";
+};
+
+export const waitForSessionToSettleViaApi = async (input: {
+  request: <T>(path: string, init: RequestInit) => Promise<T>;
+  sessionID: string;
+  directory: string;
+  timeoutMs: number;
+  pollIntervalMs: number;
+}): Promise<boolean> => {
+  /* Poll session status for a short grace period because runtime SSE can finish after HTTP transport fails. */
+  const startedAtMs = Date.now();
+
+  while (Date.now() - startedAtMs <= input.timeoutMs) {
+    const busy = await isSessionBusyViaApi({
+      request: input.request,
+      sessionID: input.sessionID,
+      directory: input.directory
+    });
+    if (!busy) {
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, input.pollIntervalMs));
+  }
+
+  return false;
 };

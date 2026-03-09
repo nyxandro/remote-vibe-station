@@ -57,6 +57,13 @@ type SessionListResult = {
 const ACTIVE_PROJECT_REQUIRED_MESSAGE =
   "Проект не выбран. Выберите его командой /project <slug> (например: /project my-project) или в Mini App.";
 const REPAIR_BUSY_TIMEOUT_MS = 45_000;
+const RUNTIME_SETTLE_AFTER_FETCH_FAILURE_MS = 30_000;
+
+const isFetchTransportFailure = (error: unknown): boolean => {
+  /* Low-level fetch crashes can still leave the OpenCode session running and streaming over SSE. */
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("fetch failed");
+};
 
 @Injectable()
 export class PromptService {
@@ -121,26 +128,57 @@ export class PromptService {
     await this.opencodeEvents.waitUntilConnected(input.directory);
 
     /* Send prompt to OpenCode and gather response. */
-    const result = await this.opencode.sendPromptParts(input.parts, {
-      directory: input.directory,
-      model: execution.model,
-      agent: execution.agent,
-      onSessionResolved: (sessionID, sessionResolution: SessionResolution) => {
-        if (input.adminId) {
-          this.sessionRouting.bind(sessionID, { adminId: input.adminId, directory: input.directory });
-          this.opencodeEvents.watchPermissionOnce({ directory: input.directory, sessionID });
-        }
-
-        /* Notify Telegram when OpenCode had to create a fresh session outside explicit /new flow. */
-        this.publishAutoSessionStarted({
-          adminId: input.adminId,
-          projectSlug: input.projectSlug,
-          directory: input.directory,
-          sessionID,
-          resolution: sessionResolution
-        });
+    let resolvedSessionID: string | null = null;
+    const onSessionResolved = (sessionID: string, sessionResolution: SessionResolution) => {
+      resolvedSessionID = sessionID;
+      if (input.adminId) {
+        this.sessionRouting.bind(sessionID, { adminId: input.adminId, directory: input.directory });
+        this.opencodeEvents.watchPermissionOnce({ directory: input.directory, sessionID });
       }
-    });
+
+      /* Notify Telegram when OpenCode had to create a fresh session outside explicit /new flow. */
+      this.publishAutoSessionStarted({
+        adminId: input.adminId,
+        projectSlug: input.projectSlug,
+        directory: input.directory,
+        sessionID,
+        resolution: sessionResolution
+      });
+    };
+
+    let result: Awaited<ReturnType<OpenCodeClient["sendPromptParts"]>>;
+    try {
+      result = await this.opencode.sendPromptParts(input.parts, {
+        directory: input.directory,
+        model: execution.model,
+        agent: execution.agent,
+        onSessionResolved
+      });
+    } catch (error) {
+      /* Telegram queue prompts may still succeed over SSE after the synchronous HTTP call drops late. */
+      if (input.allowEmptyResponse && resolvedSessionID && isFetchTransportFailure(error)) {
+        const settled = await this.opencode.waitForSessionToSettle({
+          directory: input.directory,
+          sessionID: resolvedSessionID,
+          timeoutMs: RUNTIME_SETTLE_AFTER_FETCH_FAILURE_MS
+        });
+        if (settled) {
+          return {
+            sessionId: resolvedSessionID,
+            responseText: "",
+            model: {
+              providerID: execution.model.providerID,
+              modelID: execution.model.modelID
+            },
+            mode: "primary",
+            agent: execution.agent ?? "build",
+            tokens: { input: 0, output: 0, reasoning: 0 }
+          };
+        }
+      }
+
+      throw error;
+    }
 
     /* Multipart image prompts can finish via runtime stream without immediate HTTP body. */
     if ((result as { emptyResponse?: boolean }).emptyResponse) {

@@ -176,6 +176,34 @@ describe("TelegramOutboxStore", () => {
     expect(json.items[1].inFlightBy).toBeUndefined();
   });
 
+  it("deduplicates identical plain messages emitted within a short window", () => {
+    /* Fast duplicate event delivery should not create two identical Telegram bubbles in chat history. */
+    const store = new TelegramOutboxStore();
+    const t0 = Date.parse("2026-02-05T00:00:00.000Z");
+
+    const first = store.enqueue({
+      adminId: 7,
+      chatId: 70,
+      text: "Один и тот же ответ",
+      parseMode: "HTML",
+      disableNotification: true,
+      nowMs: t0
+    });
+    const second = store.enqueue({
+      adminId: 7,
+      chatId: 70,
+      text: "Один и тот же ответ",
+      parseMode: "HTML",
+      disableNotification: true,
+      nowMs: t0 + 500
+    });
+
+    const json = readFileJson();
+    expect(json.items).toHaveLength(1);
+    expect(second.id).toBe(first.id);
+    expect(json.items[0].text).toBe("Один и тот же ответ");
+  });
+
   it("prunes delivered history and old dead letters", () => {
     /* Prepare a large-ish file directly to test retention without expensive enqueue loops. */
     if (!fs.existsSync(TEST_DATA_DIR)) {

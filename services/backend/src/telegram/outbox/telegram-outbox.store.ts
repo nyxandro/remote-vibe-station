@@ -35,6 +35,7 @@ const FILE_NAME = "telegram.outbox.json";
 const DEFAULT_MAX_DELIVERED_TO_KEEP = 500;
 const DEFAULT_MAX_DEAD_TO_KEEP = 500;
 const DEFAULT_MAX_DEAD_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const PLAIN_MESSAGE_DEDUP_WINDOW_MS = 5_000;
 
 type OutboxFile = {
   items: TelegramOutboxItem[];
@@ -62,6 +63,11 @@ const computeBackoffMs = (attempts: number): number => {
   const candidate = baseMs * Math.pow(2, exp);
   return Math.min(candidate, maxMs);
 };
+
+const areInlineKeyboardsEqual = (
+  left?: { inlineKeyboard: Array<Array<{ text: string; callback_data: string }>> },
+  right?: { inlineKeyboard: Array<Array<{ text: string; callback_data: string }>> }
+): boolean => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 @Injectable()
 export class TelegramOutboxStore {
@@ -93,6 +99,18 @@ export class TelegramOutboxStore {
     const nowMs = input.nowMs ?? Date.now();
     const now = new Date(nowMs).toISOString();
     const file = this.readAll();
+
+    /* Collapse accidental duplicate plain messages caused by repeated event delivery in the same short burst. */
+    if (!input.control && !input.progressKey && (input.mode === undefined || input.mode === "send") && input.text.trim()) {
+      const existing = this.findRecentPlainDuplicate({
+        items: file.items,
+        input,
+        nowMs
+      });
+      if (existing) {
+        return existing;
+      }
+    }
 
     /* Coalesce pending live-progress snapshots so Telegram stream follows the newest text only. */
     if ((input.mode === "draft" || input.mode === "replace") && input.progressKey) {
@@ -368,5 +386,52 @@ export class TelegramOutboxStore {
   private writeAll(file: OutboxFile): void {
     /* Persist stable JSON for manual debugging. */
     fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), "utf-8");
+  }
+
+  private findRecentPlainDuplicate(input: {
+    items: TelegramOutboxItem[];
+    input: {
+      adminId: number;
+      chatId: number;
+      text: string;
+      parseMode?: "HTML";
+      disableNotification?: boolean;
+      replyMarkup?: {
+        inlineKeyboard: Array<Array<{ text: string; callback_data: string }>>;
+      };
+    };
+    nowMs: number;
+  }): TelegramOutboxItem | null {
+    /* Only suppress exact duplicates that appear almost immediately; later repeats may be intentional. */
+    for (let index = input.items.length - 1; index >= 0; index -= 1) {
+      const item = input.items[index];
+      const itemTsMs = parseIso(item.deliveredAt ?? item.createdAt);
+      if (itemTsMs > 0 && input.nowMs - itemTsMs > PLAIN_MESSAGE_DEDUP_WINDOW_MS) {
+        break;
+      }
+
+      if (item.status !== "pending" && item.status !== "delivered") {
+        continue;
+      }
+
+      if (item.adminId !== input.input.adminId || item.chatId !== input.input.chatId) {
+        continue;
+      }
+
+      if (item.control || item.progressKey || (item.mode && item.mode !== "send")) {
+        continue;
+      }
+
+      if (
+        item.text === input.input.text &&
+        item.parseMode === input.input.parseMode &&
+        item.disableNotification === input.input.disableNotification &&
+        areInlineKeyboardsEqual(item.replyMarkup, input.input.replyMarkup)
+      ) {
+        return item;
+      }
+    }
+
+    return null;
   }
 }
