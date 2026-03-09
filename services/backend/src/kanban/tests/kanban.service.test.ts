@@ -166,7 +166,7 @@ describe("KanbanService", () => {
 
     const result = await service.createBoardLink({ adminId: 42, projectSlug: "alpha", nowMs: 1 });
 
-    expect(result.url).toContain("https://example.test/miniapp?view=kanban&project=alpha#token=");
+    expect(result.url).toContain("https://example.test/miniapp/?view=kanban&project=alpha#token=");
     expect(result.url).not.toContain("adminId=42");
   });
 });

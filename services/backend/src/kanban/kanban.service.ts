@@ -250,7 +250,8 @@ export class KanbanService {
       nowMs: input.nowMs
     });
 
-    const url = new URL("/miniapp", this.config.publicBaseUrl);
+    /* Use the canonical trailing-slash Mini App URL so nginx/traefik do not strip board query params on redirect. */
+    const url = new URL("/miniapp/", this.config.publicBaseUrl);
     url.searchParams.set("view", "kanban");
     if (input.projectSlug) {
       url.searchParams.set("project", this.requireProjectSlug(input.projectSlug));
