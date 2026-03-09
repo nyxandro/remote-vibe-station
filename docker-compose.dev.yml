@@ -9,6 +9,7 @@ services:
       - ADMIN_IDS=${ADMIN_IDS}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
+      - ALLOW_UNSAFE_LOCAL_AUTH=${ALLOW_UNSAFE_LOCAL_AUTH:-false}
       - PROJECTS_ROOT=${PROJECTS_ROOT}
       - OPENCODE_CONFIG_DIR=/opencode-config
       - OPENCODE_SERVER_URL=http://opencode:4096
@@ -64,6 +65,8 @@ services:
       dockerfile: Dockerfile
     working_dir: ${PROJECTS_ROOT:-/srv/projects}
     environment:
+      - BACKEND_URL=http://backend:3000
+      - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:-dev-bot-backend-token}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
       - CLIPROXY_PROVIDER_ID=${CLIPROXY_PROVIDER_ID:-cliproxy}
       - CLIPROXY_PROVIDER_NAME=${CLIPROXY_PROVIDER_NAME:-CLIProxy}

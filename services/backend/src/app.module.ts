@@ -69,6 +69,11 @@ import { CliproxyAccountController } from "./proxy/cliproxy-account.controller";
 import { CliproxyAccountService } from "./proxy/cliproxy-account.service";
 import { CliproxyAuthRuntimeService } from "./proxy/cliproxy-auth-runtime.service";
 import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
+import { KanbanController } from "./kanban/kanban.controller";
+import { KanbanAgentController } from "./kanban/kanban-agent.controller";
+import { KanbanService } from "./kanban/kanban.service";
+import { KanbanStore } from "./kanban/kanban.store";
+import { KanbanAgentGuard } from "./security/kanban-agent.guard";
 
 @Module({
   imports: [ConfigModule],
@@ -85,7 +90,9 @@ import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
     TelegramOutboxController,
     SystemMetricsController,
     ProxySettingsController,
-    CliproxyAccountController
+    CliproxyAccountController,
+    KanbanController,
+    KanbanAgentController
   ],
   providers: [
     EventsService,
@@ -135,7 +142,10 @@ import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
     ProxySettingsService,
     CliproxyManagementClient,
     CliproxyAuthRuntimeService,
-    CliproxyAccountService
+    CliproxyAccountService,
+    KanbanStore,
+    KanbanService,
+    KanbanAgentGuard
   ]
 })
 export class AppModule {}

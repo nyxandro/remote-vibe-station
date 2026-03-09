@@ -236,15 +236,26 @@
   white-space: nowrap;
 }
 
+.theme-mode-toggle,
 .settings-theme-toggle {
   display: inline-flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
+.theme-mode-toggle .btn.active,
 .settings-theme-toggle .btn.active {
   border-color: var(--accent);
   background: #eef3ff;
+}
+
+.theme-mode-toggle-compact {
+  gap: 8px;
+}
+
+.theme-mode-toggle-compact .btn {
+  min-height: 40px;
+  padding: 10px 12px;
 }
 
 /* Animated state makes long save requests visible without guessing. */
@@ -554,6 +565,7 @@ html[data-theme="dark"] .settings-editor-status.error {
 }
 
 html[data-theme="dark"] .tab.active,
+html[data-theme="dark"] .theme-mode-toggle .btn.active,
 html[data-theme="dark"] .settings-theme-toggle .btn.active {
   background: #1b2c49;
   border-color: #2e4b7b;

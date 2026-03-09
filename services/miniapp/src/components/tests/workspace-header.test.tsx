@@ -15,8 +15,8 @@ describe("WorkspaceHeader", () => {
     cleanup();
   });
 
-  it("renders seven icon-only tab buttons", () => {
-    /* Top menu should expose Providers without a duplicate standalone CLI/Proxy tab. */
+  it("renders eight icon-only tab buttons", () => {
+    /* Top menu should expose Tasks together with the existing workspace sections. */
     render(
       <WorkspaceHeader
         activeProject={null}
@@ -32,6 +32,7 @@ describe("WorkspaceHeader", () => {
 
     expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Files" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tasks" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Providers" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "CLI/Proxy" })).toBeNull();
     expect(screen.getByRole("button", { name: "GitHub" })).toBeTruthy();

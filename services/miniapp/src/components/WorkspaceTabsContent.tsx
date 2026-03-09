@@ -12,6 +12,7 @@ import { ProjectsTab } from "./ProjectsTab";
 import { ProvidersTab } from "./ProvidersTab";
 import { SettingsTab } from "./SettingsTab";
 import { TerminalTab } from "./TerminalTab";
+import { KanbanProjectTab } from "./KanbanProjectTab";
 import { TabKey } from "./WorkspaceHeader";
 import {
   ContainerAction,
@@ -39,6 +40,7 @@ import {
 type Props = {
   activeTab: TabKey;
   activeId: string | null;
+  activeProject: ProjectRecord | null;
   visibleProjects: ProjectRecord[];
   query: string;
   telegramStreamEnabled: boolean;
@@ -219,6 +221,16 @@ export const WorkspaceTabsContent = (props: Props) => {
         onUp={props.onFilesUp}
         onRefresh={props.onFilesRefresh}
         onOpenEntry={props.onOpenEntry}
+      />
+    );
+  }
+
+  if (props.activeTab === "tasks") {
+    return (
+      <KanbanProjectTab
+        activeProject={props.activeProject}
+        themeMode={props.themeMode}
+        onChangeTheme={props.onChangeTheme}
       />
     );
   }

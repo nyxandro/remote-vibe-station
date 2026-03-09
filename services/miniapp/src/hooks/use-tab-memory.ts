@@ -31,6 +31,7 @@ const isTabKey = (value: string | null): value is TabKey => {
   return (
     value === "projects" ||
     value === "files" ||
+    value === "tasks" ||
     value === "providers" ||
     value === "github" ||
     value === "terminal" ||
@@ -42,6 +43,7 @@ const isTabKey = (value: string | null): value is TabKey => {
 const isWorkspaceTab = (value: string | null): value is Exclude<TabKey, "projects"> => {
   return (
     value === "files" ||
+    value === "tasks" ||
     value === "providers" ||
     value === "github" ||
     value === "terminal" ||

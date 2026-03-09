@@ -26,6 +26,7 @@ import { useOpenCodeVersion } from "./hooks/use-opencode-version";
 import { useProviderAuth } from "./hooks/use-provider-auth";
 import { useProjectGit } from "./hooks/use-project-git";
 import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
+import { useThemeMode } from "./hooks/use-theme-mode";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useProjectRuntime } from "./hooks/use-project-runtime";
 import { useCliproxyAccounts } from "./hooks/use-cliproxy-accounts";
@@ -36,7 +37,6 @@ import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
 import { loadProjectMetadata } from "./utils/project-metadata";
 import { highlightToHtml } from "./utils/syntax";
-import { applyThemeToDocument, readStoredThemeMode, ThemeMode } from "./utils/theme";
 
 type ProjectStatusMap = Record<string, ProjectStatus[]>;
 type ProjectLogsMap = Record<string, string>;
@@ -97,7 +97,7 @@ export const App = () => {
     setSettingsActiveFile(null);
   };
   const [telegramStreamEnabled, setTelegramStreamEnabled] = useState<boolean>(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
+  const { themeMode, setThemeMode } = useThemeMode();
   const [restartOpenCodeState, setRestartOpenCodeState] = useState<{
     isRestarting: boolean;
     lastResult: "idle" | "success" | "error";
@@ -456,10 +456,6 @@ export const App = () => {
   }, [activeId]);
 
   useEffect(() => {
-    applyThemeToDocument(themeMode);
-  }, [themeMode]);
-
-  useEffect(() => {
     if (activeTab === "github" && activeId) {
       void loadGitOverview(activeId);
     }
@@ -539,6 +535,7 @@ export const App = () => {
         <WorkspaceTabsContent
           activeTab={activeTab}
           activeId={activeId}
+          activeProject={activeProject}
           visibleProjects={visibleProjects}
           query={query}
           telegramStreamEnabled={telegramStreamEnabled}

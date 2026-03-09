@@ -45,6 +45,27 @@ export type ProjectRecord = {
   };
 };
 
+export type KanbanStatus = "backlog" | "queued" | "in_progress" | "blocked" | "done";
+
+export type KanbanPriority = "low" | "medium" | "high";
+
+export type KanbanTask = {
+  id: string;
+  projectSlug: string;
+  projectName: string;
+  title: string;
+  description: string;
+  status: KanbanStatus;
+  priority: KanbanPriority;
+  acceptanceCriteria: string[];
+  resultSummary: string | null;
+  blockedReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  claimedBy: string | null;
+  leaseUntil: string | null;
+};
+
 export type ProjectStatus = {
   name: string;
   service: string;

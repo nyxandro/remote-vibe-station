@@ -1,0 +1,352 @@
+/**
+ * @fileoverview Reusable Trello-like kanban board for project and global views.
+ *
+ * Exports:
+ * - KanbanBoard - Renders columns, cards, filters, drag-and-drop, and editor modal.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
+
+import { CreateKanbanTaskPayload, UpdateKanbanTaskPayload } from "../hooks/use-kanban";
+import { KanbanTaskEditorModal, KanbanTaskEditorSubmit } from "./KanbanTaskEditorModal";
+import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
+import { ThemeMode } from "../utils/theme";
+import { ThemeModeToggle } from "./ThemeModeToggle";
+
+const COLUMNS: Array<{ status: KanbanStatus; label: string; emptyText: string }> = [
+  { status: "backlog", label: "Backlog", emptyText: "Discuss and refine ideas here." },
+  { status: "queued", label: "Queue", emptyText: "Tasks ready for implementation." },
+  { status: "in_progress", label: "In progress", emptyText: "Agent-claimed work appears here." },
+  { status: "blocked", label: "Blocked", emptyText: "Waiting for clarification or dependency." },
+  { status: "done", label: "Done", emptyText: "Completed tasks stay here for review." }
+];
+
+const PRIORITY_LABELS: Record<KanbanPriority, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High"
+};
+
+const COLUMN_STYLE_CLASS: Record<KanbanStatus, string> = {
+  backlog: "kanban-column-backlog",
+  queued: "kanban-column-queued",
+  in_progress: "kanban-column-in-progress",
+  blocked: "kanban-column-blocked",
+  done: "kanban-column-done"
+};
+
+type Props = {
+  scope: "project" | "global";
+  tasks: KanbanTask[];
+  projects: ProjectRecord[];
+  activeProjectSlug: string | null;
+  themeMode: ThemeMode;
+  onChangeTheme: (mode: ThemeMode) => void;
+  initialProjectFilter?: string | null;
+  isLoading: boolean;
+  isSaving: boolean;
+  onRefresh: () => void;
+  onCreateTask: (payload: CreateKanbanTaskPayload) => Promise<void> | void;
+  onUpdateTask: (taskId: string, patch: UpdateKanbanTaskPayload) => Promise<void> | void;
+  onMoveTask: (taskId: string, status: KanbanStatus) => void;
+  onOpenGlobalBoard?: () => void;
+};
+
+const formatTaskTimestamp = (value: string): string => {
+  /* Compact timestamp keeps cards informative without turning them into log entries. */
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+};
+
+export const KanbanBoard = (props: Props) => {
+  const [search, setSearch] = useState<string>("");
+  const [projectFilter, setProjectFilter] = useState<string>(props.initialProjectFilter ?? "all");
+  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [dropStatus, setDropStatus] = useState<KanbanStatus | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false);
+  const [editingTask, setEditingTask] = useState<KanbanTask | null>(null);
+  const [editorError, setEditorError] = useState<string | null>(null);
+
+  useEffect(() => {
+    /* Project-scoped boards follow the active project selection automatically. */
+    if (props.scope === "project") {
+      setProjectFilter(props.activeProjectSlug ?? "all");
+      return;
+    }
+
+    if (props.initialProjectFilter) {
+      setProjectFilter(props.initialProjectFilter);
+    }
+  }, [props.activeProjectSlug, props.initialProjectFilter, props.scope]);
+
+  const filteredTasks = useMemo(() => {
+    /* Search/filter stays client-side so the board feels immediate while the backend remains simple. */
+    const normalizedSearch = search.trim().toLowerCase();
+    const activeProjectSlug = props.scope === "project" ? props.activeProjectSlug : projectFilter === "all" ? null : projectFilter;
+
+    return props.tasks.filter((task) => {
+      if (activeProjectSlug && task.projectSlug !== activeProjectSlug) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const haystack = [task.title, task.description, task.projectName]
+        .join("\n")
+        .toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }, [projectFilter, props.activeProjectSlug, props.scope, props.tasks, search]);
+
+  const tasksByStatus = useMemo(() => {
+    /* Pre-group cards per column so render logic stays predictable and lightweight. */
+    const buckets: Record<KanbanStatus, KanbanTask[]> = {
+      backlog: [],
+      queued: [],
+      in_progress: [],
+      blocked: [],
+      done: []
+    };
+
+    for (const task of filteredTasks) {
+      const bucket = buckets[task.status];
+      if (!bucket) {
+        continue;
+      }
+      bucket.push(task);
+    }
+
+    return buckets;
+  }, [filteredTasks]);
+
+  const visibleProjectName = useMemo(() => {
+    /* Surface the active scope clearly so the board feels anchored in the selected project context. */
+    if (props.scope === "project") {
+      return props.projects[0]?.name ?? "Project";
+    }
+
+    if (projectFilter === "all") {
+      return "All projects";
+    }
+
+    return props.projects.find((project) => project.slug === projectFilter)?.name ?? projectFilter;
+  }, [projectFilter, props.projects, props.scope]);
+
+  const summaryText = props.scope === "project" ? "Project board" : "Shared board";
+
+  const handleEditorSubmit = async (payload: KanbanTaskEditorSubmit): Promise<void> => {
+    /* Create and edit dialogs both feed the board through one normalized payload shape. */
+    setEditorError(null);
+
+    try {
+      if (editingTask) {
+        await props.onUpdateTask(editingTask.id, {
+          title: payload.title,
+          description: payload.description,
+          status: payload.status,
+          priority: payload.priority,
+          acceptanceCriteria: payload.acceptanceCriteria,
+          resultSummary: payload.resultSummary,
+          blockedReason: payload.blockedReason
+        });
+        setEditingTask(null);
+        return;
+      }
+
+      await props.onCreateTask({
+        projectSlug: payload.projectSlug,
+        title: payload.title,
+        description: payload.description,
+        status: payload.status,
+        priority: payload.priority,
+        acceptanceCriteria: payload.acceptanceCriteria
+      });
+      setIsCreateOpen(false);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Failed to save task");
+    }
+  };
+
+  return (
+    <section className="kanban-shell">
+      <div className="kanban-summary-row">
+        <div className="kanban-summary-copy">
+          <span className="kanban-summary-label">{summaryText}</span>
+          <span className="kanban-summary-project">{visibleProjectName}</span>
+        </div>
+
+        <div className="kanban-summary-metrics">
+          <span className="kanban-summary-chip">Visible {filteredTasks.length}</span>
+          <span className="kanban-summary-chip">Queue {tasksByStatus.queued.length}</span>
+          <span className="kanban-summary-chip">Active {tasksByStatus.in_progress.length}</span>
+        </div>
+      </div>
+
+      <div className="kanban-toolbar">
+        <input
+          className="input kanban-search-input"
+          placeholder="Search tasks…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+
+        {props.scope === "global" ? (
+          <select className="input kanban-project-filter" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+            <option value="all">All projects</option>
+            {props.projects.map((project) => (
+              <option key={project.id} value={project.slug}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
+        <div className="kanban-toolbar-side">
+          <ThemeModeToggle compact themeMode={props.themeMode} onChangeTheme={props.onChangeTheme} />
+
+          <div className="kanban-toolbar-actions">
+            {props.onOpenGlobalBoard ? (
+              <button className="btn outline" onClick={props.onOpenGlobalBoard} type="button">
+                Open shared board
+              </button>
+            ) : null}
+
+            <button className="btn outline" onClick={props.onRefresh} type="button">
+              <RefreshCw size={14} />
+              Refresh
+            </button>
+
+            <button className="btn primary" onClick={() => setIsCreateOpen(true)} type="button">
+              New task
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {editorError ? <div className="alert">{editorError}</div> : null}
+
+      <div className="kanban-columns">
+        {COLUMNS.map((column) => (
+          <section
+            key={column.status}
+            className={
+              dropStatus === column.status
+                ? `kanban-column ${COLUMN_STYLE_CLASS[column.status]} kanban-column-active`
+                : `kanban-column ${COLUMN_STYLE_CLASS[column.status]}`
+            }
+            onDragOver={(event) => {
+              /* Columns accept card drops and highlight only while a drag operation is active. */
+              event.preventDefault();
+              setDropStatus(column.status);
+            }}
+            onDragLeave={() => setDropStatus((current) => (current === column.status ? null : current))}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (dragTaskId) {
+                void props.onMoveTask(dragTaskId, column.status);
+              }
+              setDragTaskId(null);
+              setDropStatus(null);
+            }}
+          >
+            <header className="kanban-column-header">
+              <div>
+                <div className="kanban-column-title">{column.label}</div>
+                <div className="kanban-column-subtitle">{column.emptyText}</div>
+              </div>
+
+              <span className="kanban-column-count">{tasksByStatus[column.status].length}</span>
+            </header>
+
+            <div className="kanban-column-body">
+              {tasksByStatus[column.status].length === 0 ? (
+                <div className="kanban-empty-state">{props.isLoading ? "Loading…" : column.emptyText}</div>
+              ) : null}
+
+              {tasksByStatus[column.status].map((task) => (
+                <article
+                  key={task.id}
+                  className={`kanban-card kanban-card-${task.status}`}
+                  draggable
+                  onDragStart={() => setDragTaskId(task.id)}
+                  onDragEnd={() => {
+                    setDragTaskId(null);
+                    setDropStatus(null);
+                  }}
+                >
+                  <div className="kanban-card-topline">
+                    <span className={`kanban-priority-badge kanban-priority-${task.priority}`}>
+                      {PRIORITY_LABELS[task.priority]}
+                    </span>
+                    {props.scope === "global" ? (
+                      <span className="kanban-project-badge">{task.projectName}</span>
+                    ) : null}
+                  </div>
+
+                  <div className="kanban-card-title">{task.title}</div>
+
+                  {task.description ? <div className="kanban-card-description">{task.description}</div> : null}
+
+                  {task.acceptanceCriteria.length > 0 ? (
+                    <div className="kanban-card-meta">Criteria: {task.acceptanceCriteria.length}</div>
+                  ) : null}
+
+                  {task.claimedBy ? (
+                    <div className="kanban-card-meta">Claimed by: {task.claimedBy}</div>
+                  ) : null}
+
+                  {task.blockedReason ? (
+                    <div className="kanban-card-note">Blocked: {task.blockedReason}</div>
+                  ) : null}
+
+                  {task.resultSummary ? (
+                    <div className="kanban-card-note">Result: {task.resultSummary}</div>
+                  ) : null}
+
+                  <div className="kanban-card-footer">
+                    <span className="kanban-card-updated">Updated {formatTaskTimestamp(task.updatedAt)}</span>
+
+                    <button className="btn ghost" onClick={() => setEditingTask(task)} type="button">
+                      Edit
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {isCreateOpen ? (
+        <KanbanTaskEditorModal
+          mode="create"
+          scope={props.scope}
+          activeProjectSlug={props.activeProjectSlug}
+          projects={props.projects}
+          isSaving={props.isSaving}
+          onClose={() => setIsCreateOpen(false)}
+          onSubmit={handleEditorSubmit}
+        />
+      ) : null}
+
+      {editingTask ? (
+        <KanbanTaskEditorModal
+          mode="edit"
+          scope={props.scope}
+          activeProjectSlug={props.activeProjectSlug}
+          projects={props.projects}
+          task={editingTask}
+          isSaving={props.isSaving}
+          onClose={() => setEditingTask(null)}
+          onSubmit={handleEditorSubmit}
+        />
+      ) : null}
+    </section>
+  );
+};

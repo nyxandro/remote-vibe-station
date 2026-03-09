@@ -8,10 +8,12 @@
 import { useMemo, useState } from "react";
 
 import { App } from "./App";
+import { KanbanBoardScreen } from "./components/KanbanBoardScreen";
 import { MiniAppBlockingOverlay } from "./components/MiniAppBlockingOverlay";
 import { DiffPreviewScreen } from "./components/DiffPreviewScreen";
 import { useMiniAppReadiness } from "./hooks/use-miniapp-readiness";
 import { useTelegramWebApp } from "./hooks/use-telegram-webapp";
+import { readKanbanProjectFilter, readLaunchView } from "./utils/launch-view";
 import { readDiffPreviewToken } from "./utils/start-param";
 
 export const MiniAppRoot = () => {
@@ -21,6 +23,8 @@ export const MiniAppRoot = () => {
     /* Parse token only once from launch context. */
     return readDiffPreviewToken();
   }, []);
+  const launchView = useMemo(() => readLaunchView(), []);
+  const kanbanProjectFilter = useMemo(() => readKanbanProjectFilter(), []);
   const [activeToken, setActiveToken] = useState<string | null>(launchToken);
 
   if (!readiness.isReady) {
@@ -44,6 +48,10 @@ export const MiniAppRoot = () => {
         }}
       />
     );
+  }
+
+  if (launchView === "kanban") {
+    return <KanbanBoardScreen initialProjectSlug={kanbanProjectFilter} />;
   }
 
   return <App />;

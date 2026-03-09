@@ -11,6 +11,7 @@ import {
   FileText,
   Folder,
   Github,
+  ListTodo,
   LucideIcon,
   Plug,
   Radio,
@@ -24,6 +25,7 @@ import { ProjectRecord } from "../types";
 export type TabKey =
   | "projects"
   | "files"
+  | "tasks"
   | "providers"
   | "github"
   | "terminal"
@@ -44,6 +46,7 @@ type Props = {
 const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: LucideIcon }> = [
   { key: "projects", title: "Projects", icon: Folder },
   { key: "files", title: "Files", icon: FileText },
+  { key: "tasks", title: "Tasks", icon: ListTodo },
   { key: "providers", title: "Providers", icon: Plug },
   { key: "github", title: "GitHub", icon: Github },
   { key: "terminal", title: "Terminal", icon: Terminal },
@@ -70,6 +73,7 @@ export const WorkspaceHeader = (props: Props) => {
             tab.key !== "projects" &&
             tab.key !== "providers" &&
             tab.key !== "settings" &&
+            tab.key !== "tasks" &&
             !props.canUseProjectTabs;
 
           return (

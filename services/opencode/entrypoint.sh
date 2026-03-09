@@ -46,6 +46,9 @@ fi
 # Build provider config from live CLIProxy /v1/models to avoid manual model mapping maintenance.
 node /usr/local/bin/cliproxy-provider-config.js "$TMP_PATH"
 
+# Sync default local plugins into the persisted config volume before OpenCode loads them.
+node /usr/local/bin/kanban-plugin-sync.js /usr/local/share/opencode/kanban-tools-plugin.ts
+
 mv "$TMP_PATH" "$CONFIG_PATH"
 
 # Continue with OpenCode server process.

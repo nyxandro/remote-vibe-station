@@ -6,8 +6,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MoonStar, Sun } from "lucide-react";
-
 import {
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
@@ -22,6 +20,7 @@ import { ThemeMode } from "../utils/theme";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
 import { ServerParametersAccordion } from "./ServerParametersAccordion";
 import { SettingsEditorModal } from "./SettingsEditorModal";
+import { ThemeModeToggle } from "./ThemeModeToggle";
 
 type ActiveFile = {
   kind: OpenCodeSettingsKind;
@@ -493,22 +492,7 @@ export const SettingsTab = (props: Props) => {
       <details className="settings-accordion-item">
         <summary>8. General settings</summary>
         <div className="settings-accordion-body">
-          <div className="settings-theme-toggle" role="group" aria-label="Theme mode">
-            <button
-              className={props.themeMode === "light" ? "btn outline active" : "btn outline"}
-              onClick={() => props.onChangeTheme("light")}
-              type="button"
-            >
-              <Sun size={16} className="btn-icon" /> Day
-            </button>
-            <button
-              className={props.themeMode === "dark" ? "btn outline active" : "btn outline"}
-              onClick={() => props.onChangeTheme("dark")}
-              type="button"
-            >
-              <MoonStar size={16} className="btn-icon" /> Night
-            </button>
-          </div>
+          <ThemeModeToggle themeMode={props.themeMode} onChangeTheme={props.onChangeTheme} />
         </div>
       </details>
 

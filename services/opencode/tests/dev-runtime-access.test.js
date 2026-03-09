@@ -59,6 +59,8 @@ test("main compose grants opencode direct host access and shared git auth", () =
   const compose = readRepoFile("docker-compose.yml");
 
   assert.match(compose, /working_dir: \$\{PROJECTS_ROOT:\?PROJECTS_ROOT must be set\}/);
+  assert.match(compose, /opencode:[\s\S]*- BACKEND_URL=http:\/\/backend:3000/);
+  assert.match(compose, /opencode:[\s\S]*- BOT_BACKEND_AUTH_TOKEN=\$\{BOT_BACKEND_AUTH_TOKEN/);
   assert.match(compose, /- \/var\/run\/docker\.sock:\/var\/run\/docker\.sock/);
   assert.match(compose, /- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /- \/root\/\.config\/gh:\/root\/\.config\/gh/);
@@ -82,6 +84,8 @@ test("runtime template keeps opencode host access and shared git auth", () => {
   const compose = readRepoFile("scripts/templates/runtime-docker-compose.yml");
 
   assert.match(compose, /working_dir: \$\{PROJECTS_ROOT:\?PROJECTS_ROOT must be set\}/);
+  assert.match(compose, /opencode:[\s\S]*- BACKEND_URL=http:\/\/backend:3000/);
+  assert.match(compose, /opencode:[\s\S]*- BOT_BACKEND_AUTH_TOKEN=\$\{BOT_BACKEND_AUTH_TOKEN\}/);
   assert.match(compose, /- \/var\/run\/docker\.sock:\/var\/run\/docker\.sock/);
   assert.match(compose, /- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /- \/root\/\.config\/gh:\/root\/\.config\/gh/);
@@ -106,6 +110,8 @@ test("dev compose keeps opencode host access and shared git auth", () => {
   const compose = readRepoFile("docker-compose.dev.yml");
 
   assert.match(compose, /working_dir: \$\{PROJECTS_ROOT:-\/srv\/projects\}/);
+  assert.match(compose, /opencode:[\s\S]*- BACKEND_URL=http:\/\/backend:3000/);
+  assert.match(compose, /opencode:[\s\S]*- BOT_BACKEND_AUTH_TOKEN=\$\{BOT_BACKEND_AUTH_TOKEN:-dev-bot-backend-token\}/);
   assert.match(compose, /- \/var\/run\/docker\.sock:\/var\/run\/docker\.sock/);
   assert.match(compose, /- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /- \/root\/\.config\/gh:\/root\/\.config\/gh/);
