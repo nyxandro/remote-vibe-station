@@ -18,6 +18,8 @@ import { TelegramOutboxStore } from "./telegram-outbox.store";
 import { formatTelegramFooter, renderTelegramFooterHtml } from "./telegram-footer";
 import { splitTelegramTextWithFooter } from "./telegram-split-with-footer";
 
+const FINAL_REPLY_COMMENTARY_REUSE_WINDOW_MS = 15_000;
+
 type AssistantDelivery = {
   text: string;
   sessionId?: string | null;
@@ -127,6 +129,11 @@ const buildTrace = (telemetry?: AssistantDelivery["telemetry"]): string => {
 export class TelegramOutboxService {
   private readonly assistantResponseSeqBySession = new Map<string, number>();
   private readonly activeAssistantProgressKeyBySession = new Map<string, string>();
+  private readonly assistantCommentarySeqBySession = new Map<string, number>();
+  private readonly recentAssistantCommentaryBySession = new Map<
+    string,
+    { text: string; progressKey: string; createdAtMs: number }
+  >();
 
   public constructor(
     private readonly streamStore: TelegramStreamStore,
@@ -171,10 +178,10 @@ export class TelegramOutboxService {
 
     const chunks = splitTelegramTextWithFooter(body, footer);
     const streamProgressKey = input.delivery.sessionId
-      ? this.resolveAssistantProgressKey({
+      ? this.resolveFinalAssistantProgressKey({
           adminId: input.adminId,
           sessionId: input.delivery.sessionId,
-          createIfMissing: true
+          finalText: input.delivery.text
         })
       : null;
 
@@ -210,6 +217,7 @@ export class TelegramOutboxService {
           disableNotification: !isFinalChunk
         });
       });
+      this.recentAssistantCommentaryBySession.delete(input.delivery.sessionId ?? "");
       this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
       return;
     }
@@ -230,6 +238,7 @@ export class TelegramOutboxService {
         disableNotification: !isFinalChunk
       });
     });
+    this.recentAssistantCommentaryBySession.delete(input.delivery.sessionId ?? "");
     this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
   }
 
@@ -242,7 +251,7 @@ export class TelegramOutboxService {
     return input.html.trim().length > 0 ? `${input.html}\n\n${input.footerHtml}` : input.footerHtml;
   }
 
-  public enqueueAssistantCommentary(input: { adminId: number; text: string }): void {
+  public enqueueAssistantCommentary(input: { adminId: number; sessionId?: string; text: string }): void {
     /* Commentary blocks between tools should appear as fresh chat messages, not progress edits. */
     const binding = this.streamStore.get(input.adminId);
     if (!binding) {
@@ -250,12 +259,34 @@ export class TelegramOutboxService {
     }
 
     const chunks = splitTelegramTextWithFooter(input.text, "");
-    chunks.forEach((chunk) => {
+    chunks.forEach((chunk, index) => {
       /* Keep commentary silent because it is operational stream output, not a direct mention-worthy ping. */
+      const renderedChunk = renderTelegramHtmlFromMarkdown(chunk);
+      const commentaryProgressKey = this.resolveAssistantCommentaryProgressKey({
+        adminId: input.adminId,
+        sessionId: input.sessionId,
+        text: chunk,
+        finalText: input.text,
+        isFinalChunk: index === chunks.length - 1
+      });
+
+      if (commentaryProgressKey) {
+        this.outbox.enqueue({
+          adminId: input.adminId,
+          chatId: binding.chatId,
+          text: renderedChunk,
+          parseMode: "HTML",
+          disableNotification: true,
+          mode: "replace",
+          progressKey: commentaryProgressKey
+        });
+        return;
+      }
+
       this.outbox.enqueue({
         adminId: input.adminId,
         chatId: binding.chatId,
-        text: renderTelegramHtmlFromMarkdown(chunk),
+        text: renderedChunk,
         parseMode: "HTML",
         disableNotification: true
       });
@@ -425,6 +456,56 @@ export class TelegramOutboxService {
 
     const progressKey = `assistant:${input.adminId}:${input.sessionId}:${nextSeq}`;
     this.activeAssistantProgressKeyBySession.set(input.sessionId, progressKey);
+    return progressKey;
+  }
+
+  private resolveFinalAssistantProgressKey(input: {
+    adminId: number;
+    sessionId: string;
+    finalText: string;
+  }): string | null {
+    /* Final answer should reuse the last commentary bubble only when it is clearly the same final text block. */
+    const recent = this.recentAssistantCommentaryBySession.get(input.sessionId);
+    if (
+      recent &&
+      recent.text.trim() === input.finalText.trim() &&
+      Date.now() - recent.createdAtMs <= FINAL_REPLY_COMMENTARY_REUSE_WINDOW_MS
+    ) {
+      this.activeAssistantProgressKeyBySession.set(input.sessionId, recent.progressKey);
+      return recent.progressKey;
+    }
+
+    return this.resolveAssistantProgressKey({
+      adminId: input.adminId,
+      sessionId: input.sessionId,
+      createIfMissing: true
+    });
+  }
+
+  private resolveAssistantCommentaryProgressKey(input: {
+    adminId: number;
+    sessionId?: string;
+    text: string;
+    finalText: string;
+    isFinalChunk: boolean;
+  }): string | null {
+    /* Session-bound commentary gets its own replace slot so an identical final answer can update the same bubble. */
+    if (!input.sessionId) {
+      return null;
+    }
+
+    const nextSeq = (this.assistantCommentarySeqBySession.get(input.sessionId) ?? 0) + 1;
+    this.assistantCommentarySeqBySession.set(input.sessionId, nextSeq);
+    const progressKey = `assistant-commentary:${input.adminId}:${input.sessionId}:${nextSeq}`;
+
+    if (input.isFinalChunk) {
+      this.recentAssistantCommentaryBySession.set(input.sessionId, {
+        text: input.finalText,
+        progressKey,
+        createdAtMs: Date.now()
+      });
+    }
+
     return progressKey;
   }
 

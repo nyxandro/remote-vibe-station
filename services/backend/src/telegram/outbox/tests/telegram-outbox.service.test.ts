@@ -93,6 +93,49 @@ describe("TelegramOutboxService", () => {
     }
   });
 
+  test("reuses the latest commentary bubble when final reply text is identical", () => {
+    /* Runtime may flush the final text block before the summary footer arrives, so the footer must update that same bubble. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, true);
+
+      const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
+      service.enqueueAssistantCommentary({
+        adminId: 1,
+        sessionId: "session-1",
+        text: "OK"
+      });
+
+      service.enqueueAssistantReply({
+        adminId: 1,
+        delivery: {
+          sessionId: "session-1",
+          text: "OK",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: "medium",
+          agent: "build",
+          tokens: { input: 1, output: 2, reasoning: 0 }
+        }
+      });
+
+      const assistantItems = readItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(assistantItems[0].mode).toBe("replace");
+      expect(assistantItems[0].progressKey).toBe("assistant-commentary:1:session-1:1");
+      expect(assistantItems[0].text).toContain("OK");
+      expect(assistantItems[0].text).toContain("<blockquote>");
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test("starts a fresh streamed message after a blocking question pause", () => {
     /* Question/permission pauses must close the old assistant stream slot so the resumed answer does not rewrite history. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));

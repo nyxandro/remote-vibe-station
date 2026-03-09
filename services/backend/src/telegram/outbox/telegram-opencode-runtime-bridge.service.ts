@@ -406,6 +406,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     this.outbox.enqueueAssistantCommentary({
       adminId: route.adminId,
+      sessionId: sessionID,
       text: buffered
     });
   }
