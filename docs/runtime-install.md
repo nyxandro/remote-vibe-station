@@ -31,6 +31,7 @@
 - Создает ежедневный maintenance timer, который чистит unused images, stopped containers, unused networks и build cache
 - Опционально авторизует GitHub CLI (`gh`) по токену
 - Поднимает стек через `docker compose`
+- Поднимает общий `opencode` toolbox-runtime с persistent volume `/toolbox` для shared CLI/install cache
 
 По умолчанию весь runtime работает **напрямую без прокси**.
 VLESS включается только вручную отдельным override-файлом после настройки.
@@ -106,6 +107,14 @@ sudo ./scripts/install-runtime.sh \
 Что не очищается автоматически:
 
 - named volumes (`opencode_data`, `opencode_config`, `backend_data`, `cliproxy_auth` и т.д.).
+
+## Общий toolbox runtime
+
+- Все агентные команды исполняются в общем `opencode` runtime-контейнере, а не в каждом проекте отдельно.
+- В этот runtime заранее заложены типовые dev-инструменты: `git`, `gh`, `docker`, `node`, `python`, `pipx`, `uv`, `ripgrep`, `fd`, `playwright`, `chromium` и системные browser deps.
+- Volume `toolbox_data` монтируется в `/toolbox` и сохраняет shared installs/caches между рестартами и обновлениями образов.
+- Toolbox path layout закреплен явно: `/toolbox/npm-global`, `/toolbox/pnpm/store`, `/toolbox/pipx`, `/toolbox/python-user`, `/toolbox/playwright`, `/toolbox/cache/*`, `/toolbox/bin`.
+- За счет этого новые global CLI, поставленные внутри toolbox, становятся доступны всем проектам без дублирования по project-контейнерам.
 
 ## Опциональный VLESS после установки
 

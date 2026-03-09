@@ -26,6 +26,20 @@ test("opencode Dockerfile installs git docker ssh and gh tooling", () => {
   assert.match(dockerfile, /docker\.io|docker-cli/);
   assert.match(dockerfile, /docker-compose-plugin|docker-cli-compose|docker-compose/);
   assert.match(dockerfile, /openssh-client/);
+  assert.match(dockerfile, /python3/);
+  assert.match(dockerfile, /pipx/);
+  assert.match(dockerfile, /ripgrep/);
+  assert.match(dockerfile, /fd-find/);
+  assert.match(dockerfile, /chromium/);
+  assert.match(dockerfile, /playwright/);
+  assert.match(dockerfile, /XDG_CACHE_HOME=\/toolbox\/cache/);
+  assert.match(dockerfile, /NPM_CONFIG_PREFIX=\/toolbox\/npm-global/);
+  assert.match(dockerfile, /NPM_CONFIG_CACHE=\/toolbox\/cache\/npm/);
+  assert.match(dockerfile, /PNPM_STORE_DIR=\/toolbox\/pnpm\/store/);
+  assert.match(dockerfile, /PIPX_BIN_DIR=\/toolbox\/bin/);
+  assert.match(dockerfile, /PIP_CACHE_DIR=\/toolbox\/cache\/pip/);
+  assert.match(dockerfile, /PYTHONUSERBASE=\/toolbox\/python-user/);
+  assert.match(dockerfile, /UV_CACHE_DIR=\/toolbox\/cache\/uv/);
   assert.match(dockerfile, /docker-wrapper\.sh/);
 });
 
@@ -70,6 +84,7 @@ test("runtime template keeps opencode host access and shared git auth", () => {
   assert.match(compose, /- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /- \/root\/\.config\/gh:\/root\/\.config\/gh/);
   assert.match(compose, /- \/:\/hostfs/);
+  assert.match(compose, /- toolbox_data:\/toolbox/);
   assert.match(compose, /GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
   assert.match(compose, /GIT_CONFIG_VALUE_0=!gh auth git-credential/);
 });
@@ -93,6 +108,7 @@ test("dev compose keeps opencode host access and shared git auth", () => {
   assert.match(compose, /- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /- \/root\/\.config\/gh:\/root\/\.config\/gh/);
   assert.match(compose, /- \/:\/hostfs/);
+  assert.match(compose, /- toolbox_data:\/toolbox/);
   assert.match(compose, /GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
   assert.match(compose, /GIT_CONFIG_VALUE_0=!gh auth git-credential/);
 });

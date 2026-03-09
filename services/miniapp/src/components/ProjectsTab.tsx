@@ -257,6 +257,7 @@ export const ProjectsTab = (props: Props) => {
                   className="project-actions"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {/* Keep deploy links in the content area and pin action buttons to a dedicated footer row. */}
                   {deployRoutes.length > 0 ? (
                     <div className="project-deploy-links" aria-label="Deploy links">
                       {deployRoutes.map((route) => (
@@ -275,36 +276,38 @@ export const ProjectsTab = (props: Props) => {
                     </div>
                   ) : null}
 
-                  <button
-                    className={isDeployed ? "btn outline" : "btn primary"}
-                    onClick={() => {
-                      if (isDeployed) {
-                        props.onStopProjectDeploy(project.id);
-                        return;
-                      }
-                      props.onDeployProject(project.id);
-                    }}
-                    type="button"
-                  >
-                    {isDeployed ? "Stop deploy" : "Deploy"}
-                  </button>
+                  <div className="project-actions-footer">
+                    {!isActive ? (
+                      <button
+                        className="btn outline project-action-button"
+                        onClick={() => props.onSelectProject(project.id)}
+                      >
+                        Select
+                      </button>
+                    ) : (
+                      <button
+                        className="btn outline project-action-button"
+                        disabled
+                        title="Already selected"
+                      >
+                        Selected
+                      </button>
+                    )}
 
-                  {!isActive ? (
                     <button
-                      className="btn outline"
-                      onClick={() => props.onSelectProject(project.id)}
+                      className={isDeployed ? "btn outline project-action-button" : "btn primary project-action-button"}
+                      onClick={() => {
+                        if (isDeployed) {
+                          props.onStopProjectDeploy(project.id);
+                          return;
+                        }
+                        props.onDeployProject(project.id);
+                      }}
+                      type="button"
                     >
-                      Select
+                      {isDeployed ? "Stop deploy" : "Deploy"}
                     </button>
-                  ) : (
-                    <button
-                      className="btn outline"
-                      disabled
-                      title="Already selected"
-                    >
-                      Selected
-                    </button>
-                  )}
+                  </div>
                 </div>
               ) : null}
             </article>

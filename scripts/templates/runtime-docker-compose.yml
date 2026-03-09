@@ -150,6 +150,7 @@ services:
       - /root/.config/gh:/root/.config/gh
       - opencode_data:/root/.local/share/opencode
       - opencode_config:/root/.config/opencode
+      - toolbox_data:/toolbox
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=public"
@@ -174,5 +175,6 @@ volumes:
   opencode_config:
   backend_data:
   opencode_data:
+  toolbox_data:
   cliproxy_auth:
   cliproxy_logs:

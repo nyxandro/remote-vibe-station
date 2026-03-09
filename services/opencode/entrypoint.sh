@@ -17,6 +17,19 @@ fi
 # Ensure target config directory exists before writing a new file.
 mkdir -p "$CONFIG_DIR"
 
+# Keep shared toolbox paths present even on a fresh named volume.
+mkdir -p \
+  /toolbox/bin \
+  /toolbox/cache/npm \
+  /toolbox/cache/pip \
+  /toolbox/cache/uv \
+  /toolbox/npm-global \
+  /toolbox/pipx \
+  /toolbox/playwright \
+  /toolbox/pnpm/store \
+  /toolbox/python-user \
+  /toolbox/uv/tools
+
 # Seed the temp file with the existing config so the generator can merge instead
 # of replacing unrelated user-managed keys like MCP server definitions.
 if [ -f "$CONFIG_PATH" ]; then
