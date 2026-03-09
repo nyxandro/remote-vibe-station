@@ -9,13 +9,10 @@ import { useEffect } from "react";
 
 import { useKanban } from "../hooks/use-kanban";
 import { ProjectRecord } from "../types";
-import { ThemeMode } from "../utils/theme";
 import { KanbanBoard } from "./KanbanBoard";
 
 type Props = {
   activeProject: ProjectRecord | null;
-  themeMode: ThemeMode;
-  onChangeTheme: (mode: ThemeMode) => void;
 };
 
 export const KanbanProjectTab = (props: Props) => {
@@ -54,8 +51,6 @@ export const KanbanProjectTab = (props: Props) => {
         tasks={tasks}
         projects={[props.activeProject]}
         activeProjectSlug={props.activeProject.slug}
-        themeMode={props.themeMode}
-        onChangeTheme={props.onChangeTheme}
         isLoading={isLoading}
         isSaving={isSaving}
         onRefresh={() => void reloadTasks()}

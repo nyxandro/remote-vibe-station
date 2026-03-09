@@ -5,7 +5,7 @@
 .workspace-header-shell {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   margin-bottom: 16px;
 }
 
@@ -102,7 +102,7 @@ html[data-theme="dark"] .active-project-card {
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     margin: -16px -14px 16px;
-    padding: 16px 0 12px; /* 0 horizontally so tabs can scroll edge-to-edge untouched */
+    padding: 16px 0 12px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   }
 
@@ -119,7 +119,7 @@ html[data-theme="dark"] .active-project-card {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     margin: 0;
-    padding: 4px 14px 12px; /* Pad inside to match screen edges */
+    padding: 4px 14px 6px;
     gap: 12px;
     background: transparent;
     border: none;
@@ -161,13 +161,13 @@ html[data-theme="dark"] .active-project-card {
   }
 
   .active-project-card {
-    margin: 8px 14px 0 14px; /* Reduced top margin from 14px to 8px */
+    margin: 0 14px 0 14px;
     padding: 16px;
     border-radius: 24px;
     background: rgba(255, 255, 255, 0.95);
     border: 1px solid rgba(27, 108, 255, 0.1);
     box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
-    align-items: center;
+    align-items: stretch;
   }
 
   html[data-theme="dark"] .active-project-card {

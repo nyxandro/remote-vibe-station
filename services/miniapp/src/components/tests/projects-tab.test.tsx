@@ -202,7 +202,7 @@ describe("ProjectsTab", () => {
 
   it("renders deploy route links inside expanded project card", () => {
     /* Expanded cards should expose every public deploy URL so operators can jump to web/admin surfaces. */
-    render(
+    const { container } = render(
       <ProjectsTab
         visibleProjects={[
           buildProject({
@@ -239,5 +239,12 @@ describe("ProjectsTab", () => {
     expect(adminLink.getAttribute("href")).toBe("https://admin.tvoc.dev.example.com");
     expect(screen.getByText("tvoc.dev.example.com")).toBeTruthy();
     expect(screen.getByText("admin.tvoc.dev.example.com")).toBeTruthy();
+
+    const expandedCard = container.querySelector(".project-card");
+    const linksBlock = expandedCard?.querySelector(".project-deploy-links");
+    const actionsBlock = expandedCard?.querySelector(".project-actions-footer");
+    expect(linksBlock).toBeTruthy();
+    expect(actionsBlock).toBeTruthy();
+    expect(linksBlock?.compareDocumentPosition(actionsBlock as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

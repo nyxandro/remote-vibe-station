@@ -1,10 +1,10 @@
 /**
- * @fileoverview Tests for standalone kanban theme switching and persistence.
+ * @fileoverview Tests for standalone kanban theme behavior.
  */
 
 /* @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { KanbanBoardScreen } from "../KanbanBoardScreen";
@@ -35,9 +35,9 @@ vi.mock("../../hooks/use-project-catalog", () => ({
 
 describe("KanbanBoardScreen theme toggle", () => {
   beforeEach(() => {
-    /* Start every render from a clean theme state for deterministic assertions. */
-    document.documentElement.removeAttribute("data-theme");
-    localStorage.removeItem(THEME_STORAGE_KEY);
+    /* Mimic the globally applied theme that comes from Mini App settings before the screen mounts. */
+    document.documentElement.setAttribute("data-theme", "dark");
+    localStorage.setItem(THEME_STORAGE_KEY, "dark");
   });
 
   afterEach(() => {
@@ -46,16 +46,13 @@ describe("KanbanBoardScreen theme toggle", () => {
     localStorage.removeItem(THEME_STORAGE_KEY);
   });
 
-  it("switches theme from the standalone board and remembers the selected mode", () => {
-    /* Secure board links should not force users back into Settings just to change the visual mode. */
+  it("inherits the global theme and does not render local day/night controls", () => {
+    /* Kanban should follow the single global theme source instead of exposing a second toggle. */
     render(<KanbanBoardScreen initialProjectSlug={null} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Night/i }));
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
-
-    fireEvent.click(screen.getByRole("button", { name: /Day/i }));
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
+    expect(screen.queryByRole("button", { name: /Day/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Night/i })).toBeNull();
   });
 });

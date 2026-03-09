@@ -9,7 +9,6 @@ import { useEffect } from "react";
 
 import { useKanban } from "../hooks/use-kanban";
 import { useProjectCatalog } from "../hooks/use-project-catalog";
-import { useThemeMode } from "../hooks/use-theme-mode";
 import { KanbanBoard } from "./KanbanBoard";
 
 type Props = {
@@ -17,7 +16,6 @@ type Props = {
 };
 
 export const KanbanBoardScreen = (props: Props) => {
-  const { themeMode, setThemeMode } = useThemeMode();
   const {
     tasks,
     isLoading,
@@ -67,8 +65,6 @@ export const KanbanBoardScreen = (props: Props) => {
           tasks={tasks}
           projects={projects}
           activeProjectSlug={null}
-          themeMode={themeMode}
-          onChangeTheme={setThemeMode}
           initialProjectFilter={props.initialProjectSlug}
           isLoading={isLoading || isProjectsLoading}
           isSaving={isSaving}

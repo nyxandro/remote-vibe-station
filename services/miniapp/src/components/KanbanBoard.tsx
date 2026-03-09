@@ -5,14 +5,12 @@
  * - KanbanBoard - Renders columns, cards, filters, drag-and-drop, and editor modal.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink, Plus, RefreshCw, Search, X } from "lucide-react";
 
 import { CreateKanbanTaskPayload, UpdateKanbanTaskPayload } from "../hooks/use-kanban";
 import { KanbanTaskEditorModal, KanbanTaskEditorSubmit } from "./KanbanTaskEditorModal";
 import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
-import { ThemeMode } from "../utils/theme";
-import { ThemeModeToggle } from "./ThemeModeToggle";
 
 const COLUMNS: Array<{ status: KanbanStatus; label: string; emptyText: string }> = [
   { status: "backlog", label: "Backlog", emptyText: "Discuss and refine ideas here." },
@@ -41,8 +39,6 @@ type Props = {
   tasks: KanbanTask[];
   projects: ProjectRecord[];
   activeProjectSlug: string | null;
-  themeMode: ThemeMode;
-  onChangeTheme: (mode: ThemeMode) => void;
   initialProjectFilter?: string | null;
   isLoading: boolean;
   isSaving: boolean;
@@ -64,12 +60,14 @@ const formatTaskTimestamp = (value: string): string => {
 
 export const KanbanBoard = (props: Props) => {
   const [search, setSearch] = useState<string>("");
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [projectFilter, setProjectFilter] = useState<string>(props.initialProjectFilter ?? "all");
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dropStatus, setDropStatus] = useState<KanbanStatus | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false);
   const [editingTask, setEditingTask] = useState<KanbanTask | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     /* Project-scoped boards follow the active project selection automatically. */
@@ -82,6 +80,15 @@ export const KanbanBoard = (props: Props) => {
       setProjectFilter(props.initialProjectFilter);
     }
   }, [props.activeProjectSlug, props.initialProjectFilter, props.scope]);
+
+  useEffect(() => {
+    /* Focus the search field only after the expanding search shell has mounted. */
+    if (!isSearchOpen) {
+      return;
+    }
+
+    searchInputRef.current?.focus();
+  }, [isSearchOpen]);
 
   const filteredTasks = useMemo(() => {
     /* Search/filter stays client-side so the board feels immediate while the backend remains simple. */
@@ -125,21 +132,6 @@ export const KanbanBoard = (props: Props) => {
     return buckets;
   }, [filteredTasks]);
 
-  const visibleProjectName = useMemo(() => {
-    /* Surface the active scope clearly so the board feels anchored in the selected project context. */
-    if (props.scope === "project") {
-      return props.projects[0]?.name ?? "Project";
-    }
-
-    if (projectFilter === "all") {
-      return "All projects";
-    }
-
-    return props.projects.find((project) => project.slug === projectFilter)?.name ?? projectFilter;
-  }, [projectFilter, props.projects, props.scope]);
-
-  const summaryText = props.scope === "project" ? "Project board" : "Shared board";
-
   const handleEditorSubmit = async (payload: KanbanTaskEditorSubmit): Promise<void> => {
     /* Create and edit dialogs both feed the board through one normalized payload shape. */
     setEditorError(null);
@@ -175,60 +167,93 @@ export const KanbanBoard = (props: Props) => {
 
   return (
     <section className="kanban-shell">
-      <div className="kanban-summary-row">
-        <div className="kanban-summary-copy">
-          <span className="kanban-summary-label">{summaryText}</span>
-          <span className="kanban-summary-project">{visibleProjectName}</span>
-        </div>
-
-        <div className="kanban-summary-metrics">
-          <span className="kanban-summary-chip">Visible {filteredTasks.length}</span>
-          <span className="kanban-summary-chip">Queue {tasksByStatus.queued.length}</span>
-          <span className="kanban-summary-chip">Active {tasksByStatus.in_progress.length}</span>
-        </div>
-      </div>
-
-      <div className="kanban-toolbar">
-        <input
-          className="input kanban-search-input"
-          placeholder="Search tasks…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-
-        {props.scope === "global" ? (
-          <select className="input kanban-project-filter" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-            <option value="all">All projects</option>
-            {props.projects.map((project) => (
-              <option key={project.id} value={project.slug}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        ) : null}
-
-        <div className="kanban-toolbar-side">
-          <ThemeModeToggle compact themeMode={props.themeMode} onChangeTheme={props.onChangeTheme} />
-
-          <div className="kanban-toolbar-actions">
-            {props.onOpenGlobalBoard ? (
-              <button className="btn outline" onClick={props.onOpenGlobalBoard} type="button">
-                Open shared board
-              </button>
-            ) : null}
-
-            <button className="btn outline" onClick={props.onRefresh} type="button">
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-
-            <button className="btn primary" onClick={() => setIsCreateOpen(true)} type="button">
-              New task
+      <div className={isSearchOpen ? "kanban-toolbar kanban-toolbar-search-open" : "kanban-toolbar"}>
+        {isSearchOpen ? (
+          <div className="kanban-search-shell">
+            <Search size={16} className="kanban-search-shell-icon" />
+            <input
+              ref={searchInputRef}
+              className="input kanban-search-input"
+              placeholder="Search tasks…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <button
+              className="btn outline kanban-toolbar-icon-button"
+              onClick={() => setIsSearchOpen(false)}
+              type="button"
+              aria-label="Close search"
+              title="Close search"
+            >
+              <X size={16} />
             </button>
           </div>
-        </div>
-      </div>
+        ) : (
+          <>
+            {props.scope === "global" ? (
+              <select
+                className="input kanban-project-filter kanban-project-filter-compact"
+                value={projectFilter}
+                onChange={(event) => setProjectFilter(event.target.value)}
+                aria-label="Filter by project"
+              >
+                <option value="all">All projects</option>
+                {props.projects.map((project) => (
+                  <option key={project.id} value={project.slug}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
 
+            <div className="kanban-toolbar-side">
+              <div className="kanban-toolbar-actions">
+                <button
+                  className="btn outline kanban-toolbar-icon-button"
+                  onClick={() => setIsSearchOpen(true)}
+                  type="button"
+                  aria-label="Open search"
+                  title="Search tasks"
+                >
+                  <Search size={16} />
+                </button>
+
+                {props.onOpenGlobalBoard ? (
+                  <button
+                    className="btn outline kanban-toolbar-icon-button"
+                    onClick={props.onOpenGlobalBoard}
+                    type="button"
+                    aria-label="Open shared board"
+                    title="Open shared board"
+                  >
+                    <ExternalLink size={16} />
+                  </button>
+                ) : null}
+
+                <button
+                  className="btn outline kanban-toolbar-icon-button"
+                  onClick={props.onRefresh}
+                  type="button"
+                  aria-label="Refresh board"
+                  title="Refresh board"
+                >
+                  <RefreshCw size={16} />
+                </button>
+
+                <button
+                  className="btn primary kanban-toolbar-icon-button"
+                  onClick={() => setIsCreateOpen(true)}
+                  type="button"
+                  aria-label="Create new task"
+                  title="Create new task"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
       {editorError ? <div className="alert">{editorError}</div> : null}
 
       <div className="kanban-columns">
@@ -274,6 +299,19 @@ export const KanbanBoard = (props: Props) => {
                   key={task.id}
                   className={`kanban-card kanban-card-${task.status}`}
                   draggable
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open task ${task.title}`}
+                  onClick={() => setEditingTask(task)}
+                  onKeyDown={(event) => {
+                    /* Keyboard users need the same full-card edit affordance as pointer users. */
+                    if (event.key !== "Enter" && event.key !== " ") {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    setEditingTask(task);
+                  }}
                   onDragStart={() => setDragTaskId(task.id)}
                   onDragEnd={() => {
                     setDragTaskId(null);
@@ -311,10 +349,6 @@ export const KanbanBoard = (props: Props) => {
 
                   <div className="kanban-card-footer">
                     <span className="kanban-card-updated">Updated {formatTaskTimestamp(task.updatedAt)}</span>
-
-                    <button className="btn ghost" onClick={() => setEditingTask(task)} type="button">
-                      Edit
-                    </button>
                   </div>
                 </article>
               ))}

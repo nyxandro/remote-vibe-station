@@ -316,8 +316,11 @@ html[data-theme="dark"] .project-card.active {
 
 .project-deploy-link {
   display: grid;
-  gap: 2px;
-  padding: 10px 12px;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid rgba(71, 132, 255, 0.28);
   background: linear-gradient(180deg, rgba(233, 242, 255, 0.92) 0%, rgba(221, 234, 255, 0.76) 100%);
@@ -337,6 +340,7 @@ html[data-theme="dark"] .project-card.active {
   font-size: 13px;
   color: #10213f;
   overflow-wrap: anywhere;
+  text-align: left;
 }
 
 html[data-theme="dark"] .project-deploy-link {
@@ -403,6 +407,7 @@ html[data-theme="dark"] .project-deploy-link-url {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
 }
 
 .project-actions-footer {
@@ -410,6 +415,7 @@ html[data-theme="dark"] .project-deploy-link-url {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-items: stretch;
+  width: 100%;
 }
 
 .project-action-button {
@@ -418,6 +424,11 @@ html[data-theme="dark"] .project-deploy-link-url {
 }
 
 @media (max-width: 560px) {
+  .project-deploy-link {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
   .project-actions-footer {
     grid-template-columns: 1fr;
   }
@@ -846,10 +857,19 @@ html[data-theme="dark"] .project-deploy-link-url {
 
   .project-actions {
     margin-top: 16px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 10px;
     animation: slideDownFade 0.2s ease-out;
+  }
+
+  .project-deploy-links {
+    width: 100%;
+  }
+
+  .project-actions-footer {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   @keyframes slideDownFade {

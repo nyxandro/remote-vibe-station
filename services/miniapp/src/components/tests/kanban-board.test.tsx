@@ -54,8 +54,6 @@ describe("KanbanBoard", () => {
         tasks={[]}
         projects={[buildProject()]}
         activeProjectSlug="alpha"
-        themeMode="light"
-        onChangeTheme={vi.fn()}
         isLoading={false}
         isSaving={false}
         onRefresh={vi.fn()}
@@ -90,8 +88,6 @@ describe("KanbanBoard", () => {
         tasks={[buildTask()]}
         projects={[buildProject()]}
         activeProjectSlug="alpha"
-        themeMode="light"
-        onChangeTheme={vi.fn()}
         isLoading={false}
         isSaving={false}
         onRefresh={vi.fn()}
@@ -107,5 +103,30 @@ describe("KanbanBoard", () => {
     expect(screen.getByText("Blocked")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Discuss backlog item")).toBeTruthy();
+  });
+
+  it("opens task editor by clicking the whole card and hides the legacy Edit button", () => {
+    /* Editing should feel direct on touch devices, so the entire card acts as the edit trigger. */
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[buildTask()]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Open task Discuss backlog item/i }));
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByDisplayValue("Discuss backlog item")).toBeTruthy();
   });
 });

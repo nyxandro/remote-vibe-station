@@ -98,10 +98,6 @@ export const KanbanTaskEditorModal = (props: Props) => {
           <h2 id="kanban-editor-title" className="kanban-modal-title">
             {props.mode === "create" ? "New task" : "Edit task"}
           </h2>
-
-          <button className="btn ghost" onClick={props.onClose} type="button">
-            Close
-          </button>
         </div>
 
         <div className="kanban-form-grid">

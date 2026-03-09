@@ -226,13 +226,7 @@ export const WorkspaceTabsContent = (props: Props) => {
   }
 
   if (props.activeTab === "tasks") {
-    return (
-      <KanbanProjectTab
-        activeProject={props.activeProject}
-        themeMode={props.themeMode}
-        onChangeTheme={props.onChangeTheme}
-      />
-    );
+    return <KanbanProjectTab activeProject={props.activeProject} />;
   }
 
   if (props.activeTab === "terminal") {
