@@ -50,7 +50,9 @@ describe("Telegram session started notification", () => {
       const outboxStore = new TelegramOutboxStore();
       const outboxService = new TelegramOutboxService(streamStore, outboxStore);
       const events = new EventsService(config as any);
-      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any);
       bridge.onModuleInit();
 
       events.publish({

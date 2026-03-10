@@ -9,6 +9,7 @@ import * as path from "node:path";
 import { EventsService } from "../../../events/events.service";
 import { TelegramStreamStore } from "../../telegram-stream.store";
 import { TelegramOutboxStore } from "../telegram-outbox.store";
+import { TelegramOpenCodeRuntimeBridge } from "../telegram-opencode-runtime-bridge.service";
 import { TelegramOutboxService } from "../telegram-outbox.service";
 import { TelegramEventsOutboxBridge } from "../telegram-events-outbox-bridge.service";
 
@@ -47,7 +48,9 @@ describe("TelegramEventsOutboxBridge", () => {
       const outboxStore = new TelegramOutboxStore();
       const outboxService = new TelegramOutboxService(streamStore, outboxStore);
       const events = new EventsService(config as any);
-      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -104,7 +107,9 @@ describe("TelegramEventsOutboxBridge", () => {
       const outboxStore = new TelegramOutboxStore();
       const outboxService = new TelegramOutboxService(streamStore, outboxStore);
       const events = new EventsService(config as any);
-      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -164,7 +169,9 @@ describe("TelegramEventsOutboxBridge", () => {
       const outboxStore = new TelegramOutboxStore();
       const outboxService = new TelegramOutboxService(streamStore, outboxStore);
       const events = new EventsService(config as any);
-      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -235,7 +242,9 @@ describe("TelegramEventsOutboxBridge", () => {
       const outboxStore = new TelegramOutboxStore();
       const outboxService = new TelegramOutboxService(streamStore, outboxStore);
       const events = new EventsService(config as any);
-      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -293,7 +302,9 @@ describe("TelegramEventsOutboxBridge", () => {
       const outboxStore = new TelegramOutboxStore();
       const outboxService = new TelegramOutboxService(streamStore, outboxStore);
       const events = new EventsService(config as any);
-      const bridge = new TelegramEventsOutboxBridge(events, outboxService);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -315,6 +326,165 @@ describe("TelegramEventsOutboxBridge", () => {
       const assistantItems = readOutboxItems().filter((item) => item.control == null);
       expect(assistantItems).toHaveLength(1);
       expect(assistantItems[0].text).toContain("Финальный текст целиком");
+      expect(assistantItems[0].text).toContain("<blockquote>");
+    } finally {
+      process.chdir(prev);
+      try {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  });
+
+  test("ignores late text-part replay after the final Telegram reply is already enqueued", () => {
+    /* Late OpenCode replay events must not reopen an already delivered final answer as duplicate commentary. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-bridge-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, true);
+
+      const outboxStore = new TelegramOutboxStore();
+      const outboxService = new TelegramOutboxService(streamStore, outboxStore);
+      const events = new EventsService(config as any);
+      const runtimeBridge = new TelegramOpenCodeRuntimeBridge(
+        config as any,
+        events,
+        {
+          resolve: jest.fn(() => ({ adminId: 1, directory: tmp })),
+          bindQuestion: jest.fn(() => "question-token"),
+          bindPermission: jest.fn(() => "permission-token")
+        } as any,
+        outboxService,
+        { create: jest.fn(() => ({ token: "diff-token" })) } as any
+      );
+      runtimeBridge.onModuleInit();
+
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, runtimeBridge);
+      bridge.onModuleInit();
+
+      /* Simulate the final assistant text that was already buffered from the runtime stream. */
+      events.publish({
+        type: "opencode.event",
+        ts: new Date().toISOString(),
+        data: {
+          payload: JSON.stringify({
+            type: "message.part.updated",
+            properties: {
+              part: {
+                type: "text",
+                id: "assistant-part-1",
+                sessionID: "session-1"
+              }
+            }
+          })
+        }
+      });
+      events.publish({
+        type: "opencode.event",
+        ts: new Date().toISOString(),
+        data: {
+          payload: JSON.stringify({
+            type: "message.part.delta",
+            properties: {
+              sessionID: "session-1",
+              partID: "assistant-part-1",
+              field: "text",
+              delta: "Привет! На связи. Что сделать?"
+            }
+          })
+        }
+      });
+
+      /* Final HTTP response publishes the same answer with footer metadata. */
+      events.publish({
+        type: "opencode.message",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: 1,
+          sessionId: "session-1",
+          text: "Привет! На связи. Что сделать?",
+          finalText: "Привет! На связи. Что сделать?",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: "medium",
+          agent: "build",
+          tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+        }
+      });
+
+      /* Replay of the already delivered text must be ignored instead of becoming a second chat bubble. */
+      events.publish({
+        type: "opencode.event",
+        ts: new Date().toISOString(),
+        data: {
+          payload: JSON.stringify({
+            type: "message.part.updated",
+            properties: {
+              part: {
+                type: "text",
+                id: "assistant-part-1",
+                sessionID: "session-1"
+              }
+            }
+          })
+        }
+      });
+      events.publish({
+        type: "opencode.event",
+        ts: new Date().toISOString(),
+        data: {
+          payload: JSON.stringify({
+            type: "message.part.delta",
+            properties: {
+              sessionID: "session-1",
+              partID: "assistant-part-1",
+              field: "text",
+              delta: "Привет! На связи. Что сделать?"
+            }
+          })
+        }
+      });
+      events.publish({
+        type: "opencode.event",
+        ts: new Date().toISOString(),
+        data: {
+          payload: JSON.stringify({
+            type: "message.part.updated",
+            properties: {
+              part: {
+                type: "tool",
+                id: "tool-part-1",
+                sessionID: "session-1",
+                tool: "write",
+                state: {
+                  status: "running",
+                  input: { content: "ignored" },
+                  metadata: { filepath: "notes.txt" }
+                }
+              }
+            }
+          })
+        }
+      });
+
+      const assistantItems = readOutboxItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(assistantItems[0].text).toContain("Привет! На связи. Что сделать?");
       expect(assistantItems[0].text).toContain("<blockquote>");
     } finally {
       process.chdir(prev);

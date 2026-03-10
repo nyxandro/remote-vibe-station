@@ -14,13 +14,15 @@ import { Injectable, OnModuleInit } from "@nestjs/common";
 
 import { EventsService } from "../../events/events.service";
 import { EventEnvelope } from "../../events/events.types";
+import { TelegramOpenCodeRuntimeBridge } from "./telegram-opencode-runtime-bridge.service";
 import { TelegramOutboxService } from "./telegram-outbox.service";
 
 @Injectable()
 export class TelegramEventsOutboxBridge implements OnModuleInit {
   public constructor(
     private readonly events: EventsService,
-    private readonly outbox: TelegramOutboxService
+    private readonly outbox: TelegramOutboxService,
+    private readonly runtimeBridge: TelegramOpenCodeRuntimeBridge
   ) {}
 
   public onModuleInit(): void {
@@ -52,6 +54,12 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
           telemetry: data?.telemetry
         }
       });
+
+      /* Drop stale runtime buffers so late SSE replays cannot duplicate the just-delivered final answer. */
+      const sessionId = typeof data?.sessionId === "string" ? data.sessionId.trim() : "";
+      if (sessionId.length > 0) {
+        this.runtimeBridge.finalizeAssistantReply(sessionId);
+      }
       return;
     }
 

@@ -13,6 +13,7 @@ import { EventsService } from "../../events/events.service";
 import { OpenCodeSessionRoutingStore } from "../../open-code/opencode-session-routing.store";
 import { TelegramDiffPreviewStore } from "../diff-preview/telegram-diff-preview.store";
 import { formatTelegramQuestionPrompt } from "../telegram-question-prompt";
+import { TelegramAssistantPartState } from "./telegram-assistant-part-state";
 import { formatFileOperationMessageHtml } from "./telegram-file-event-message";
 import { TelegramOutboxService } from "./telegram-outbox.service";
 import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
@@ -63,6 +64,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly assistantTextBySession = new Map<string, string>();
   private readonly partTypeById = new Map<string, string>();
   private readonly partIdsBySession = new Map<string, Set<string>>();
+  private readonly assistantPartState = new TelegramAssistantPartState();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private readonly emittedSystemNotificationsBySession = new Map<string, Set<string>>();
   private botUsernamePromise: Promise<string | null> | null = null;
@@ -149,6 +151,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     const partType = String(part.type ?? "");
     const partID = String(part.id ?? "").trim();
+    if (partType === "text" && partID && !this.assistantPartState.rememberOpenTextPart(sessionID, partID)) {
+      /* Late replay of an already finalized text part must not resurrect duplicate commentary. */
+      return;
+    }
+
     if (partID) {
       /* Remember part type so later delta events can distinguish text from reasoning/tool output. */
       this.partTypeById.set(partID, partType);
@@ -263,6 +270,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     const field = String(properties.field ?? "").trim();
     const partID = String(properties.partID ?? "").trim();
+    if (partID && this.assistantPartState.isClosedTextPart(sessionID, partID)) {
+      /* Ignore late text deltas once the corresponding Telegram reply was already finalized. */
+      return;
+    }
+
     const partType = partID ? this.partTypeById.get(partID) ?? "" : "";
     if (field !== "text" || partType !== "text") {
       return;
@@ -356,6 +368,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
   private clearSessionRuntimeState(sessionID: string): void {
     /* Drop cached stream text and part metadata once the OpenCode turn is fully idle. */
+    this.assistantPartState.closeOpenTextParts(sessionID);
     this.outbox.closeAssistantProgress({ sessionId: sessionID });
     this.assistantTextBySession.delete(sessionID);
     this.emittedSystemNotificationsBySession.delete(sessionID);
@@ -378,6 +391,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private closeAssistantStreamSegment(sessionID: string): void {
     /* Non-text runtime activity marks a new assistant commentary block, so flush buffered text and restart. */
     this.flushAssistantCommentarySegment(sessionID);
+    this.assistantPartState.closeOpenTextParts(sessionID);
     const hadBufferedText = (this.assistantTextBySession.get(sessionID) ?? "").length > 0;
     this.outbox.closeAssistantProgress({ sessionId: sessionID });
     if (!hadBufferedText) {
@@ -409,6 +423,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       sessionId: sessionID,
       text: buffered
     });
+  }
+
+  public finalizeAssistantReply(sessionID: string): void {
+    /* The synchronous final reply is authoritative, so any later SSE replay for this turn becomes stale noise. */
+    this.clearSessionRuntimeState(sessionID);
   }
 
   private buildAssistantPartKey(adminId: number, sessionID: string, partID: string): string {
