@@ -16,6 +16,7 @@ import { formatTelegramQuestionPrompt } from "../telegram-question-prompt";
 import { TelegramAssistantPartState } from "./telegram-assistant-part-state";
 import { formatFileOperationMessageHtml } from "./telegram-file-event-message";
 import { TelegramOutboxService } from "./telegram-outbox.service";
+import { TelegramRuntimePartReplayGuard } from "./telegram-runtime-part-replay-guard";
 import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
 
 type OpenCodeBusEvent = {
@@ -65,6 +66,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly partTypeById = new Map<string, string>();
   private readonly partIdsBySession = new Map<string, Set<string>>();
   private readonly assistantPartState = new TelegramAssistantPartState();
+  private readonly finalizedRuntimePartReplayGuard = new TelegramRuntimePartReplayGuard();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private readonly emittedSystemNotificationsBySession = new Map<string, Set<string>>();
   private botUsernamePromise: Promise<string | null> | null = null;
@@ -151,6 +153,19 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     const partType = String(part.type ?? "");
     const partID = String(part.id ?? "").trim();
+    const state = part.state as any;
+    const status = String(state?.status ?? "");
+
+    /* Completed non-text parts may be replayed later; emit them into Telegram only once per session. */
+    if (
+      partType === "tool" &&
+      partID &&
+      (status === "completed" || status === "error") &&
+      !this.finalizedRuntimePartReplayGuard.rememberFinalizedPart(sessionID, partID)
+    ) {
+      return;
+    }
+
     if (partType === "text" && partID && !this.assistantPartState.rememberOpenTextPart(sessionID, partID)) {
       /* Late replay of an already finalized text part must not resurrect duplicate commentary. */
       return;
@@ -180,8 +195,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     const toolName = String(part.tool ?? "");
-    const state = part.state as any;
-    const status = String(state?.status ?? "");
 
     if (toolName === "bash") {
       const command = String(state?.input?.command ?? "").trim();
