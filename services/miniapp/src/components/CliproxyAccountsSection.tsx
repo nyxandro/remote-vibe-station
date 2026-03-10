@@ -5,7 +5,7 @@
  * - CliproxyAccountsSection (L36) - Renders account cards, manual switch/delete actions, and OAuth completion form.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CliproxyAccountState, CliproxyOAuthStartPayload } from "../types";
 import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
@@ -29,6 +29,11 @@ type Props = {
   onDeleteAccount: (accountId: string) => void;
 };
 
+type ParsedCliproxyStatusMessage = {
+  details: string[];
+  isQuotaExceeded: boolean;
+};
+
 export const CliproxyAccountsSection = (props: Props) => {
   const [callbackUrlDraft, setCallbackUrlDraft] = useState<string>("");
   const [codeDraft, setCodeDraft] = useState<string>("");
@@ -43,12 +48,121 @@ export const CliproxyAccountsSection = (props: Props) => {
 
   const selectedProvider = props.oauthStart?.provider;
 
+  const formatDuration = (seconds: number): string => {
+    /* Relative reset countdown must stay readable instead of exposing raw provider seconds. */
+    const normalizedSeconds = Math.max(0, Math.trunc(seconds));
+    const days = Math.floor(normalizedSeconds / 86_400);
+    const hours = Math.floor((normalizedSeconds % 86_400) / 3_600);
+    const minutes = Math.floor((normalizedSeconds % 3_600) / 60);
+    const parts: string[] = [];
+
+    if (days > 0) {
+      parts.push(`${days}д`);
+    }
+    if (hours > 0) {
+      parts.push(`${hours}ч`);
+    }
+    if (minutes > 0 || parts.length === 0) {
+      parts.push(`${minutes}м`);
+    }
+
+    return parts.join(" ");
+  };
+
+  const normalizeCliproxyStatusMessage = (
+    value: string | null
+  ): ParsedCliproxyStatusMessage => {
+    /* Structured upstream JSON errors should become short operator-friendly lines in the account card. */
+    const normalized = String(value ?? "").trim();
+    if (!normalized) {
+      return { details: [], isQuotaExceeded: false };
+    }
+
+    try {
+      const parsed = JSON.parse(normalized) as {
+        error?: {
+          type?: unknown;
+          message?: unknown;
+          plan_type?: unknown;
+          resets_at?: unknown;
+          resets_in_seconds?: unknown;
+          code?: unknown;
+        };
+        status?: unknown;
+      };
+      const error = parsed?.error;
+      if (!error || typeof error !== "object") {
+        return { details: [normalized], isQuotaExceeded: false };
+      }
+
+      const details: string[] = [];
+      const errorType = typeof error.type === "string" ? error.type.trim() : "";
+      const message = typeof error.message === "string" ? error.message.trim() : "";
+      const planType = typeof error.plan_type === "string" ? error.plan_type.trim() : "";
+      const errorCode = typeof error.code === "string" ? error.code.trim() : "";
+      const statusCode =
+        typeof parsed.status === "number" && Number.isFinite(parsed.status) ? Math.trunc(parsed.status) : null;
+      const resetsAtValue = typeof error.resets_at === "number" ? error.resets_at : Number.NaN;
+      const resetsAt = Number.isFinite(resetsAtValue) ? new Date(resetsAtValue * 1000) : null;
+      const resetsInSecondsValue =
+        typeof error.resets_in_seconds === "number" ? error.resets_in_seconds : Number.NaN;
+      const isQuotaExceeded = errorType === "usage_limit_reached";
+
+      if (errorType) {
+        details.push(`Ошибка: ${errorType}`);
+      }
+
+      if (message) {
+        const translatedMessage =
+          errorCode === "account_deactivated"
+            ? "OpenAI сообщает, что аккаунт деактивирован. Проверь почту этого аккаунта."
+            : message;
+        details.push(translatedMessage);
+      }
+
+      if (planType) {
+        details.push(`Тариф: ${planType}`);
+      }
+
+      if (errorCode) {
+        details.push(`Код: ${errorCode}`);
+      }
+
+      if (statusCode !== null) {
+        details.push(`HTTP статус: ${statusCode}`);
+      }
+
+      if (resetsAt && !Number.isNaN(resetsAt.getTime())) {
+        details.push(`Лимит сбросится: ${resetsAt.toLocaleString()}`);
+      }
+
+      if (Number.isFinite(resetsInSecondsValue)) {
+        details.push(`Сброс через: ${formatDuration(resetsInSecondsValue)}`);
+      }
+
+      return {
+        details: details.length > 0 ? details : [normalized],
+        isQuotaExceeded
+      };
+    } catch {
+      /* Plain-text provider details should remain visible even when they are not JSON payloads. */
+      return { details: [normalized], isQuotaExceeded: false };
+    }
+  };
+
   const getCliproxyAccountDetails = (account: CliproxyAccountState["accounts"][number]): string[] => {
     /* CLIProxy may duplicate identity data across fields, so collapse repeated values for one concise card. */
     const uniqueDetails = new Set<string>();
 
-    [account.email ?? account.name, account.account, account.label, account.statusMessage].forEach((value) => {
+    [account.email ?? account.name, account.account, account.label].forEach((value) => {
       const normalized = String(value ?? "").trim();
+      if (normalized) {
+        uniqueDetails.add(normalized);
+      }
+    });
+
+    normalizeCliproxyStatusMessage(account.statusMessage).details.forEach((detail) => {
+      const normalized = detail.trim();
       if (normalized) {
         uniqueDetails.add(normalized);
       }
@@ -56,11 +170,6 @@ export const CliproxyAccountsSection = (props: Props) => {
 
     return Array.from(uniqueDetails);
   };
-
-  const maxTrackedTokens = useMemo(() => {
-    /* Relative bar uses the busiest observed account as 100% to avoid implying real provider quota. */
-    return Math.max(0, ...(props.accounts?.accounts ?? []).map((account) => account.usage.tokenCount));
-  }, [props.accounts]);
 
   const formatUsageNumber = (value: number): string => {
     /* Locale-aware formatting keeps compact usage counters readable on mobile. */
@@ -76,17 +185,23 @@ export const CliproxyAccountsSection = (props: Props) => {
     return Number.isNaN(parsed.getTime()) ? "еще нет" : parsed.toLocaleString();
   };
 
-  const getUsageActivityPercent = (account: CliproxyAccountState["accounts"][number]): number => {
-    /* Activity bar is relative only to observed usage inside the current account pool. */
-    if (maxTrackedTokens <= 0) {
-      return 0;
+  const getQuotaState = (account: CliproxyAccountState["accounts"][number]): {
+    label: string;
+    value: number;
+  } => {
+    /* CLIProxy exposes real availability/error state, but not an exact remaining-quota percentage. */
+    const parsedStatus = normalizeCliproxyStatusMessage(account.statusMessage);
+    if (parsedStatus.isQuotaExceeded || account.unavailable) {
+      return {
+        label: "Квота исчерпана",
+        value: 0
+      };
     }
-    return Math.max(0, Math.min(100, Math.round((account.usage.tokenCount / maxTrackedTokens) * 100)));
-  };
 
-  const getUsageRemainingPercent = (account: CliproxyAccountState["accounts"][number]): number => {
-    /* We show the remaining gap to the busiest account because Mini App has no real provider quota limit. */
-    return Math.max(0, 100 - getUsageActivityPercent(account));
+    return {
+      label: "Квота доступна",
+      value: 100
+    };
   };
 
   return (
@@ -102,6 +217,9 @@ export const CliproxyAccountsSection = (props: Props) => {
       <div className="project-create-note">
         Здесь отображаются аккаунты, уже подключенные внутри CLIProxy. Можно вручную сделать один аккаунт активным или удалить ненужный auth file.
       </div>
+      <div className="project-create-note">
+        CLIProxy не отдает точный процент остатка квоты, поэтому UI показывает реальное состояние доступности, а не вычисленные по токенам псевдо-проценты.
+      </div>
 
       {!props.accounts?.usageTrackingEnabled ? (
         <div className="project-create-note">
@@ -111,7 +229,7 @@ export const CliproxyAccountsSection = (props: Props) => {
 
       <div className="providers-list">
         {props.accounts?.accounts.map((account) => {
-          const limitPercent = getUsageRemainingPercent(account);
+          const quotaState = getQuotaState(account);
           return (
             <div key={`cliproxy-account:${account.id}`} className="providers-item-card">
               {/* Status badge must distinguish active, disabled and unavailable accounts at a glance. */}
@@ -138,26 +256,24 @@ export const CliproxyAccountsSection = (props: Props) => {
               {account.usage.models.length > 0 ? (
                 <div className="project-create-note">Модели: {account.usage.models.join(", ")}</div>
               ) : null}
-              {props.accounts?.usageTrackingEnabled ? (
+               {props.accounts ? (
                 <div className="providers-usage-block">
-                  <div className="project-create-note">
-                    Limit: {limitPercent}%
-                  </div>
+                  <div className="project-create-note">Квота: {quotaState.label}</div>
                   <div
                     className="providers-usage-meter"
                     role="progressbar"
-                    aria-label={`Limit for ${account.name}`}
+                    aria-label={`Quota state for ${account.name}`}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={limitPercent}
-                    aria-valuetext={`Limit ${limitPercent}%`}
+                    aria-valuenow={quotaState.value}
+                    aria-valuetext={quotaState.label}
                   >
                     <div
                       className="providers-usage-meter-fill"
-                      style={{ width: `${limitPercent}%` }}
+                      style={{ width: `${quotaState.value}%` }}
                     />
                     <span className="providers-usage-meter-text">
-                      Limit {limitPercent}%
+                      {quotaState.label}
                     </span>
                   </div>
                 </div>

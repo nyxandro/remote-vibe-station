@@ -90,9 +90,10 @@ const humanizePriority = (priority: KanbanTask["priority"]): string => {
 };
 
 const formatTaskLine = (task: KanbanTask): string => {
-  /* Surface task content instead of internal ids so backlog discussions stay human-readable. */
+  /* Surface the stable task id explicitly so later refine/complete calls can reuse the exact same identifier. */
   const lines = [
     `- ${task.title}`,
+    `  Task ID: ${task.id}`,
     `  Status: ${humanizeStatus(task.status)} | Priority: ${humanizePriority(task.priority)} | Project: ${task.projectName}`
   ];
 
@@ -111,6 +112,7 @@ const formatTaskDetails = (task: KanbanTask | null): string => {
 
   const lines = [
     `${task.title}`,
+    `taskId: ${task.id}`,
     `project: ${task.projectName} (${task.projectSlug})`,
     `status: ${humanizeStatus(task.status)}`,
     `priority: ${humanizePriority(task.priority)}`

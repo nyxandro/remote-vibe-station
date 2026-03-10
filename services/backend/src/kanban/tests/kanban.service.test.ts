@@ -76,7 +76,8 @@ describe("KanbanService", () => {
           runnable: true,
           status: "running"
         }
-      ])
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
 
     const service = new KanbanService(
@@ -129,7 +130,8 @@ describe("KanbanService", () => {
           runnable: true,
           status: "running"
         }
-      ])
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
 
     const service = new KanbanService(
@@ -168,5 +170,69 @@ describe("KanbanService", () => {
 
     expect(result.url).toContain("https://example.test/miniapp/?view=kanban&project=alpha#token=");
     expect(result.url).not.toContain("adminId=42");
+  });
+
+  test("create, claim, refine, and complete reuse the same stable task id", async () => {
+    /* Agent workflows must keep one stable task id across every kanban tool call. */
+    const file = {
+      tasks: [] as MutableTask[]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    const created = await service.createTask({
+      projectSlug: "alpha",
+      title: "Check README",
+      description: "Verify docs and code",
+      status: "queued",
+      priority: "medium",
+      acceptanceCriteria: ["README matches code"]
+    });
+
+    const claimed = await service.claimNextTask({
+      agentId: "opencode-agent",
+      projectSlug: "alpha"
+    });
+    const refined = await service.updateTask(created.id, {
+      description: "Verify docs, code, and examples",
+      acceptanceCriteria: ["README matches code", "Examples still work"]
+    });
+    const completed = await service.completeTask({
+      taskId: created.id,
+      resultSummary: "Done"
+    });
+    const listed = await service.listTasks({ projectSlug: "alpha" });
+
+    expect(claimed?.id).toBe(created.id);
+    expect(refined.id).toBe(created.id);
+    expect(completed.id).toBe(created.id);
+    expect(listed[0]?.id).toBe(created.id);
+    expect(completed.status).toBe("done");
   });
 });

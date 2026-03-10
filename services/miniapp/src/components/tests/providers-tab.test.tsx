@@ -138,19 +138,19 @@ describe("ProvidersTab", () => {
     expect(screen.getByText("Запросы: 3")).toBeTruthy();
     expect(screen.getByText("Токены: 1,450")).toBeTruthy();
     expect(screen.getByText("Ошибки: 1")).toBeTruthy();
-    expect(screen.getByText("Limit: 0%")).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: /Limit for codex-user@example.com/i })).toBeTruthy();
-    expect(screen.getByText("Limit 0%")).toBeTruthy();
+    expect(screen.getByText("Квота: Квота доступна")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: /Quota state for codex-user@example.com/i })).toBeTruthy();
+    expect(screen.getByText("Квота доступна")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
 
     expect(props.onStartCliproxyAuth).toHaveBeenCalledWith("codex");
   });
 
-  it("marks long CLIProxy detail lines as wrapping-safe content", () => {
-    /* Long provider diagnostics must stay inside the card instead of stretching the layout horizontally. */
+  it("parses CLIProxy usage-limit JSON into readable status details", () => {
+    /* Raw upstream JSON errors should become actionable text with reset time in the user's local timezone. */
     const longDetail =
-      '{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"free","resets_at":1773387976}}';
+      '{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"plus","resets_at":1773531611,"resets_in_seconds":438164}}';
 
     renderProvidersTab({
       selected: {
@@ -170,8 +170,39 @@ describe("ProvidersTab", () => {
       proxySnapshot: proxySnapshotFixture
     });
 
-    const detail = screen.getByText(longDetail);
-    expect(detail.className).toContain("providers-account-detail");
+    expect(screen.getByText("Ошибка: usage_limit_reached")).toBeTruthy();
+    expect(screen.getByText("Тариф: plus")).toBeTruthy();
+    expect(screen.getByText(/Лимит сбросится:/i)).toBeTruthy();
+    expect(screen.getByText(/Сброс через:/i)).toBeTruthy();
+  });
+
+  it("parses CLIProxy account deactivated JSON into readable status details", () => {
+    /* Account deactivation errors should expose the provider message instead of raw JSON noise. */
+    const detail =
+      '{"error":{"message":"Your OpenAI account has been deactivated, please check your email for more information.","type":"invalid_request_error","code":"account_deactivated","param":null},"status":401}';
+
+    renderProvidersTab({
+      selected: {
+        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+        thinking: "high",
+        agent: "build"
+      },
+      cliproxyAccounts: {
+        ...cliproxyAccountsFixture,
+        accounts: [
+          {
+            ...cliproxyAccountsFixture.accounts[0],
+            statusMessage: detail
+          }
+        ]
+      },
+      proxySnapshot: proxySnapshotFixture
+    });
+
+    expect(screen.getByText("Ошибка: invalid_request_error")).toBeTruthy();
+    expect(screen.getByText("Код: account_deactivated")).toBeTruthy();
+    expect(screen.getByText("HTTP статус: 401")).toBeTruthy();
+    expect(screen.getByText(/аккаунт деактивирован/i)).toBeTruthy();
   });
 
   it("shows activate action for disabled CLIProxy account and forwards selection", () => {
@@ -197,6 +228,7 @@ describe("ProvidersTab", () => {
     });
 
     expect(screen.getByText("Недоступен для запросов прямо сейчас.")).toBeTruthy();
+    expect(screen.getByText("Квота: Квота исчерпана")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Сделать активным" }));
 
