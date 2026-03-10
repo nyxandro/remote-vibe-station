@@ -21,6 +21,7 @@ import {
 } from "./types";
 import { useAuthControl } from "./hooks/use-auth-control";
 import { useContainerStatusPolling } from "./hooks/use-container-status-polling";
+import { useGithubAuth } from "./hooks/use-github-auth";
 import { useOpenCodeSettings } from "./hooks/use-opencode-settings";
 import { useOpenCodeVersion } from "./hooks/use-opencode-version";
 import { useProviderAuth } from "./hooks/use-provider-auth";
@@ -109,6 +110,13 @@ export const App = () => {
     loadSettings: loadVoiceControlSettings,
     saveSettings: saveVoiceControlSettings
   } = useVoiceControlSettings(setError);
+  const {
+    state: githubAuthState,
+    loadStatus: loadGithubAuthStatus,
+    setTokenDraft: setGithubTokenDraft,
+    saveToken: saveGithubToken,
+    disconnect: disconnectGithubAuth
+  } = useGithubAuth(setError);
   const {
     status: openCodeVersionStatus,
     isLoading: isOpenCodeVersionLoading,
@@ -481,6 +489,7 @@ export const App = () => {
       if (canControlTelegramStream) {
         void loadVoiceControlSettings();
       }
+      void loadGithubAuthStatus();
     }
   }, [
     activeId,
@@ -489,6 +498,7 @@ export const App = () => {
     loadOpenCodeVersionStatus,
     loadRuntime,
     loadSettingsOverview,
+    loadGithubAuthStatus,
     loadVoiceControlSettings
   ]);
 
@@ -622,6 +632,11 @@ export const App = () => {
           onVoiceControlModelChange={setVoiceControlModel}
           onReloadVoiceControl={() => void loadVoiceControlSettings()}
           onSaveVoiceControl={() => void saveVoiceControlSettings()}
+          githubAuth={githubAuthState}
+          onReloadGithubAuth={() => void loadGithubAuthStatus()}
+          onGithubTokenDraftChange={setGithubTokenDraft}
+          onSaveGithubToken={() => void saveGithubToken()}
+          onDisconnectGithubAuth={() => void disconnectGithubAuth()}
           openCodeVersion={{
             status: openCodeVersionStatus,
             isLoading: isOpenCodeVersionLoading,

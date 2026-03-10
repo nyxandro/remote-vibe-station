@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  GithubAuthStatus,
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
   ProjectRuntimeSettingsPatch,
@@ -17,10 +18,12 @@ import {
   VoiceControlSettings
 } from "../types";
 import { ThemeMode } from "../utils/theme";
+import { GitHubAuthSettingsSection } from "./GitHubAuthSettingsSection";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
 import { ServerParametersAccordion } from "./ServerParametersAccordion";
 import { SettingsEditorModal } from "./SettingsEditorModal";
 import { ThemeModeToggle } from "./ThemeModeToggle";
+import { VoiceControlSettingsSection } from "./VoiceControlSettingsSection";
 
 type ActiveFile = {
   kind: OpenCodeSettingsKind;
@@ -67,6 +70,17 @@ type Props = {
   onVoiceControlModelChange?: (value: VoiceControlSettings["model"]) => void;
   onReloadVoiceControl?: () => void;
   onSaveVoiceControl?: () => void;
+  githubAuth?: {
+    status: GithubAuthStatus | null;
+    tokenDraft: string;
+    isLoading: boolean;
+    isSaving: boolean;
+    isDisconnecting: boolean;
+  };
+  onReloadGithubAuth?: () => void;
+  onGithubTokenDraftChange?: (value: string) => void;
+  onSaveGithubToken?: () => void;
+  onDisconnectGithubAuth?: () => void;
   openCodeVersion?: {
     status: OpenCodeVersionStatus | null;
     isLoading: boolean;
@@ -403,75 +417,25 @@ export const SettingsTab = (props: Props) => {
         </div>
       </details>
 
-      <details className="settings-accordion-item">
-        <summary>6. Голосовое управление</summary>
-        <div className="settings-accordion-body">
-          {props.voiceControl ? (
-            <>
-              {/* The browser must never receive the stored Groq key; blank input means "keep unchanged" until edited. */}
-              {props.voiceControl.hasApiKey ? (
-                <div className="settings-save-status" aria-live="polite">
-                  <span className="settings-save-dot" /> Ключ Groq сохранен на сервере и не раскрывается в UI.
-                </div>
-              ) : null}
+      <VoiceControlSettingsSection
+        voiceControl={props.voiceControl}
+        onVoiceControlApiKeyChange={props.onVoiceControlApiKeyChange}
+        onVoiceControlModelChange={props.onVoiceControlModelChange}
+        onReloadVoiceControl={props.onReloadVoiceControl}
+        onSaveVoiceControl={props.onSaveVoiceControl}
+      />
 
-              <input
-                className="input settings-input-compact"
-                type="password"
-                autoComplete="new-password"
-                placeholder="Groq API key (gsk_...)"
-                value={props.voiceControl.apiKey}
-                onChange={(event) => props.onVoiceControlApiKeyChange?.(event.target.value)}
-              />
-
-              <select
-                className="input settings-input-compact"
-                value={props.voiceControl.model ?? ""}
-                onChange={(event) => {
-                  const value = event.target.value.trim();
-                  props.onVoiceControlModelChange?.(
-                    value.length > 0 ? (value as VoiceControlSettings["model"]) : null
-                  );
-                }}
-              >
-                <option value="">Select model</option>
-                {props.voiceControl.supportedModels.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-
-              <div className="settings-actions-grid">
-                <button
-                  className="btn outline"
-                  onClick={props.onReloadVoiceControl}
-                  disabled={props.voiceControl.isLoading}
-                  type="button"
-                >
-                  {props.voiceControl.isLoading ? "Loading..." : "Reload voice settings"}
-                </button>
-                <button
-                  className={props.voiceControl.isSaving ? "btn primary settings-save-btn is-busy" : "btn primary settings-save-btn"}
-                  onClick={props.onSaveVoiceControl}
-                  disabled={props.voiceControl.isSaving}
-                  type="button"
-                >
-                  {props.voiceControl.isSaving ? "Saving..." : "Save voice settings"}
-                </button>
-              </div>
-
-              {props.voiceControl.isSaving ? (
-                <div className="settings-save-status" aria-live="polite">
-                  <span className="settings-save-dot" /> Сохраняем настройки...
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="placeholder">Voice settings are available only in Telegram Mini App context.</div>
-          )}
-        </div>
-      </details>
+      <GitHubAuthSettingsSection
+        status={props.githubAuth?.status ?? null}
+        tokenDraft={props.githubAuth?.tokenDraft ?? ""}
+        isLoading={props.githubAuth?.isLoading ?? false}
+        isSaving={props.githubAuth?.isSaving ?? false}
+        isDisconnecting={props.githubAuth?.isDisconnecting ?? false}
+        onReload={props.onReloadGithubAuth ?? (() => {})}
+        onTokenDraftChange={props.onGithubTokenDraftChange ?? (() => {})}
+        onSaveToken={props.onSaveGithubToken ?? (() => {})}
+        onDisconnect={props.onDisconnectGithubAuth ?? (() => {})}
+      />
 
       {voiceToast ? (
         <div
@@ -490,7 +454,7 @@ export const SettingsTab = (props: Props) => {
       />
 
       <details className="settings-accordion-item">
-        <summary>8. General settings</summary>
+        <summary>9. General settings</summary>
         <div className="settings-accordion-body">
           <ThemeModeToggle themeMode={props.themeMode} onChangeTheme={props.onChangeTheme} />
         </div>

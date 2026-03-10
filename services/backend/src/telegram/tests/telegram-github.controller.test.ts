@@ -1,8 +1,5 @@
 /**
- * @fileoverview Tests for Telegram GitHub connect endpoints.
- *
- * Exports:
- * - (none)
+ * @fileoverview Tests for Telegram GitHub PAT endpoints.
  */
 
 import { Request } from "express";
@@ -13,50 +10,38 @@ describe("TelegramGithubController", () => {
   const buildController = () => {
     /* Keep GitHub service mocked to isolate request/response contracts. */
     const github = {
-      startInstall: jest.fn().mockReturnValue({
-        url: "https://github.com/apps/my-station/installations/new?state=abc",
-        state: "abc",
-        expiresAt: "2030-01-01T00:00:00.000Z"
+      saveToken: jest.fn().mockReturnValue({ ok: true }),
+      getStatus: jest.fn().mockReturnValue({
+        configured: true,
+        connected: true,
+        tokenPreview: "gith...3456",
+        updatedAt: "2026-03-10T10:00:00.000Z",
+        gitCredential: { connected: true, mode: "pat", updatedAt: "2026-03-10T10:00:00.000Z" }
       }),
-      getStatus: jest.fn().mockReturnValue({ connected: true, installationId: 123 }),
-      disconnect: jest.fn().mockReturnValue({ ok: true }),
-      completeInstall: jest.fn().mockReturnValue({
-        adminId: 7,
-        installationId: 123,
-        accountLogin: "my-org",
-        setupAction: "install"
-      })
+      disconnect: jest.fn().mockReturnValue({ ok: true })
     };
 
     const controller = new TelegramGithubController(github as never);
     return { controller, github };
   };
 
-  test("returns connect URL for authenticated admin", () => {
-    /* Mini App starts GitHub install flow from explicit backend endpoint. */
+  test("returns status for authenticated admin", () => {
+    /* Mini App settings should load current PAT state from the same authenticated endpoint. */
     const { controller, github } = buildController();
-    const result = controller.startInstall({ authAdminId: 7 } as unknown as Request);
+    const result = controller.getStatus({ authAdminId: 7 } as unknown as Request);
 
-    expect(github.startInstall).toHaveBeenCalledWith(7);
-    expect(result.state).toBe("abc");
+    expect(github.getStatus).toHaveBeenCalledWith(7);
+    expect(result.connected).toBe(true);
   });
 
-  test("returns callback html after successful installation", () => {
-    /* Browser callback should render deterministic success page for user handoff. */
+  test("saves PAT for authenticated admin", () => {
+    /* Saving a token should pass the pasted PAT to the backend service unchanged except for service-side trimming. */
     const { controller, github } = buildController();
-    const response = {
-      setHeader: jest.fn(),
-      status: jest.fn().mockReturnThis()
-    } as any;
-    const html = controller.callback({
-      state: "abc",
-      installation_id: "123",
-      setup_action: "install",
-      account: { login: "my-org", type: "Organization" }
-    }, response);
+    const result = controller.saveToken({ authAdminId: 7 } as unknown as Request, {
+      token: "github_pat_example123"
+    });
 
-    expect(github.completeInstall).toHaveBeenCalledTimes(1);
-    expect(response.setHeader).toHaveBeenCalledWith("Content-Type", "text/html; charset=utf-8");
-    expect(html.includes("GitHub подключен")).toBe(true);
+    expect(github.saveToken).toHaveBeenCalledWith({ adminId: 7, token: "github_pat_example123" });
+    expect(result.ok).toBe(true);
   });
 });

@@ -52,6 +52,7 @@ import { ProjectWorkspaceService } from "./projects/project-workspace.service";
 import { ProjectDeploymentService } from "./projects/project-deployment.service";
 import { ProjectRuntimeSettingsStore } from "./projects/project-runtime-settings.store";
 import { AdminHeaderGuard } from "./security/admin-header.guard";
+import { BotBackendGuard } from "./security/bot-backend.guard";
 import { AppAuthGuard } from "./security/app-auth.guard";
 import { TelegramInitDataGuard } from "./security/telegram.guard";
 import { TerminalController } from "./terminal/terminal.controller";
@@ -59,6 +60,7 @@ import { TerminalService } from "./terminal/terminal.service";
 import { DataMaintenanceService } from "./maintenance/data-maintenance.service";
 import { GithubAppService } from "./github/github-app.service";
 import { GithubAppStore } from "./github/github-app.store";
+import { GithubGitCredentialController } from "./github/github-git-credential.controller";
 import { TelegramGithubController } from "./telegram/telegram-github.controller";
 import { SystemMetricsController } from "./system/system-metrics.controller";
 import { SystemMetricsService } from "./system/system-metrics.service";
@@ -86,6 +88,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     TelegramController,
     TelegramProviderController,
     TelegramGithubController,
+    GithubGitCredentialController,
     TelegramSessionController,
     TelegramOutboxController,
     SystemMetricsController,
@@ -132,6 +135,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     DockerComposeService,
     TerminalService,
     AdminHeaderGuard,
+    BotBackendGuard,
     AppAuthGuard,
     TelegramInitDataGuard,
     DataMaintenanceService,

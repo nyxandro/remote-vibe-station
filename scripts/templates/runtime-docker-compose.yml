@@ -27,6 +27,7 @@ services:
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN}
+      - BACKEND_URL=http://localhost:3000
       - TELEGRAM_MINIAPP_SHORT_NAME=${TELEGRAM_MINIAPP_SHORT_NAME}
       - ADMIN_IDS=${ADMIN_IDS}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
@@ -43,15 +44,15 @@ services:
       - OPENCODE_WARM_RECENTS_ON_START=false
       - OPENCODE_WARM_RECENTS_LIMIT=50
       - RUNTIME_CONFIG_DIR=/runtime-config
-      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      # Ask backend for short-lived GitHub App credentials so git auth stays global across all projects.
       - GIT_CONFIG_COUNT=1
       - GIT_CONFIG_KEY_0=credential.https://github.com.helper
-      - GIT_CONFIG_VALUE_0=!gh auth git-credential
+      - GIT_CONFIG_VALUE_0=!node /usr/local/bin/github-git-credential.js
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/runtime-config
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
-      # Mirror host git credentials so backend clone/pull/push matches OpenCode behavior.
+      # Keep optional manual SSH/GitHub CLI access available for operators inside the backend container.
       - /root/.ssh:/root/.ssh
       - /root/.config/gh:/root/.config/gh
       - opencode_data:/opencode-data
@@ -141,10 +142,10 @@ services:
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID}
       - HOST_ROOT_PATH=/hostfs
-      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      # Ask backend for short-lived GitHub App credentials so agent git auth stays global across projects.
       - GIT_CONFIG_COUNT=1
       - GIT_CONFIG_KEY_0=credential.https://github.com.helper
-      - GIT_CONFIG_VALUE_0=!gh auth git-credential
+      - GIT_CONFIG_VALUE_0=!node /usr/local/bin/github-git-credential.js
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}

@@ -55,7 +55,7 @@ test("backend Dockerfile installs git ssh and gh tooling", () => {
 });
 
 test("main compose grants opencode direct host access and shared git auth", () => {
-  /* OpenCode must see host SSH keys, gh auth state, and git credential helper wiring on the VDS. */
+  /* OpenCode must see host SSH keys and backend-backed git credential helper wiring on the VDS. */
   const compose = readRepoFile("docker-compose.yml");
 
   assert.match(compose, /working_dir: \$\{PROJECTS_ROOT:\?PROJECTS_ROOT must be set\}/);
@@ -66,17 +66,18 @@ test("main compose grants opencode direct host access and shared git auth", () =
   assert.match(compose, /- \/root\/\.config\/gh:\/root\/\.config\/gh/);
   assert.match(compose, /- \/:\/hostfs/);
   assert.match(compose, /GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
-  assert.match(compose, /GIT_CONFIG_VALUE_0=!gh auth git-credential/);
+  assert.match(compose, /GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });
 
 test("main compose grants backend shared host git auth", () => {
-  /* Backend must use the same host-level credentials as OpenCode when cloning new private repositories. */
+  /* Backend must use the same backend-minted credentials as OpenCode when cloning private repositories. */
   const compose = readRepoFile("docker-compose.yml");
 
+  assert.match(compose, /backend:[\s\S]*- BACKEND_URL=http:\/\/localhost:3000/);
   assert.match(compose, /backend:[\s\S]*- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /backend:[\s\S]*- \/root\/\.config\/gh:\/root\/\.config\/gh/);
   assert.match(compose, /backend:[\s\S]*GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
-  assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!gh auth git-credential/);
+  assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });
 
 test("runtime template keeps opencode host access and shared git auth", () => {
@@ -92,17 +93,18 @@ test("runtime template keeps opencode host access and shared git auth", () => {
   assert.match(compose, /- \/:\/hostfs/);
   assert.match(compose, /- toolbox_data:\/toolbox/);
   assert.match(compose, /GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
-  assert.match(compose, /GIT_CONFIG_VALUE_0=!gh auth git-credential/);
+  assert.match(compose, /GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });
 
 test("runtime template grants backend shared host git auth", () => {
   /* Fresh VDS installs must clone private repos without per-project credential reconfiguration. */
   const compose = readRepoFile("scripts/templates/runtime-docker-compose.yml");
 
+  assert.match(compose, /backend:[\s\S]*- BACKEND_URL=http:\/\/localhost:3000/);
   assert.match(compose, /backend:[\s\S]*- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /backend:[\s\S]*- \/root\/\.config\/gh:\/root\/\.config\/gh/);
   assert.match(compose, /backend:[\s\S]*GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
-  assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!gh auth git-credential/);
+  assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });
 
 test("dev compose keeps opencode host access and shared git auth", () => {
@@ -118,15 +120,16 @@ test("dev compose keeps opencode host access and shared git auth", () => {
   assert.match(compose, /- \/:\/hostfs/);
   assert.match(compose, /- toolbox_data:\/toolbox/);
   assert.match(compose, /GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
-  assert.match(compose, /GIT_CONFIG_VALUE_0=!gh auth git-credential/);
+  assert.match(compose, /GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });
 
 test("dev compose grants backend shared host git auth", () => {
   /* Local backend behavior must match the VDS path for private repository onboarding. */
   const compose = readRepoFile("docker-compose.dev.yml");
 
+  assert.match(compose, /backend:[\s\S]*- BACKEND_URL=http:\/\/localhost:3000/);
   assert.match(compose, /backend:[\s\S]*- \/root\/\.ssh:\/root\/\.ssh/);
   assert.match(compose, /backend:[\s\S]*- \/root\/\.config\/gh:\/root\/\.config\/gh/);
   assert.match(compose, /backend:[\s\S]*GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
-  assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!gh auth git-credential/);
+  assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });

@@ -1,10 +1,10 @@
 /**
- * @fileoverview JSON store for GitHub App installation bindings and pending states.
+ * @fileoverview JSON store for the global GitHub PAT used by backend and OpenCode git helpers.
  *
  * Exports:
- * - GithubPendingState (type) - One-time state token metadata.
- * - GithubInstallationBinding (type) - Persisted admin -> installation mapping.
- * - GithubAppStore (class) - Reads and writes GitHub App auth state.
+ * - GithubStoredToken (type) - Persisted GitHub PAT metadata plus secret.
+ * - GithubTokenSummary (type) - Safe token metadata returned to service callers.
+ * - GithubAppStore (class) - Reads and writes the global GitHub PAT payload.
  */
 
 import * as fs from "node:fs";
@@ -13,30 +13,27 @@ import * as path from "node:path";
 import { Injectable } from "@nestjs/common";
 
 const DATA_DIR = "data";
-const STORE_FILE = "github.app.json";
+const STORE_FILE = "github.token.json";
 
-export type GithubPendingState = {
-  state: string;
+export type GithubStoredToken = {
   adminId: number;
-  createdAt: string;
-  expiresAt: string;
+  token: string;
+  updatedAt: string;
 };
 
-export type GithubInstallationBinding = {
-  installationId: number;
-  accountLogin: string;
-  accountType: string;
-  connectedAt: string;
+export type GithubTokenSummary = {
+  adminId: number;
+  token: string;
+  tokenPreview: string;
+  updatedAt: string;
 };
 
 type StoreShape = {
-  byAdminId: Record<string, GithubInstallationBinding>;
-  pendingStates: Record<string, GithubPendingState>;
+  token: GithubStoredToken | null;
 };
 
 const buildEmptyStore = (): StoreShape => ({
-  byAdminId: {},
-  pendingStates: {}
+  token: null
 });
 
 @Injectable()
@@ -44,87 +41,41 @@ export class GithubAppStore {
   private readonly filePath: string;
 
   public constructor() {
-    /* Keep store near other backend runtime JSON files. */
+    /* Keep store next to other backend runtime JSON files so self-hosted operators can back it up easily. */
     this.filePath = path.join(process.cwd(), DATA_DIR, STORE_FILE);
   }
 
-  public savePendingState(input: GithubPendingState): void {
-    /* Persist one-time state token before redirecting user to GitHub. */
-    const data = this.readAll();
-    data.pendingStates[input.state] = input;
-    this.writeAll(data);
+  public saveToken(input: GithubStoredToken): void {
+    /* Persist the single instance-wide PAT used by all future backend/opencode HTTPS git operations. */
+    this.writeAll({ token: input });
   }
 
-  public consumePendingState(state: string): GithubPendingState | null {
-    /* Read-and-delete state token to enforce one-time callback usage. */
-    const data = this.readAll();
-    const value = data.pendingStates[state] ?? null;
-    if (!value) {
+  public getToken(): GithubTokenSummary | null {
+    /* Expose only a masked preview alongside the full secret needed by the credential helper. */
+    const token = this.readAll().token;
+    if (!token) {
       return null;
     }
 
-    /* Expired state tokens are dropped instead of being returned to caller. */
-    const expires = Date.parse(value.expiresAt);
-    if (!Number.isFinite(expires) || expires < Date.now()) {
-      delete data.pendingStates[state];
-      this.writeAll(data);
-      return null;
-    }
-
-    delete data.pendingStates[state];
-    this.writeAll(data);
-    return value;
-  }
-
-  public pruneExpiredStates(nowISO: string): number {
-    /* Remove stale pending states to keep JSON store bounded over time. */
-    const data = this.readAll();
-    const nowTime = Date.parse(nowISO);
-    let removed = 0;
-
-    for (const [state, item] of Object.entries(data.pendingStates)) {
-      const expires = Date.parse(item.expiresAt);
-      if (!Number.isFinite(expires) || expires < nowTime) {
-        delete data.pendingStates[state];
-        removed += 1;
-      }
-    }
-
-    if (removed > 0) {
-      this.writeAll(data);
-    }
-    return removed;
-  }
-
-  public saveInstallation(input: {
-    adminId: number;
-    installationId: number;
-    accountLogin: string;
-    accountType: string;
-    connectedAt: string;
-  }): void {
-    /* Persist final admin -> GitHub installation mapping after callback. */
-    const data = this.readAll();
-    data.byAdminId[String(input.adminId)] = {
-      installationId: input.installationId,
-      accountLogin: input.accountLogin,
-      accountType: input.accountType,
-      connectedAt: input.connectedAt
+    return {
+      ...token,
+      tokenPreview: this.maskToken(token.token)
     };
-    this.writeAll(data);
   }
 
-  public getInstallation(adminId: number): GithubInstallationBinding | null {
-    /* Resolve installation mapping for admin-owned push/pull operations. */
-    const data = this.readAll();
-    return data.byAdminId[String(adminId)] ?? null;
+  public deleteToken(): void {
+    /* Clearing the store revokes runtime access immediately without inventing replacement credentials. */
+    this.writeAll(buildEmptyStore());
   }
 
-  public deleteInstallation(adminId: number): void {
-    /* Explicit disconnect removes GitHub installation binding for admin. */
-    const data = this.readAll();
-    delete data.byAdminId[String(adminId)];
-    this.writeAll(data);
+  private maskToken(token: string): string {
+    /* UI should reveal only a tiny stable suffix so operators can identify which PAT is currently saved. */
+    const trimmed = token.trim();
+    if (trimmed.length <= 8) {
+      return "saved";
+    }
+
+    return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
   }
 
   private readAll(): StoreShape {
@@ -141,10 +92,17 @@ export class GithubAppStore {
     try {
       const raw = fs.readFileSync(this.filePath, "utf-8");
       const parsed = JSON.parse(raw) as Partial<StoreShape>;
-      return {
-        byAdminId: parsed?.byAdminId ?? {},
-        pendingStates: parsed?.pendingStates ?? {}
-      };
+      const token = parsed?.token;
+      if (
+        token &&
+        typeof token.adminId === "number" &&
+        typeof token.token === "string" &&
+        typeof token.updatedAt === "string"
+      ) {
+        return { token };
+      }
+
+      return buildEmptyStore();
     } catch (error) {
       /* Surface malformed/corrupted store reads while still preserving service uptime. */
       const details = error instanceof Error ? error.message : String(error);
@@ -154,7 +112,7 @@ export class GithubAppStore {
   }
 
   private writeAll(data: StoreShape): void {
-    /* Persist human-readable JSON for easier operations/debug on server. */
+    /* Persist human-readable JSON for easier self-hosted operations/debug on server. */
     const dir = path.dirname(this.filePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });

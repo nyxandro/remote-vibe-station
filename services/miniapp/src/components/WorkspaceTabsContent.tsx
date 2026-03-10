@@ -21,6 +21,7 @@ import {
   CliproxyProviderState,
   FileListResponse,
   FileReadResponse,
+  GithubAuthStatus,
   GroqTranscriptionModel,
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
@@ -110,6 +111,17 @@ type Props = {
   onVoiceControlModelChange?: (value: GroqTranscriptionModel | null) => void;
   onReloadVoiceControl?: () => void;
   onSaveVoiceControl?: () => void;
+  githubAuth?: {
+    status: GithubAuthStatus | null;
+    tokenDraft: string;
+    isLoading: boolean;
+    isSaving: boolean;
+    isDisconnecting: boolean;
+  };
+  onReloadGithubAuth?: () => void;
+  onGithubTokenDraftChange?: (value: string) => void;
+  onSaveGithubToken?: () => void;
+  onDisconnectGithubAuth?: () => void;
   openCodeVersion: {
     status: OpenCodeVersionStatus | null;
     isLoading: boolean;
@@ -317,6 +329,11 @@ export const WorkspaceTabsContent = (props: Props) => {
       onVoiceControlModelChange={props.onVoiceControlModelChange}
       onReloadVoiceControl={props.onReloadVoiceControl}
       onSaveVoiceControl={props.onSaveVoiceControl}
+      githubAuth={props.githubAuth}
+      onReloadGithubAuth={props.onReloadGithubAuth}
+      onGithubTokenDraftChange={props.onGithubTokenDraftChange}
+      onSaveGithubToken={props.onSaveGithubToken}
+      onDisconnectGithubAuth={props.onDisconnectGithubAuth}
       openCodeVersion={props.openCodeVersion}
       onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
       serverMetrics={props.serverMetrics}

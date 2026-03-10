@@ -9,6 +9,7 @@
  * - OpenCodeSettingsOverview (L72) - Accordion metadata for settings files.
  * - GroqTranscriptionModel (L91) - Supported Groq speech-to-text models.
  * - VoiceControlSettings (L93) - Persisted Telegram voice-control settings.
+ * - GithubAuthStatus - Global GitHub PAT status used for agent git operations.
  * - ProviderAuthMethod (L99) - Available connect methods per provider.
  * - ProviderOverview (L104) - Providers tab payload from backend.
  * - SystemMetricsSnapshot - CPU/RAM/disk/network snapshot for Settings diagnostics.
@@ -155,6 +156,18 @@ export type VoiceControlSettings = {
   hasApiKey: boolean;
   model: GroqTranscriptionModel | null;
   supportedModels: GroqTranscriptionModel[];
+};
+
+export type GithubAuthStatus = {
+  configured: boolean;
+  connected: boolean;
+  tokenPreview?: string;
+  updatedAt?: string;
+  gitCredential: {
+    connected: boolean;
+    mode: "pat";
+    updatedAt?: string;
+  };
 };
 
 export type ProviderAuthMethod = {

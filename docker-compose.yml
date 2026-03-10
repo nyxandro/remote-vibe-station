@@ -27,6 +27,7 @@ services:
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:?BOT_BACKEND_AUTH_TOKEN must be set}
+      - BACKEND_URL=http://localhost:3000
       - ADMIN_IDS=${ADMIN_IDS}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - PUBLIC_DOMAIN=${PUBLIC_DOMAIN}
@@ -36,14 +37,14 @@ services:
       - OPENCODE_SERVER_URL=${OPENCODE_SERVER_URL}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
-      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      # Ask backend for short-lived GitHub App credentials so git auth stays global across all projects.
       - GIT_CONFIG_COUNT=1
       - GIT_CONFIG_KEY_0=credential.https://github.com.helper
-      - GIT_CONFIG_VALUE_0=!gh auth git-credential
+      - GIT_CONFIG_VALUE_0=!node /usr/local/bin/github-git-credential.js
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PROJECTS_ROOT}:${PROJECTS_ROOT}
-      # Mirror host git credentials so backend clone/pull/push matches OpenCode behavior.
+      # Keep optional manual SSH/GitHub CLI access available for operators inside the backend container.
       - /root/.ssh:/root/.ssh
       - /root/.config/gh:/root/.config/gh
       # Shared OpenCode state volume (projects/sessions/messages).
@@ -133,10 +134,10 @@ services:
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY:?CLIPROXY_API_KEY must be set}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID:-}
       - HOST_ROOT_PATH=/hostfs
-      # Reuse host GitHub CLI credentials for HTTPS git auth without mutating container gitconfig.
+      # Ask backend for short-lived GitHub App credentials so agent git auth stays global across projects.
       - GIT_CONFIG_COUNT=1
       - GIT_CONFIG_KEY_0=credential.https://github.com.helper
-      - GIT_CONFIG_VALUE_0=!gh auth git-credential
+      - GIT_CONFIG_VALUE_0=!node /usr/local/bin/github-git-credential.js
     volumes:
       # Trust the dev operator container with host docker control.
       - /var/run/docker.sock:/var/run/docker.sock
@@ -146,7 +147,7 @@ services:
       - /:/hostfs
       # Reuse host SSH identities for git/ssh operations initiated by the agent.
       - /root/.ssh:/root/.ssh
-      # Reuse host GitHub CLI state for HTTPS git auth flows.
+      # Keep optional manual GitHub CLI state available for operators inside the OpenCode container.
       - /root/.config/gh:/root/.config/gh
       # Persist OpenCode state (projects/sessions/messages) in a named volume.
       - opencode_data:/root/.local/share/opencode

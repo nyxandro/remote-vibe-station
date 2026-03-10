@@ -22,5 +22,6 @@ RUN apk add --no-cache bash curl git github-cli openssh-client docker-cli docker
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/dist ./dist
+COPY --chmod=755 github-git-credential.js /usr/local/bin/github-git-credential.js
 
 CMD ["node", "dist/main.js"]
