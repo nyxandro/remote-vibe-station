@@ -61,9 +61,46 @@ const postJson = async <T>(path: string, body: unknown): Promise<T | null> => {
   return text.trim().length > 0 ? (JSON.parse(text) as T) : null;
 };
 
+const humanizeStatus = (status: KanbanTask["status"]): string => {
+  /* Keep tool output conversational so users see workflow states without backend-style snake_case labels. */
+  switch (status) {
+    case "backlog":
+      return "Backlog";
+    case "queued":
+      return "Queued";
+    case "in_progress":
+      return "In progress";
+    case "blocked":
+      return "Blocked";
+    case "done":
+      return "Done";
+  }
+};
+
+const humanizePriority = (priority: KanbanTask["priority"]): string => {
+  /* Match the board labels so task summaries read the same way in UI and tools. */
+  switch (priority) {
+    case "low":
+      return "Low";
+    case "medium":
+      return "Medium";
+    case "high":
+      return "High";
+  }
+};
+
 const formatTaskLine = (task: KanbanTask): string => {
-  /* Compact one-line summaries keep tool output readable in the agent context window. */
-  return `- ${task.id} [${task.status}/${task.priority}] ${task.title} (${task.projectName})`;
+  /* Surface task content instead of internal ids so backlog discussions stay human-readable. */
+  const lines = [
+    `- ${task.title}`,
+    `  Status: ${humanizeStatus(task.status)} | Priority: ${humanizePriority(task.priority)} | Project: ${task.projectName}`
+  ];
+
+  if (task.description) {
+    lines.push(`  Description: ${task.description}`);
+  }
+
+  return lines.join("\n");
 };
 
 const formatTaskDetails = (task: KanbanTask | null): string => {
@@ -74,10 +111,9 @@ const formatTaskDetails = (task: KanbanTask | null): string => {
 
   const lines = [
     `${task.title}`,
-    `id: ${task.id}`,
     `project: ${task.projectName} (${task.projectSlug})`,
-    `status: ${task.status}`,
-    `priority: ${task.priority}`
+    `status: ${humanizeStatus(task.status)}`,
+    `priority: ${humanizePriority(task.priority)}`
   ];
 
   if (task.description) {
