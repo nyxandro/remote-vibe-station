@@ -92,6 +92,23 @@ export const useCliproxyAccounts = (setError: (value: string | null) => void) =>
     [loadState, setError]
   );
 
+  const testAccount = useCallback(
+    async (accountId: string): Promise<void> => {
+      /* Manual test should refresh stale error/limit badges even when CLIProxy status lags behind reality. */
+      try {
+        setError(null);
+        setIsSubmitting(true);
+        await apiPost<{ ok: true }>(`/api/telegram/cliproxy/accounts/${encodeURIComponent(accountId)}/test`, {});
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to test CLIProxy account");
+      } finally {
+        await loadState();
+        setIsSubmitting(false);
+      }
+    },
+    [loadState, setError]
+  );
+
   const deleteAccount = useCallback(
     async (accountId: string): Promise<void> => {
       /* Removing stale auth files should also refresh the list immediately after success. */
@@ -118,6 +135,7 @@ export const useCliproxyAccounts = (setError: (value: string | null) => void) =>
     loadState,
     startOAuth,
     completeOAuth,
+    testAccount,
     activateAccount,
     deleteAccount
   };

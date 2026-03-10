@@ -148,6 +148,7 @@ export const App = () => {
     loadState: loadCliproxyAccounts,
     startOAuth: startCliproxyOAuth,
     completeOAuth: completeCliproxyOAuth,
+    testAccount: testCliproxyAccount,
     activateAccount: activateCliproxyAccount,
     deleteAccount: deleteCliproxyAccount
   } = useCliproxyAccounts(setError);
@@ -685,6 +686,7 @@ export const App = () => {
             onReloadCliproxy: () => void loadCliproxyAccounts(),
             onStartCliproxyAuth: (provider) => void startCliproxyOAuth(provider),
             onCompleteCliproxyAuth: (input) => void completeCliproxyOAuth(input),
+            onTestCliproxyAccount: (accountId) => void testCliproxyAccount(accountId),
             onActivateCliproxyAccount: (accountId) => void activateCliproxyAccount(accountId),
             onDeleteCliproxyAccount: (accountId) => void deleteCliproxyAccount(accountId)
           }}

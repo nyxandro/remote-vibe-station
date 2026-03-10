@@ -24,6 +24,7 @@ type Props = {
     state?: string;
     error?: string;
   }) => void;
+  onTestAccount: (accountId: string) => void;
   onActivateAccount: (accountId: string) => void;
   onDeleteAccount: (accountId: string) => void;
 };
@@ -165,6 +166,14 @@ export const CliproxyAccountsSection = (props: Props) => {
               {/* Account actions stay explicit because activation disables same-provider siblings on the backend. */}
               {account.canManage ? (
                 <div className="providers-action-row">
+                  <button
+                    className="btn outline"
+                    type="button"
+                    disabled={props.isSubmitting}
+                    onClick={() => props.onTestAccount(account.id)}
+                  >
+                    Тест
+                  </button>
                   <button
                     className="btn outline"
                     type="button"

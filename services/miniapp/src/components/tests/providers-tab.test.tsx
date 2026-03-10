@@ -203,6 +203,23 @@ describe("ProvidersTab", () => {
     expect(props.onActivateCliproxyAccount).toHaveBeenCalledWith("codex-user@example.com");
   });
 
+  it("forwards manual CLIProxy account test action", () => {
+    /* Operators should be able to force a live check when status looks stale or delayed. */
+    const { props } = renderProvidersTab({
+      selected: {
+        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+        thinking: "high",
+        agent: "build"
+      },
+      cliproxyAccounts: cliproxyAccountsFixture,
+      proxySnapshot: proxySnapshotFixture
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Тест" }));
+
+    expect(props.onTestCliproxyAccount).toHaveBeenCalledWith("codex-user@example.com");
+  });
+
   it("deletes CLIProxy account only after confirmation", () => {
     /* Destructive account removal must stay behind explicit browser confirmation. */
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);

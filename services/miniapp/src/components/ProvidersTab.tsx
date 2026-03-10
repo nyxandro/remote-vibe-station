@@ -50,6 +50,7 @@ type Props = {
     state?: string;
     error?: string;
   }) => void;
+  onTestCliproxyAccount: (accountId: string) => void;
   onActivateCliproxyAccount: (accountId: string) => void;
   onDeleteCliproxyAccount: (accountId: string) => void;
   onReloadProxy: () => void;
@@ -219,6 +220,7 @@ export const ProvidersTab = (props: Props) => {
         onReload={props.onReloadCliproxy}
         onStartAuth={props.onStartCliproxyAuth}
         onCompleteAuth={props.onCompleteCliproxyAuth}
+        onTestAccount={props.onTestCliproxyAccount}
         onActivateAccount={props.onActivateCliproxyAccount}
         onDeleteAccount={props.onDeleteCliproxyAccount}
       />

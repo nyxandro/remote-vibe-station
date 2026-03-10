@@ -3,6 +3,8 @@
  *
  * Exports:
  * - CliproxyProviderId - Supported OAuth provider identifiers.
+ * - CliproxyAuthFile - Structured auth-file record from management API.
+ * - CliproxyUsageDetail - Flattened usage snapshot row for per-account aggregation.
  * - CliproxyManagementClient - Calls management endpoints with secret header.
  */
 
@@ -81,6 +83,10 @@ type UsageSnapshotResponse = {
   usage?: {
     apis?: Record<string, UsageApiEntry>;
   };
+};
+
+type ModelsResponse = {
+  data?: Array<{ id?: string }>;
 };
 
 export type CliproxyUsageDetail = {
@@ -196,6 +202,33 @@ export class CliproxyManagementClient {
     });
   }
 
+  public async listModels(): Promise<string[]> {
+    /* Public OpenAI-compatible models endpoint reveals which model ids are currently routable. */
+    const response = await this.requestPublic<ModelsResponse>("/v1/models", {
+      method: "GET"
+    });
+    if (!response || !Array.isArray(response.data)) {
+      return [];
+    }
+
+    return response.data
+      .map((entry) => (typeof entry?.id === "string" ? entry.id.trim() : ""))
+      .filter((modelID): modelID is string => modelID.length > 0);
+  }
+
+  public async runChatProbe(input: { modelID: string }): Promise<void> {
+    /* Tiny chat request forces a real upstream auth check while keeping token usage minimal. */
+    await this.requestPublic<Record<string, unknown>>("/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: input.modelID,
+        messages: [{ role: "user", content: "Reply with OK" }],
+        max_tokens: 1
+      })
+    });
+  }
+
   private async request<T>(path: string, init: RequestInit): Promise<T> {
     /* Management API is private; every call must include secret header and timeout. */
     const managementPassword = this.config.cliproxyManagementPassword;
@@ -233,6 +266,37 @@ export class CliproxyManagementClient {
       const details = error instanceof Error ? error.message : String(error);
       throw new BadGatewayException(
         `CLIProxy management returned invalid JSON at '${path}': ${details}; body: ${body}`
+      );
+    }
+  }
+
+  private async requestPublic<T>(path: string, init: RequestInit): Promise<T> {
+    /* Public OpenAI-compatible endpoints intentionally skip management header but still use shared timeout/parsing. */
+    const baseUrl = this.config.cliproxyManagementUrl ?? DEFAULT_MANAGEMENT_URL;
+    const url = `${baseUrl}${path}`;
+
+    const response = await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(MANAGEMENT_TIMEOUT_MS)
+    });
+
+    const body = await response.text();
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `CLIProxy public request failed (${response.status}) at '${path}': ${body || "empty response"}`
+      );
+    }
+
+    if (!body) {
+      return null as unknown as T;
+    }
+
+    try {
+      return JSON.parse(body) as T;
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      throw new BadGatewayException(
+        `CLIProxy public endpoint returned invalid JSON at '${path}': ${details}; body: ${body}`
       );
     }
   }

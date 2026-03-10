@@ -79,6 +79,16 @@ export class CliproxyAccountController {
   }
 
   @UseGuards(AppAuthGuard)
+  @Post("accounts/:accountId/test")
+  @HttpCode(HttpStatus.OK)
+  public async testAccount(@Param("accountId") accountId: string, @Req() req: Request) {
+    /* Manual test triggers a lightweight live request so stale limit/error statuses refresh immediately. */
+    this.assertAdmin(req);
+    await this.accounts.testAccount({ accountId: this.assertAccountId(accountId) });
+    return { ok: true };
+  }
+
+  @UseGuards(AppAuthGuard)
   @Post("accounts/:accountId/activate")
   @HttpCode(HttpStatus.OK)
   public async activateAccount(@Param("accountId") accountId: string, @Req() req: Request) {

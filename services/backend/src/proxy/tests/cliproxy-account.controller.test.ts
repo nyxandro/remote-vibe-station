@@ -18,6 +18,7 @@ describe("CliproxyAccountController", () => {
       }),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn(),
+      testAccount: jest.fn(),
       activateAccount: jest.fn(),
       deleteAccount: jest.fn()
     };
@@ -40,6 +41,7 @@ describe("CliproxyAccountController", () => {
         instructions: "Open URL and paste callback URL here"
       }),
       completeOAuth: jest.fn(),
+      testAccount: jest.fn(),
       activateAccount: jest.fn(),
       deleteAccount: jest.fn()
     };
@@ -75,6 +77,7 @@ describe("CliproxyAccountController", () => {
       getState: jest.fn(),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn().mockResolvedValue(undefined),
+      testAccount: jest.fn(),
       activateAccount: jest.fn(),
       deleteAccount: jest.fn()
     };
@@ -105,6 +108,7 @@ describe("CliproxyAccountController", () => {
       getState: jest.fn(),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn(),
+      testAccount: jest.fn(),
       activateAccount: jest.fn(),
       deleteAccount: jest.fn()
     };
@@ -129,6 +133,7 @@ describe("CliproxyAccountController", () => {
       getState: jest.fn(),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn(),
+      testAccount: jest.fn(),
       activateAccount: jest.fn().mockResolvedValue(undefined),
       deleteAccount: jest.fn()
     };
@@ -149,6 +154,7 @@ describe("CliproxyAccountController", () => {
       getState: jest.fn(),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn(),
+      testAccount: jest.fn().mockResolvedValue(undefined),
       activateAccount: jest.fn(),
       deleteAccount: jest.fn().mockResolvedValue(undefined)
     };
@@ -163,12 +169,34 @@ describe("CliproxyAccountController", () => {
     expect(result).toEqual({ ok: true });
   });
 
+  test("tests selected CLIProxy account", async () => {
+    /* Manual test action should reach backend service and refresh remote status for that auth file. */
+    const service = {
+      getState: jest.fn(),
+      startOAuth: jest.fn(),
+      completeOAuth: jest.fn(),
+      testAccount: jest.fn().mockResolvedValue(undefined),
+      activateAccount: jest.fn(),
+      deleteAccount: jest.fn()
+    };
+
+    const controller = new CliproxyAccountController(service as never);
+    const result = await controller.testAccount(
+      "codex-user@example.com",
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(service.testAccount).toHaveBeenCalledWith({ accountId: "codex-user@example.com" });
+    expect(result).toEqual({ ok: true });
+  });
+
   test("rejects account mutation for traversal-like account id", async () => {
     /* Controller should block path-like ids before they reach runtime auth mutation flows. */
     const service = {
       getState: jest.fn(),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn(),
+      testAccount: jest.fn(),
       activateAccount: jest.fn(),
       deleteAccount: jest.fn()
     };

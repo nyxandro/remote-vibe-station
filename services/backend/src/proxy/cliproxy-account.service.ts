@@ -22,6 +22,23 @@ const PROVIDER_DEFINITIONS: Array<{ id: CliproxyProviderId; label: string }> = [
   { id: "iflow", label: "iFlow" }
 ];
 
+const PROVIDER_TEST_MODEL_PREFIXES: Record<CliproxyProviderId, string[]> = {
+  codex: ["gpt-", "o"],
+  anthropic: ["claude-"],
+  antigravity: ["antigravity", "claude-", "gpt-"],
+  kimi: ["kimi", "moonshot"],
+  qwen: ["qwen"],
+  iflow: ["iflow", "gpt-"]
+};
+
+const PROVIDER_TEST_MODEL_DEFAULTS: Partial<Record<CliproxyProviderId, string[]>> = {
+  codex: ["gpt-5.4", "gpt-5.4-mini"],
+  anthropic: ["claude-sonnet-4-5", "claude-3-7-sonnet"],
+  qwen: ["qwen3-coder-plus"],
+  kimi: ["kimi-k2"],
+  iflow: ["gpt-5.4-mini"]
+};
+
 const PROVIDER_FILE_MARKERS: Record<CliproxyProviderId, string[]> = {
   codex: ["codex"],
   anthropic: ["claude", "anthropic"],
@@ -231,6 +248,63 @@ export class CliproxyAccountService {
     await this.runtime.deleteFile({ filePath: this.requireFilePath(target) });
   }
 
+  public async testAccount(input: { accountId: string }): Promise<void> {
+    /* Test action temporarily routes one provider through the selected auth file, performs a tiny probe, then restores flags. */
+    const authFiles = await this.api.getAuthFiles();
+    const target = this.requireManageableAuthFile(authFiles, input.accountId);
+    const targetProvider = this.resolveProviderFromAuthFile(target);
+    if (!targetProvider) {
+      throw new BadRequestException(`Unsupported auth file provider for account '${input.accountId}'`);
+    }
+
+    const providerEntries = authFiles.filter((entry) => {
+      return this.resolveProviderFromAuthFile(entry) === targetProvider && this.isManageableAuthFile(entry);
+    });
+    const updates = providerEntries.slice().sort((left, right) => {
+      /* Enable the tested account first so the probe always uses the requested credential. */
+      if (left.id === target.id) {
+        return -1;
+      }
+      if (right.id === target.id) {
+        return 1;
+      }
+      return left.name.localeCompare(right.name);
+    });
+
+    const originalDisabledByPath = new Map(
+      updates.map((entry) => [this.requireFilePath(entry), entry.disabled] as const)
+    );
+    const usageDetails = await this.api.getUsage();
+    const appliedPaths: string[] = [];
+
+    try {
+      for (const entry of updates) {
+        const filePath = this.requireFilePath(entry);
+        await this.runtime.setDisabled({ filePath, disabled: entry.id !== target.id });
+        appliedPaths.push(filePath);
+      }
+
+      const availableModels = await this.api.listModels();
+      const modelID = this.selectProbeModel(targetProvider, target, usageDetails, availableModels);
+      await this.api.runChatProbe({ modelID });
+    } finally {
+      for (const entry of updates.sort((left, right) => left.name.localeCompare(right.name))) {
+        const filePath = this.requireFilePath(entry);
+        try {
+          await this.runtime.setDisabled({
+            filePath,
+            disabled: originalDisabledByPath.get(filePath) ?? false
+          });
+        } catch (rollbackError) {
+          const rollbackDetails = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          this.logger.error(
+            `Failed to restore CLIProxy test routing for account='${target.id}' path='${filePath}': ${rollbackDetails}`
+          );
+        }
+      }
+    }
+  }
+
   private parseCallbackUrl(value: string): { code?: string; state?: string; error?: string } {
     /* Browser callback URL can carry values in query or hash fragment depending on provider flow. */
     let url: URL;
@@ -346,6 +420,38 @@ export class CliproxyAccountService {
       models: Array.from(modelSet).sort((left, right) => left.localeCompare(right)),
       lastUsedAt
     };
+  }
+
+  private selectProbeModel(
+    provider: CliproxyProviderId,
+    entry: Pick<CliproxyAuthFile, "authIndex" | "id" | "name">,
+    usageDetails: CliproxyUsageDetail[],
+    availableModels: string[]
+  ): string {
+    /* Prefer models already observed on this auth file because they are the strongest proof of compatibility. */
+    const usageSummary = this.buildUsageSummary(entry, usageDetails);
+    const normalizedAvailable = availableModels.map((modelID) => modelID.trim()).filter(Boolean);
+    const observedModel = usageSummary.models.find((modelID) => normalizedAvailable.includes(modelID));
+    if (observedModel) {
+      return observedModel;
+    }
+
+    /* Fall back to provider-specific prefixes from the current model catalog when the account has no recent usage yet. */
+    const prefixedMatch = normalizedAvailable.find((modelID) => {
+      const lowered = modelID.toLowerCase();
+      return PROVIDER_TEST_MODEL_PREFIXES[provider].some((prefix) => lowered.startsWith(prefix));
+    });
+    if (prefixedMatch) {
+      return prefixedMatch;
+    }
+
+    /* Known defaults keep common providers testable even if usage history is empty and catalog order changes. */
+    const defaultMatch = PROVIDER_TEST_MODEL_DEFAULTS[provider]?.find((modelID) => normalizedAvailable.includes(modelID));
+    if (defaultMatch) {
+      return defaultMatch;
+    }
+
+    throw new BadRequestException(`No suitable test model found for provider '${provider}'`);
   }
 
   private resolveProviderFromAuthFile(entry: CliproxyAuthFile): CliproxyProviderId | null {

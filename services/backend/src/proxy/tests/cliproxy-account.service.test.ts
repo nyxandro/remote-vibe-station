@@ -375,4 +375,81 @@ describe("CliproxyAccountService", () => {
     });
     expect(runtime.deleteFile).toHaveBeenCalledWith({ filePath: "/root/.cli-proxy-api/codex-a.json" });
   });
+
+  test("tests selected account with temporary provider switch and restores original flags", async () => {
+    /* Test action must send a real lightweight request through the chosen account and then restore routing. */
+    const api = {
+      getAuthFiles: jest.fn().mockResolvedValue([
+        {
+          id: "codex-a",
+          name: "codex-a",
+          authIndex: "codex-1",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-a.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
+          email: null,
+          account: null,
+          label: null,
+          status: "active",
+          statusMessage: ""
+        },
+        {
+          id: "codex-b",
+          name: "codex-b",
+          authIndex: "codex-2",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-b.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: true,
+          unavailable: true,
+          email: null,
+          account: null,
+          label: null,
+          status: "error",
+          statusMessage: "usage limit reached"
+        }
+      ]),
+      getUsage: jest.fn().mockResolvedValue([
+        {
+          model: "gpt-5.4",
+          authIndex: "codex-2",
+          timestamp: "2026-03-10T10:05:00.000Z",
+          failed: true,
+          totalTokens: 120
+        }
+      ]),
+      listModels: jest.fn().mockResolvedValue(["gpt-5.4", "gpt-5.4-mini"]),
+      runChatProbe: jest.fn().mockResolvedValue(undefined)
+    };
+    const runtime = {
+      setDisabled: jest.fn().mockResolvedValue(undefined),
+      deleteFile: jest.fn()
+    };
+
+    const service = new CliproxyAccountService(api as never, runtime as never);
+    await service.testAccount({ accountId: "codex-b" });
+
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(1, {
+      filePath: "/root/.cli-proxy-api/codex-b.json",
+      disabled: false
+    });
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(2, {
+      filePath: "/root/.cli-proxy-api/codex-a.json",
+      disabled: true
+    });
+    expect(api.listModels).toHaveBeenCalledTimes(1);
+    expect(api.runChatProbe).toHaveBeenCalledWith({ modelID: "gpt-5.4" });
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(3, {
+      filePath: "/root/.cli-proxy-api/codex-a.json",
+      disabled: false
+    });
+    expect(runtime.setDisabled).toHaveBeenNthCalledWith(4, {
+      filePath: "/root/.cli-proxy-api/codex-b.json",
+      disabled: true
+    });
+  });
 });
