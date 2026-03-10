@@ -43,6 +43,7 @@ test("opencode Dockerfile installs git docker ssh and gh tooling", () => {
   assert.match(dockerfile, /NODE_PATH=\/toolbox\/npm-global\/lib\/node_modules/);
   assert.match(dockerfile, /COPY toolbox-profile\.sh \/etc\/profile\.d\/toolbox\.sh/);
   assert.match(dockerfile, /docker-wrapper\.sh/);
+  assert.match(dockerfile, /COPY --chmod=755 github-gh-auth-wrapper\.sh \/usr\/local\/bin\/gh/);
 });
 
 test("backend Dockerfile installs git ssh and gh tooling", () => {
@@ -52,6 +53,7 @@ test("backend Dockerfile installs git ssh and gh tooling", () => {
   assert.match(dockerfile, /git/);
   assert.match(dockerfile, /openssh-client/);
   assert.match(dockerfile, /github-cli|\bgh\b/);
+  assert.match(dockerfile, /COPY --chmod=755 github-gh-auth-wrapper\.sh \/usr\/local\/bin\/gh/);
 });
 
 test("main compose grants opencode direct host access and shared git auth", () => {

@@ -106,6 +106,7 @@ WORKDIR /srv/projects
 COPY --chmod=755 entrypoint.sh /usr/local/bin/opencode-entrypoint.sh
 COPY cliproxy-provider-config.js /usr/local/bin/cliproxy-provider-config.js
 COPY --chmod=755 github-git-credential.js /usr/local/bin/github-git-credential.js
+COPY --chmod=755 github-gh-auth-wrapper.sh /usr/local/bin/gh
 COPY kanban-plugin-sync.js /usr/local/bin/kanban-plugin-sync.js
 COPY kanban-tools-plugin.ts /usr/local/share/opencode/kanban-tools-plugin.ts
 COPY --chmod=755 docker-wrapper.sh /usr/local/bin/docker

@@ -23,5 +23,6 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/dist ./dist
 COPY --chmod=755 github-git-credential.js /usr/local/bin/github-git-credential.js
+COPY --chmod=755 github-gh-auth-wrapper.sh /usr/local/bin/gh
 
 CMD ["node", "dist/main.js"]
