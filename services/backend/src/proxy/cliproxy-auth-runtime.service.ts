@@ -19,54 +19,44 @@ export class CliproxyAuthRuntimeService {
   public constructor(private readonly dockerCompose: DockerComposeService) {}
 
   public async setDisabled(input: { filePath: string; disabled: boolean }): Promise<void> {
-    /* Persist explicit disabled flag inside auth JSON and let CLIProxy file watcher reload it. */
+    /* Persist explicit disabled flag with POSIX tools because the CLIProxy image does not ship Python/Node. */
     const filePath = this.validateAuthFilePath(input.filePath);
-    await this.execPython(`
-import json
-import os
-import tempfile
-from pathlib import Path
-
-path = Path(${JSON.stringify(filePath)})
-try:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-except FileNotFoundError:
-    raise FileNotFoundError(f"auth file not found: {path}")
-
-payload["disabled"] = ${input.disabled ? "True" : "False"}
-fd, temp_path = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=path.parent)
-try:
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temp_path, path)
-    dir_fd = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(dir_fd)
-    finally:
-        os.close(dir_fd)
-except Exception:
-    try:
-        os.unlink(temp_path)
-    except FileNotFoundError:
-        pass
-    raise
-`);
+    const disabledLiteral = input.disabled ? "true" : "false";
+    const quotedPath = this.shellQuote(filePath);
+    const awkProgram = this.shellQuote([
+      'BEGIN { replaced = 0 }',
+      '{',
+      '  current = $0',
+      '  if (replaced == 0) {',
+      '    if (sub(/"disabled"[[:space:]]*:[[:space:]]*(true|false)/, "\\\"disabled\\\":" disabled, current)) {',
+      '      replaced = 1',
+      '    }',
+      '  }',
+      '  print current',
+      '}',
+      'END { if (replaced == 0) { exit 2 } }'
+    ].join(" "));
+    await this.execShell(
+      [
+        `path=${quotedPath}`,
+        'tmp="$(mktemp "${path}.XXXXXX.tmp")"',
+        '[ -f "$path" ] || { echo "auth file not found: $path" >&2; exit 1; }',
+        `awk -v disabled=${this.shellQuote(disabledLiteral)} ${awkProgram} "$path" > "$tmp" || { status=$?; rm -f -- "$tmp"; exit "$status"; }`,
+        'mv -- "$tmp" "$path"',
+        'test ! -e "$tmp"'
+      ].join(" && ")
+    );
   }
 
   public async deleteFile(input: { filePath: string }): Promise<void> {
-    /* Delete persisted auth file from CLIProxy volume so it disappears from the pool entirely. */
+    /* Delete persisted auth file with portable shell commands available in the running CLIProxy image. */
     const filePath = this.validateAuthFilePath(input.filePath);
-    await this.execPython(`
-from pathlib import Path
-
-path = Path(${JSON.stringify(filePath)})
-try:
-    path.unlink()
-except FileNotFoundError:
-    raise FileNotFoundError(f"auth file not found: {path}")
-`);
+    const quotedPath = this.shellQuote(filePath);
+    await this.execShell(
+      [`path=${quotedPath}`, '[ -f "$path" ] || { echo "auth file not found: $path" >&2; exit 1; }', 'rm -f -- "$path"'].join(
+        " && "
+      )
+    );
   }
 
   private validateAuthFilePath(filePath: string): string {
@@ -95,8 +85,13 @@ except FileNotFoundError:
     return normalizedPath;
   }
 
-  private async execPython(source: string): Promise<void> {
-    /* Reuse cliproxy container Python to keep JSON edits deterministic and shell-safe. */
+  private shellQuote(value: string): string {
+    /* Runtime paths are already validated, but shell quoting keeps composed exec commands deterministic. */
+    return `'${value.replaceAll("'", `'\\''`)}'`;
+  }
+
+  private async execShell(command: string): Promise<void> {
+    /* Reuse plain shell execution because the CLIProxy image only guarantees POSIX userland tools. */
     const runtimeConfigDir = process.env[RUNTIME_CONFIG_DIR_ENV]?.trim() || "";
     if (!runtimeConfigDir) {
       throw new BadRequestException("RUNTIME_CONFIG_DIR is not configured in backend container");
@@ -108,7 +103,7 @@ except FileNotFoundError:
       CLIPROXY_SERVICE_NAME,
       "sh",
       "-lc",
-      `python - <<'PY'\n${source.trim()}\nPY`
+      command
     ];
     await this.dockerCompose.run(args, runtimeConfigDir);
   }
