@@ -20,6 +20,7 @@ import { modeReplyKeyboard, registerModeControl } from "./mode-control";
 import { registerOpenCodeCallbacks } from "./opencode-callbacks";
 import { registerOpenCodeAccessCommand } from "./opencode-access-command";
 import { registerOpenCodeWebAuthHttp } from "./opencode-web-auth-http";
+import { waitForOpenCodeVersionWarmup } from "./opencode-version-warmup";
 import { OpenCodeWebAuthService } from "./opencode-web-auth";
 import { registerRepairCommand } from "./repair-command";
 import { registerSessionCommands } from "./session-command";
@@ -646,19 +647,30 @@ const bootstrap = async (): Promise<void> => {
     Array.isArray(config.adminIds) && typeof config.adminIds[0] === "number" ? config.adminIds[0] : null;
 
   const checkOpenCodeVersionOnBoot = async (adminId: number): Promise<void> => {
-    /* Refresh backend OpenCode version cache once on bot startup. */
+    /* Deploy restarts can bring backend and OpenCode up a few seconds after the bot process itself. */
     try {
-      const response = await fetch(`${config.backendUrl}/api/telegram/opencode/version/check`, {
-        method: "POST",
-        headers: buildBotBackendHeaders(config, adminId, {
-          "Content-Type": "application/json"
-        }),
-        body: "{}"
-      });
+      await waitForOpenCodeVersionWarmup({
+        run: async () => {
+          const response = await fetch(`${config.backendUrl}/api/telegram/opencode/version/check`, {
+            method: "POST",
+            headers: buildBotBackendHeaders(config, adminId, {
+              "Content-Type": "application/json"
+            }),
+            body: "{}"
+          });
 
-      if (!response.ok) {
-        throw new Error(`status=${response.status}`);
-      }
+          if (!response.ok) {
+            throw new Error(`status=${response.status}`);
+          }
+        },
+        onRetry: ({ attempt, maxAttempts, error }) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `OpenCode version warmup retry ${attempt}/${maxAttempts - 1} after transient startup failure`,
+            error
+          );
+        }
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("OpenCode version check on boot failed", error);
