@@ -47,9 +47,9 @@
 }
 
 .workspace-icon-tab.active {
-  border-color: #87b2ff;
-  background: linear-gradient(180deg, #245295 0%, #1a3f75 100%);
-  box-shadow: 0 8px 18px rgba(26, 63, 117, 0.35);
+  border-color: #1b6cff;
+  background: linear-gradient(180deg, #1b6cff 0%, #1656cc 100%);
+  color: #ffffff;
 }
 
 .workspace-icon-tab:disabled {
@@ -115,7 +115,7 @@ html[data-theme="dark"] .active-project-card {
     display: flex;
     flex-wrap: nowrap;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: visible;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     margin: 0;
@@ -123,6 +123,8 @@ html[data-theme="dark"] .active-project-card {
     gap: 12px;
     background: transparent;
     border: none;
+    position: relative;
+    z-index: 10;
   }
 
   .workspace-top-tabs::after {
@@ -154,10 +156,10 @@ html[data-theme="dark"] .active-project-card {
   }
 
   .workspace-icon-tab.active {
-    background: linear-gradient(135deg, #1b6cff 0%, #0b2a6d 100%);
-    color: white;
-    box-shadow: 0 10px 24px rgba(27, 108, 255, 0.4);
-    transform: translateY(-2px);
+    background: linear-gradient(135deg, #1b6cff 0%, #1255cc 100%) !important;
+    color: #ffffff !important;
+    opacity: 1 !important;
+    outline: none;
   }
 
   .active-project-card {

@@ -226,14 +226,19 @@
   min-width: 0;
 }
 
-/* Language label helps identify syntax mode at a glance. */
-.settings-editor-language {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  white-space: nowrap;
+/* Language badge for premium feel in editors and previews. */
+.settings-editor-language-badge {
+  background: linear-gradient(135deg, var(--accent) 0%, #0b2a6d 100%);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(27, 108, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
 }
 
 .theme-mode-toggle,
@@ -243,10 +248,18 @@
   flex-wrap: wrap;
 }
 
+.theme-mode-toggle .btn,
+.settings-theme-toggle .btn {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
 .theme-mode-toggle .btn.active,
 .settings-theme-toggle .btn.active {
   border-color: var(--accent);
-  background: #eef3ff;
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .theme-mode-toggle-compact {
@@ -409,6 +422,61 @@
   gap: 8px;
 }
 
+/* Premium styling for header action icons in the code modal context. */
+.settings-editor-actions .btn-icon {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  flex: 0 0 40px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #475569;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.settings-editor-actions .btn-icon:hover {
+  background: #ffffff;
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+/* Close button hover uses a subtle red theme. */
+.settings-editor-actions .btn-icon[title="Close"]:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.12);
+}
+
+html[data-theme="dark"] .settings-editor-actions .btn-icon {
+  background: #1e293b;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme="dark"] .settings-editor-actions .btn-icon:hover {
+  background: #2d3e5a;
+  border-color: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="dark"] .settings-editor-actions .btn-icon[title="Close"]:hover {
+  border-color: #f87171;
+  color: #f87171;
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.3);
+}
+
 /* Status line reports dirty/saved/error state and shortcut hint. */
 .settings-editor-status {
   margin-right: auto;
@@ -505,7 +573,6 @@ html[data-theme="dark"] .project-git-minus {
 }
 
 html[data-theme="dark"] .tab,
-html[data-theme="dark"] .btn,
 html[data-theme="dark"] .icon-tool-btn,
 html[data-theme="dark"] .input,
 html[data-theme="dark"] .files-list,
@@ -554,7 +621,12 @@ html[data-theme="dark"] .settings-toast.error {
 }
 
 /* Dark mode mirrors editor chrome semantics for language/shortcut badges. */
-html[data-theme="dark"] .settings-editor-language,
+html[data-theme="dark"] .settings-editor-language-badge {
+  background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
 html[data-theme="dark"] .settings-editor-shortcut {
   border-color: #2e4b7b;
   color: #b8c7e3;
@@ -564,11 +636,18 @@ html[data-theme="dark"] .settings-editor-status.error {
   color: #ffc4ce;
 }
 
+html[data-theme="dark"] .theme-mode-toggle .btn,
+html[data-theme="dark"] .settings-theme-toggle .btn {
+  background: transparent;
+  border-color: #2e4b7b;
+  color: #a2b0c8;
+}
+
 html[data-theme="dark"] .tab.active,
 html[data-theme="dark"] .theme-mode-toggle .btn.active,
 html[data-theme="dark"] .settings-theme-toggle .btn.active {
-  background: #1b2c49;
-  border-color: #2e4b7b;
+  background: var(--accent);
+  border-color: var(--accent);
   color: #ffffff;
 }
 
@@ -588,6 +667,10 @@ html[data-theme="dark"] .stream-toggle-on {
   background: #113128;
   border-color: #1d5f4c;
   color: #9ff0ce;
+}
+
+html[data-theme="dark"] .btn.ghost {
+  color: #a2b0c8;
 }
 
 html[data-theme="dark"] .file-item:hover {

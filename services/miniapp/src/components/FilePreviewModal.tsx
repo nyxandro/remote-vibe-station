@@ -5,7 +5,8 @@
  * - FilePreviewModal - Opens project file content in the shared fullscreen code modal.
  */
 
-import { useEffect } from "react";
+import { useEffect, ReactNode } from "react";
+import { Download, X } from "lucide-react";
 
 import { ThemeMode } from "../utils/theme";
 import { inferTextEditorLanguage } from "../utils/text-editor-language";
@@ -40,8 +41,8 @@ export const FilePreviewModal = (props: Props) => {
     <FullscreenCodeModal
       filePath={props.filePath}
       headerActions={
-        <button className="btn outline" onClick={props.onDownload} type="button">
-          Download
+        <button className="btn outline btn-icon" onClick={props.onDownload} type="button" title="Download file">
+          <Download size={20} />
         </button>
       }
       isOpen={props.isOpen}

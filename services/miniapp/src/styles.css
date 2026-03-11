@@ -243,7 +243,7 @@ html[data-theme="dark"] .project-create-panel {
 
 .project-grid {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
@@ -435,16 +435,27 @@ html[data-theme="dark"] .project-deploy-link-url {
 }
 
 .btn {
-  border: 1px solid var(--border);
-  background: #ffffff;
-  color: #1c2230;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #ffffff;
   border-radius: 10px;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  transition: opacity 0.2s ease, transform 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .btn-icon {
@@ -463,14 +474,18 @@ html[data-theme="dark"] .project-deploy-link-url {
 }
 
 .btn.ghost {
-  background: #f7f9ff;
-  color: #5b6b94;
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+  font-weight: 600;
 }
 
-.btn.outline {
-  border-color: #9db8ff;
-  color: #1b3f91;
+.btn.ghost:hover:not(:disabled) {
+  background: rgba(27, 108, 255, 0.08);
+  color: var(--accent);
 }
+
+/* outline class falls back to the universal blue primary style */
 
 .status-grid {
   display: grid;
@@ -796,7 +811,7 @@ html[data-theme="dark"] .project-deploy-link-url {
   }
 
   .project-grid {
-    gap: 16px;
+    gap: 10px;
   }
 
   .project-card {
@@ -887,21 +902,11 @@ html[data-theme="dark"] .project-deploy-link-url {
     padding: 12px 16px;
     border-radius: 16px;
     font-size: 14px;
-    font-weight: 600;
     min-height: 48px;
-    justify-content: center;
-    border: none;
-    background: rgba(15, 23, 42, 0.04);
-    color: #1e293b;
-    transition:
-      transform 0.2s,
-      background 0.2s;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
   }
 
   html[data-theme="dark"] .btn {
-    background: rgba(255, 255, 255, 0.1);
-    color: #f8fafc;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
 

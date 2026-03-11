@@ -6,6 +6,7 @@
  */
 
 import { ReactNode, useEffect, useId, useRef } from "react";
+import { X } from "lucide-react";
 
 import { ThemeMode } from "../utils/theme";
 import { TextEditorLanguage } from "../utils/text-editor-language";
@@ -110,16 +111,16 @@ export const FullscreenCodeModal = (props: Props) => {
       >
         <div className="settings-editor-modal-header">
           <div className="settings-editor-header-meta">
+            <div className="settings-editor-language-badge">{props.language.toUpperCase()}</div>
             <div id={titleId} className="settings-editor-meta">
               {props.filePath}
             </div>
-            <div className="settings-editor-language">{props.language.toUpperCase()}</div>
           </div>
 
           <div className="settings-editor-actions">
             {props.headerActions}
-            <button className="btn outline" onClick={props.onClose} type="button">
-              Close
+            <button className="btn outline btn-icon" onClick={props.onClose} type="button" title="Close">
+              <X size={20} />
             </button>
           </div>
         </div>
