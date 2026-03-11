@@ -5,8 +5,8 @@
  * - TelegramRuntimePartReplayGuard - Remembers finalized non-text part ids per session to ignore stale replays.
  */
 
-const MAX_FINALIZED_PARTS_PER_SESSION = 1024;
-const SESSION_STATE_TTL_MS = 30 * 60_000;
+const MAX_FINALIZED_PARTS_PER_SESSION = 8_192;
+const SESSION_STATE_TTL_MS = 24 * 60 * 60_000;
 
 export class TelegramRuntimePartReplayGuard {
   private readonly finalizedPartIdsBySession = new Map<string, string[]>();
@@ -56,7 +56,7 @@ export class TelegramRuntimePartReplayGuard {
   }
 
   private pruneStaleSessions(nowMs: number): void {
-    /* Late replay protection only matters shortly after a session turn completes. */
+    /* Keep one-day replay history because the same Telegram/OpenCode session can run for many hours. */
     this.lastAccessAtMsBySession.forEach((lastAccessAtMs, sessionID) => {
       if (nowMs - lastAccessAtMs <= SESSION_STATE_TTL_MS) {
         return;

@@ -23,7 +23,7 @@ describe("TelegramAssistantPartState", () => {
   });
 
   test("prunes stale session state after ttl expires", () => {
-    /* Replay guards should be temporary so sessions that disappear do not leak memory forever. */
+    /* Replay guards should still expire eventually after long-lived session protection is no longer needed. */
     const nowSpy = jest.spyOn(Date, "now");
     const state = new TelegramAssistantPartState();
 
@@ -32,7 +32,7 @@ describe("TelegramAssistantPartState", () => {
     state.closeOpenTextParts("stale-session");
     expect(state.isClosedTextPart("stale-session", "stale-part")).toBe(true);
 
-    nowSpy.mockReturnValue(1_802_000);
+    nowSpy.mockReturnValue(24 * 60 * 60 * 1000 + 2_000);
     expect(state.rememberOpenTextPart("fresh-session", "fresh-part")).toBe(true);
     expect(state.isClosedTextPart("stale-session", "stale-part")).toBe(false);
     nowSpy.mockRestore();

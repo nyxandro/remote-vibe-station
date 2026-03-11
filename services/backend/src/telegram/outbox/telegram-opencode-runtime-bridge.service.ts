@@ -15,6 +15,7 @@ import { TelegramOpenCodeRuntimeFileOperations } from "./telegram-opencode-runti
 import { TelegramOpenCodeRuntimeInteractions } from "./telegram-opencode-runtime-interactions";
 import { TelegramOutboxService } from "./telegram-outbox.service";
 import { TelegramRuntimePartReplayGuard } from "./telegram-runtime-part-replay-guard";
+import { TelegramRuntimeTurnState } from "./telegram-runtime-turn-state";
 import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
 type OpenCodeBusEvent = {
   type?: string;
@@ -45,6 +46,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly partIdsBySession = new Map<string, Set<string>>();
   private readonly assistantPartState = new TelegramAssistantPartState();
   private readonly finalizedRuntimePartReplayGuard = new TelegramRuntimePartReplayGuard();
+  private readonly runtimeTurnState = new TelegramRuntimeTurnState();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private readonly emittedSystemNotificationsBySession = new Map<string, Set<string>>();
   private readonly fileOperations: TelegramOpenCodeRuntimeFileOperations;
@@ -67,11 +69,15 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     this.events.subscribe((event) => this.onEvent(event));
   }
   private onEvent(event: EventEnvelope): void {
+    if (event.type === "opencode.turn.started") {
+      const sessionID = String((event.data as any)?.sessionId ?? "").trim();
+      if (sessionID) this.runtimeTurnState.openTurn(sessionID);
+      return;
+    }
     /* Accept only raw OpenCode SSE events published by OpenCodeEventsService. */
     if (event.type !== "opencode.event") {
       return;
     }
-
     const payload = String((event.data as any)?.payload ?? "");
     const eventName = String((event.data as any)?.eventName ?? "").trim();
     if (!payload) {
@@ -92,27 +98,22 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       this.handlePartUpdated(properties);
       return;
     }
-
     if (eventType === "message.part.delta") {
       this.handleMessagePartDelta(properties);
       return;
     }
-
     if (eventType === "session.status") {
       this.handleSessionStatus(properties);
       return;
     }
-
     if (eventType === "session.idle") {
       this.handleSessionIdle(properties);
       return;
     }
-
     if (eventType === "question.asked") {
       this.handleQuestionAsked(properties);
       return;
     }
-
     if (eventType === "permission.updated" || eventType === "permission.asked") {
       this.handlePermissionUpdated(properties);
     }
@@ -127,15 +128,13 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
     const sessionID = String(part.sessionID ?? "");
     const route = this.routes.resolve(sessionID);
-    if (!route) {
+    if (!route || !this.runtimeTurnState.isTurnOpen(sessionID)) {
       return;
     }
-
     const partType = String(part.type ?? "");
     const partID = String(part.id ?? "").trim();
     const state = part.state as any;
     const status = String(state?.status ?? "");
-
     /* Completed non-text parts may be replayed later; emit them into Telegram only once per session. */
     if (
       partType === "tool" &&
@@ -145,7 +144,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     ) {
       return;
     }
-
     if (partType === "text" && partID && !this.assistantPartState.rememberOpenTextPart(sessionID, partID)) {
       /* Late replay of an already finalized text part must not resurrect duplicate commentary. */
       return;
@@ -347,10 +345,10 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (!route) {
       return;
     }
-
     const statusType = String((properties.status as any)?.type ?? "");
     if (statusType === "idle") {
       this.setThinking(route.adminId, sessionID, false);
+      this.runtimeTurnState.closeTurn(sessionID);
       this.clearSessionRuntimeState(sessionID);
     }
   }
@@ -366,8 +364,8 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (!route) {
       return;
     }
-
     this.setThinking(route.adminId, sessionID, false);
+    this.runtimeTurnState.closeTurn(sessionID);
     this.clearSessionRuntimeState(sessionID);
   }
 
@@ -377,7 +375,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     this.outbox.closeAssistantProgress({ sessionId: sessionID });
     this.assistantTextBySession.delete(sessionID);
     this.emittedSystemNotificationsBySession.delete(sessionID);
-
     const sessionPartIds = this.partIdsBySession.get(sessionID);
     if (sessionPartIds) {
       sessionPartIds.forEach((partID) => {
@@ -390,7 +387,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       });
       this.partIdsBySession.delete(sessionID);
     }
-
   }
 
   private closeAssistantStreamSegment(sessionID: string): void {
@@ -402,7 +398,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (!hadBufferedText) {
       return;
     }
-
     this.assistantTextBySession.delete(sessionID);
     for (const key of this.assistantTextByPart.keys()) {
       if (key.includes(`:${sessionID}:`)) {
@@ -417,12 +412,10 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (!buffered.trim()) {
       return;
     }
-
     const route = this.routes.resolve(sessionID);
     if (!route) {
       return;
     }
-
     this.outbox.enqueueAssistantCommentary({
       adminId: route.adminId,
       sessionId: sessionID,
@@ -432,6 +425,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
   public finalizeAssistantReply(sessionID: string): void {
     /* The synchronous final reply is authoritative, so any later SSE replay for this turn becomes stale noise. */
+    this.runtimeTurnState.closeTurn(sessionID);
     this.clearSessionRuntimeState(sessionID);
   }
 
@@ -488,11 +482,15 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
   private handleQuestionAsked(properties: Record<string, unknown>): void {
     /* Delegate interactive question rendering to a focused formatter. */
+    const sessionID = String(properties.sessionID ?? "");
+    if (!sessionID || !this.runtimeTurnState.isTurnOpen(sessionID)) return;
     this.interactions.handleQuestionAsked(properties);
   }
 
   private handlePermissionUpdated(properties: Record<string, unknown>): void {
     /* Delegate permission prompt rendering to a focused formatter. */
+    const sessionID = String(properties.sessionID ?? "");
+    if (!sessionID || !this.runtimeTurnState.isTurnOpen(sessionID)) return;
     this.interactions.handlePermissionUpdated(properties);
   }
 }

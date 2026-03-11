@@ -204,12 +204,74 @@ describe("PromptService", () => {
     expect(harness.events.publish).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
+        type: "opencode.turn.started",
+        data: expect.objectContaining({
+          adminId: 7,
+          projectSlug: "carousel",
+          directory: "/tmp/carousel",
+          sessionId: "session-auto"
+        })
+      })
+    );
+    expect(harness.events.publish).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
         type: "opencode.session.started",
         data: expect.objectContaining({
           adminId: 7,
           projectSlug: "carousel",
           trigger: "busy-rotated",
           sessionId: "session-auto"
+        })
+      })
+    );
+  });
+
+  test("dispatchPromptParts publishes runtime turn start when session is resolved", async () => {
+    /* Runtime replay barrier needs an explicit per-turn open event before SSE progress may flow to Telegram. */
+    const harness = createDispatchHarness();
+    harness.opencode.getModelContextLimit.mockResolvedValue(null);
+    harness.opencode.getModelDisplayName.mockResolvedValue(null);
+    harness.opencode.sendPromptParts.mockImplementation(
+      async (
+        _parts: unknown,
+        options: {
+          onSessionResolved?: (sessionID: string, resolution: { isNew: boolean; reason: string }) => void;
+        }
+      ) => {
+        options.onSessionResolved?.("session-turn", { isNew: false, reason: "existing" });
+        return {
+          sessionId: "session-turn",
+          responseText: "Готово",
+          info: {
+            providerID: "cliproxy",
+            modelID: "gpt-5",
+            mode: "primary",
+            agent: "build",
+            tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
+          },
+          parts: [{ type: "text", text: "Готово" }]
+        };
+      }
+    );
+
+    await harness.service.dispatchPromptParts({
+      adminId: 7,
+      projectSlug: "demo",
+      directory: "/tmp/demo",
+      promptTextForTelemetry: "почини",
+      parts: [{ type: "text", text: "почини" }]
+    });
+
+    expect(harness.events.publish).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: "opencode.turn.started",
+        data: expect.objectContaining({
+          adminId: 7,
+          projectSlug: "demo",
+          directory: "/tmp/demo",
+          sessionId: "session-turn"
         })
       })
     );
@@ -296,9 +358,17 @@ describe("PromptService", () => {
       sessionID: "session-runtime",
       timeoutMs: 30_000
     });
-    expect(harness.events.publish).toHaveBeenCalledTimes(1);
-    expect(harness.events.publish).toHaveBeenCalledWith(
+    expect(harness.events.publish).toHaveBeenCalledTimes(2);
+    expect(harness.events.publish).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({ type: "opencode.prompt" })
+    );
+    expect(harness.events.publish).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: "opencode.turn.started",
+        data: expect.objectContaining({ sessionId: "session-runtime" })
+      })
     );
   });
 });

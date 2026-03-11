@@ -5,8 +5,8 @@
  * - TelegramAssistantPartState - Remembers open/finalized text parts to ignore late SSE replays.
  */
 
-const MAX_CLOSED_TEXT_PARTS_PER_SESSION = 512;
-const SESSION_STATE_TTL_MS = 30 * 60_000;
+const MAX_CLOSED_TEXT_PARTS_PER_SESSION = 4_096;
+const SESSION_STATE_TTL_MS = 24 * 60 * 60_000;
 
 export class TelegramAssistantPartState {
   private readonly openTextPartIdsBySession = new Map<string, Set<string>>();
@@ -92,7 +92,7 @@ export class TelegramAssistantPartState {
   }
 
   private pruneStaleSessions(nowMs: number): void {
-    /* Keep only recently touched sessions because late replay protection is only needed briefly. */
+    /* Keep one-day replay history because production sessions can stay active for many hours. */
     this.lastAccessAtMsBySession.forEach((lastAccessAtMs, sessionID) => {
       if (nowMs - lastAccessAtMs <= SESSION_STATE_TTL_MS) {
         return;

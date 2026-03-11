@@ -270,6 +270,75 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     nowSpy.mockRestore();
   });
 
+  it("keeps closed text-part replay protection across long-lived sessions", () => {
+    /* Old commentary chunks must stay ignored even when the same session continues hours later. */
+    const { bridge, outbox } = makeBridge();
+    const nowSpy = jest.spyOn(Date, "now");
+
+    nowSpy.mockReturnValue(1_000);
+    (bridge as any).onEvent({
+      type: "opencode.turn.started",
+      ts: new Date().toISOString(),
+      data: { sessionId: "session-text-replay" }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-old",
+        sessionID: "session-text-replay"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-text-replay",
+            partID: "assistant-part-old",
+            field: "text",
+            delta: "Старый комментарий"
+          }
+        })
+      }
+    });
+    bridge.finalizeAssistantReply("session-text-replay");
+
+    nowSpy.mockReturnValue(6 * 60 * 60 * 1000);
+    (bridge as any).onEvent({
+      type: "opencode.turn.started",
+      ts: new Date().toISOString(),
+      data: { sessionId: "session-text-replay" }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-old",
+        sessionID: "session-text-replay"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-text-replay",
+            partID: "assistant-part-old",
+            field: "text",
+            delta: "Старый комментарий"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantCommentary).not.toHaveBeenCalled();
+    expect((bridge as any).assistantTextBySession.get("session-text-replay")).toBeUndefined();
+    nowSpy.mockRestore();
+  });
+
   it("keeps one buffered transcript across assistant text parts in the same turn", () => {
     /* Real OpenCode streams can rotate text part ids mid-reply, so final buffered text must stay continuous. */
     const { bridge, outbox } = makeBridge();

@@ -17,6 +17,7 @@ import { summarizeOpenCodeParts } from "../open-code/opencode-telemetry";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { ProjectsService } from "../projects/projects.service";
 import { TelegramPreferencesService } from "../telegram/preferences/telegram-preferences.service";
+import { publishPromptRuntimeTurnStarted } from "./prompt-runtime-turn-event";
 
 type PromptResult = {
   sessionId: string;
@@ -135,6 +136,7 @@ export class PromptService {
         this.sessionRouting.bind(sessionID, { adminId: input.adminId, directory: input.directory });
         this.opencodeEvents.watchPermissionOnce({ directory: input.directory, sessionID });
       }
+      publishPromptRuntimeTurnStarted(this.events, { adminId: input.adminId, projectSlug: input.projectSlug, directory: input.directory, sessionID });
 
       /* Notify Telegram when OpenCode had to create a fresh session outside explicit /new flow. */
       this.publishAutoSessionStarted({
@@ -248,6 +250,7 @@ export class PromptService {
           this.sessionRouting.bind(sessionID, { adminId, directory: active.rootPath });
           this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID });
         }
+        publishPromptRuntimeTurnStarted(this.events, { adminId, projectSlug: active.slug, directory: active.rootPath, sessionID });
 
         /* Command execution must surface the same session reset warning as plain prompts. */
         this.publishAutoSessionStarted({
