@@ -81,35 +81,6 @@ describe("TelegramOutboxStore", () => {
     expect(Date.parse(stored.nextAttemptAt)).toBeGreaterThan(t0);
   });
 
-  it("coalesces pending draft updates by progressKey", () => {
-    /* Live draft streaming only needs the freshest pending snapshot, not every intermediate chunk. */
-    const store = new TelegramOutboxStore();
-    const t0 = Date.parse("2026-02-05T00:00:00.000Z");
-
-    const first = store.enqueue({
-      adminId: 4,
-      chatId: 40,
-      text: "one",
-      mode: "draft",
-      progressKey: "assistant:4:session-1",
-      nowMs: t0
-    });
-    const second = store.enqueue({
-      adminId: 4,
-      chatId: 40,
-      text: "two",
-      mode: "draft",
-      progressKey: "assistant:4:session-1",
-      nowMs: t0 + 1
-    });
-
-    const json = readFileJson();
-    expect(json.items).toHaveLength(1);
-    expect(json.items[0].id).toBe(first.id);
-    expect(json.items[0].text).toBe("two");
-    expect(second.id).toBe(first.id);
-  });
-
   it("coalesces pending replace updates by progressKey", () => {
     /* Live Telegram stream edits must keep one freshest pending snapshot per progress message. */
     const store = new TelegramOutboxStore();
@@ -267,5 +238,31 @@ describe("TelegramOutboxStore", () => {
 
     /* Old dead letters are dropped by age, recent ones remain. */
     expect(deadLeft.map((i: any) => i.id)).toEqual(["dead-new"]);
+  });
+
+  it("backs up corrupted JSON and accepts new messages again", () => {
+    /* Corrupted outbox file must not crash delivery recovery on the next backend write. */
+    fs.writeFileSync(OUTBOX_PATH, "{broken-json", "utf-8");
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const store = new TelegramOutboxStore();
+      const item = store.enqueue({ adminId: 8, chatId: 80, text: "после восстановления" });
+
+      const backups = fs
+        .readdirSync(TEST_DATA_DIR)
+        .filter((name) => name.startsWith("telegram.outbox.json.corrupt-"));
+
+      expect(backups).toHaveLength(1);
+
+      const json = readFileJson();
+      expect(json.items).toHaveLength(1);
+      expect(json.items[0].id).toBe(item.id);
+      expect(json.items[0].text).toBe("после восстановления");
+
+      fs.rmSync(path.join(TEST_DATA_DIR, backups[0]), { force: true });
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

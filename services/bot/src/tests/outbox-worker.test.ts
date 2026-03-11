@@ -1,10 +1,9 @@
 /**
- * @fileoverview Tests for OutboxWorker replace and draft streaming behavior.
+ * @fileoverview Tests for OutboxWorker replace delivery and report retries.
  *
  * Exports/constructs:
- * - makeWorker (L20) - Builds worker with mocked config/bot.
- * - describe("OutboxWorker replace delivery", L35) - Covers edit and draft fallback paths.
- * - describe("OutboxWorker report retry", L169) - Covers dedupe when backend report ack is flaky.
+ * - makeWorker - Builds worker with mocked config/bot.
+ * - describe("OutboxWorker replace delivery", ...) - Covers replace/edit fallback paths.
  */
 
 import { OutboxWorker } from "../outbox-worker";
@@ -12,7 +11,6 @@ import { OutboxWorker } from "../outbox-worker";
 type TelegramMock = {
   sendMessage: jest.Mock;
   editMessageText: jest.Mock;
-  callApi: jest.Mock;
 };
 
 const makeWorker = (telegram: TelegramMock): OutboxWorker => {
@@ -37,20 +35,10 @@ const makeReplaceItem = () => ({
   progressKey: "bash:1:ses:call"
 });
 
-const makeDraftItem = () => ({
-  id: "draft-1",
-  chatId: 100,
-  text: "partial answer",
-  disableNotification: true,
-  mode: "draft" as const,
-  progressKey: "assistant:1:ses"
-});
-
 describe("OutboxWorker replace delivery", () => {
   it("sends replace-progress without reply keyboard by default", async () => {
     /* Progress messages must stay editable, so they should not include reply keyboard markup. */
     const telegram: TelegramMock = {
-      callApi: jest.fn(),
       editMessageText: jest.fn(async () => true),
       sendMessage: jest.fn(async () => ({ message_id: 701 }))
     };
@@ -70,7 +58,6 @@ describe("OutboxWorker replace delivery", () => {
   it("falls back to sendMessage when Telegram rejects edit", async () => {
     /* Simulate Telegram 'message can't be edited' on update attempt. */
     const telegram: TelegramMock = {
-      callApi: jest.fn(),
       editMessageText: jest.fn(async () => {
         throw new Error("400: Bad Request: message can't be edited");
       }),
@@ -98,7 +85,6 @@ describe("OutboxWorker replace delivery", () => {
   it("returns failure for edit errors unrelated to editability", async () => {
     /* Non-recoverable edit failures should not be swallowed. */
     const telegram: TelegramMock = {
-      callApi: jest.fn(),
       editMessageText: jest.fn(async () => {
         throw new Error("400: Bad Request: chat not found");
       }),
@@ -121,55 +107,9 @@ describe("OutboxWorker replace delivery", () => {
     expect(telegram.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("uses sendMessageDraft for live text streaming", async () => {
-    /* Draft streaming should use Telegram native partial-message API instead of edit loops. */
-    const telegram: TelegramMock = {
-      callApi: jest.fn(async () => true),
-      editMessageText: jest.fn(),
-      sendMessage: jest.fn()
-    };
-    const worker = makeWorker(telegram);
-
-    const result = await (worker as any).deliver(makeDraftItem());
-
-    expect(result).toEqual({ id: "draft-1", ok: true });
-    expect(telegram.callApi).toHaveBeenCalledWith(
-      "sendMessageDraft",
-      expect.objectContaining({
-        chat_id: 100,
-        draft_id: expect.any(Number),
-        text: "partial answer"
-      })
-    );
-    expect(telegram.editMessageText).not.toHaveBeenCalled();
-    expect(telegram.sendMessage).not.toHaveBeenCalled();
-  });
-
-  it("falls back to replace delivery when sendMessageDraft is unsupported", async () => {
-    /* Older Telegram API wrappers or incompatible runtimes must degrade to editable progress message. */
-    const telegram: TelegramMock = {
-      callApi: jest.fn(async () => {
-        throw new Error("404: Bad Request: method sendMessageDraft not found");
-      }),
-      editMessageText: jest.fn(),
-      sendMessage: jest.fn(async () => ({ message_id: 808 }))
-    };
-    const worker = makeWorker(telegram);
-
-    const firstResult = await (worker as any).deliver(makeDraftItem());
-    const secondResult = await (worker as any).deliver({ ...makeDraftItem(), text: "partial answer 2" });
-
-    expect(firstResult).toEqual({ id: "draft-1", ok: true, telegramMessageId: 808 });
-    expect(secondResult).toEqual({ id: "draft-1", ok: true, telegramMessageId: 808 });
-    expect(telegram.callApi).toHaveBeenCalledTimes(1);
-    expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
-    expect(telegram.editMessageText).not.toHaveBeenCalled();
-  });
-
   it("reuses cached successful delivery for the same outbox item id", async () => {
     /* Re-pulled items after a failed report must not send a second Telegram message. */
     const telegram: TelegramMock = {
-      callApi: jest.fn(),
       editMessageText: jest.fn(),
       sendMessage: jest.fn(async () => ({ message_id: 909 }))
     };
@@ -196,12 +136,12 @@ describe("OutboxWorker replace delivery", () => {
   it("retries pending report before pulling new items", async () => {
     /* Backend report failure must not cause the same Telegram message to be resent on the next poll. */
     const telegram: TelegramMock = {
-      callApi: jest.fn(),
       editMessageText: jest.fn(),
       sendMessage: jest.fn(async () => ({ message_id: 1001 }))
     };
     const worker = makeWorker(telegram);
     const fetchSpy = jest.spyOn(globalThis, "fetch" as any);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
     let pullCalls = 0;
 
     fetchSpy.mockImplementation(async (...args: unknown[]) => {
@@ -245,11 +185,15 @@ describe("OutboxWorker replace delivery", () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
 
-    await (worker as any).processAdmin(1);
-    await (worker as any).processAdmin(1);
+    try {
+      await (worker as any).processAdmin(1);
+      await (worker as any).processAdmin(1);
 
-    expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes("/api/telegram/outbox/report"))).toHaveLength(2);
-    fetchSpy.mockRestore();
+      expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes("/api/telegram/outbox/report"))).toHaveLength(2);
+    } finally {
+      fetchSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
   });
 });

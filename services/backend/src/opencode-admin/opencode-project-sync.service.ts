@@ -7,7 +7,7 @@
  * - We implement a best-effort sync by writing OpenCode's storage JSON files.
  *
  * Exports:
- * - OpenCodeProjectSyncService (L26) - Writes/updates storage/project/*.json files.
+ * - OpenCodeProjectSyncService - Writes/updates storage/project/*.json files.
  */
 
 import * as fs from "node:fs";
@@ -250,48 +250,54 @@ export class OpenCodeProjectSyncService implements OnModuleInit {
      * Create a bootstrap session to force OpenCode to register the directory.
      * We immediately delete it to avoid polluting the session list.
      */
-    const session = await this.request<{ id: string; projectID?: string }>(
-      `/session?directory=${encodeURIComponent(input.directory)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Bootstrap" })
+    let session: { id: string; projectID?: string } | null = null;
+
+    try {
+      session = await this.request<{ id: string; projectID?: string }>(
+        `/session?directory=${encodeURIComponent(input.directory)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Bootstrap" })
+        }
+      );
+
+      /* If OpenCode fell back to global project, there's nothing to patch. */
+      if (session.projectID === "global") {
+        return;
       }
-    );
 
-    /* Always clean up the bootstrap session. */
-    await this.request(`/session/${session.id}`, { method: "DELETE" });
+      /*
+       * Resolve the derived project id and patch its metadata.
+       * We select the 40-hex id for the exact worktree.
+       */
+      const projects = await this.request<Array<{ id: string; worktree: string }>>(
+        `/project?directory=${encodeURIComponent(input.directory)}`,
+        { method: "GET" }
+      );
 
-    /* If OpenCode fell back to global project, there's nothing to patch. */
-    if (session.projectID === "global") {
-      return;
-    }
+      const derived = projects.find(
+        (p) => p.worktree === input.directory && /^[0-9a-f]{40}$/i.test(p.id)
+      );
 
-    /*
-     * Resolve the derived project id and patch its metadata.
-     * We select the 40-hex id for the exact worktree.
-     */
-    const projects = await this.request<Array<{ id: string; worktree: string }>>(
-      `/project?directory=${encodeURIComponent(input.directory)}`,
-      { method: "GET" }
-    );
-
-    const derived = projects.find(
-      (p) => p.worktree === input.directory && /^[0-9a-f]{40}$/i.test(p.id)
-    );
-
-    if (!derived) {
-      throw new Error(`Derived OpenCode project id not found for: ${input.directory}`);
-    }
-
-    await this.request(
-      `/project/${derived.id}?directory=${encodeURIComponent(input.directory)}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: input.name, icon: { color: input.color } })
+      if (!derived) {
+        throw new Error(`Derived OpenCode project id not found for: ${input.directory}`);
       }
-    );
+
+      await this.request(
+        `/project/${derived.id}?directory=${encodeURIComponent(input.directory)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: input.name, icon: { color: input.color } })
+        }
+      );
+    } finally {
+      /* Always clean up the bootstrap session when creation succeeded. */
+      if (session?.id) {
+        await this.request(`/session/${session.id}`, { method: "DELETE" });
+      }
+    }
   }
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {

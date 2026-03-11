@@ -2,9 +2,9 @@
  * @fileoverview Runtime controls for OpenCode docker service.
  *
  * Exports:
- * - OpenCodeVersionStatus (L17) - Current/latest OpenCode versions with update marker.
- * - OpenCodeUpdateResult (L24) - Update operation result details.
- * - OpenCodeRuntimeService (L35) - Restarts, checks version, and updates OpenCode containers.
+ * - OpenCodeVersionStatus - Current/latest OpenCode versions with update marker.
+ * - OpenCodeUpdateResult - Update operation result details.
+ * - OpenCodeRuntimeService - Restarts, checks version, and updates OpenCode containers.
  */
 
 import { Injectable } from "@nestjs/common";

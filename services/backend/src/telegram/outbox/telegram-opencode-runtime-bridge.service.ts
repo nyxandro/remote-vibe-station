@@ -2,61 +2,39 @@
  * @fileoverview Live bridge for OpenCode runtime events into Telegram outbox.
  *
  * Exports:
- * - TelegramOpenCodeRuntimeBridge (L24) - Parses opencode.event and enqueues progress/questions.
+ * - TelegramOpenCodeRuntimeBridge - Parses opencode.event and enqueues progress/questions.
  */
-
 import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
-
 import { AppConfig, ConfigToken } from "../../config/config.types";
 import { EventEnvelope } from "../../events/events.types";
 import { EventsService } from "../../events/events.service";
 import { OpenCodeSessionRoutingStore } from "../../open-code/opencode-session-routing.store";
 import { TelegramDiffPreviewStore } from "../diff-preview/telegram-diff-preview.store";
-import { formatTelegramQuestionPrompt } from "../telegram-question-prompt";
 import { TelegramAssistantPartState } from "./telegram-assistant-part-state";
-import { formatFileOperationMessageHtml } from "./telegram-file-event-message";
+import { TelegramOpenCodeRuntimeFileOperations } from "./telegram-opencode-runtime-file-operations";
+import { TelegramOpenCodeRuntimeInteractions } from "./telegram-opencode-runtime-interactions";
 import { TelegramOutboxService } from "./telegram-outbox.service";
 import { TelegramRuntimePartReplayGuard } from "./telegram-runtime-part-replay-guard";
 import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
-
 type OpenCodeBusEvent = {
   type?: string;
   properties?: Record<string, unknown>;
 };
-
 const BASH_PROGRESS_MAX_CHARS = 2600;
 const BASH_PROGRESS_MIN_INTERVAL_MS = 1000;
 const BASH_NOISE_PROBE_COMMAND = /^(node|npm|pnpm|yarn|bun|python|python3)\s+(-v|--version)$/i;
-const QUESTION_CALLBACK_PREFIX = "q";
-const PERMISSION_CALLBACK_PREFIX = "perm";
-const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
-const TELEGRAM_DEEP_LINK_BASE = "https://t.me";
-const DIFF_START_PARAM_PREFIX = "diff_";
 const COOLDOWN_MESSAGE_PATTERN = /All credentials for model[\s\S]*?(?:попытка №\d+|attempt #\d+)/gi;
 const SYSTEM_REMINDER_PATTERN = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
-
-type ExtractedFileOperation = {
-  kind: "create" | "edit" | "delete";
-  absolutePath: string;
-  additions: number;
-  deletions: number;
-  diff: string;
-  before?: string;
-  after?: string;
-};
-
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
-
 const isNoisyRuntimeProbeCommand = (command: string): boolean => {
   /* Suppress low-signal version probes to keep Telegram terminal stream useful. */
   const normalized = command.trim().replaceAll(/\s+/g, " ");
   return BASH_NOISE_PROBE_COMMAND.test(normalized);
 };
-
 @Injectable()
 export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressEmittedAtMs = new Map<string, number>();
@@ -69,21 +47,25 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly finalizedRuntimePartReplayGuard = new TelegramRuntimePartReplayGuard();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private readonly emittedSystemNotificationsBySession = new Map<string, Set<string>>();
-  private botUsernamePromise: Promise<string | null> | null = null;
-
+  private readonly fileOperations: TelegramOpenCodeRuntimeFileOperations;
+  private readonly interactions: TelegramOpenCodeRuntimeInteractions;
   public constructor(
     @Inject(ConfigToken) private readonly config: AppConfig,
     private readonly events: EventsService,
     private readonly routes: OpenCodeSessionRoutingStore,
     private readonly outbox: TelegramOutboxService,
     private readonly diffPreviews: TelegramDiffPreviewStore
-  ) {}
-
+  ) {
+    this.fileOperations = new TelegramOpenCodeRuntimeFileOperations(this.config, this.diffPreviews, this.outbox);
+    this.interactions = new TelegramOpenCodeRuntimeInteractions(this.routes, this.outbox, {
+      setThinking: (adminId, sessionID, active) => this.setThinking(adminId, sessionID, active),
+      closeAssistantStreamSegment: (sessionID) => this.closeAssistantStreamSegment(sessionID)
+    });
+  }
   public onModuleInit(): void {
     /* Subscribe once and process OpenCode runtime events in background. */
     this.events.subscribe((event) => this.onEvent(event));
   }
-
   private onEvent(event: EventEnvelope): void {
     /* Accept only raw OpenCode SSE events published by OpenCodeEventsService. */
     if (event.type !== "opencode.event") {
@@ -95,14 +77,12 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (!payload) {
       return;
     }
-
     let parsed: OpenCodeBusEvent;
     try {
       parsed = JSON.parse(payload) as OpenCodeBusEvent;
     } catch {
       return;
     }
-
     const eventType = String(parsed.type ?? eventName ?? "");
     const properties =
       parsed.properties && typeof parsed.properties === "object"
@@ -266,7 +246,19 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    void this.emitFileOperations(part, route);
+    void this.fileOperations
+      .emitFromToolPart({
+        part,
+        adminId: route.adminId
+      })
+      .catch((error) => {
+        // eslint-disable-next-line no-console
+        console.error("[telegram-runtime-file-operations] failed to emit Telegram diff notification", {
+          adminId: route.adminId,
+          tool: String(part.tool ?? ""),
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
   }
 
   private handleMessagePartDelta(properties: Record<string, unknown>): void {
@@ -494,333 +486,13 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     return Array.from(text.matchAll(pattern)).map((entry) => String(entry[0] ?? ""));
   }
 
-  private extractFileOperations(part: any): ExtractedFileOperation[] {
-    /* Extract normalized file operations from tool payloads. */
-    const toolName = String(part.tool ?? "");
-    const state = part.state as any;
-    const operations: ExtractedFileOperation[] = [];
-
-    if (toolName === "write") {
-      const targetPath = String(state?.metadata?.filepath ?? "").trim();
-      if (!targetPath) {
-        return operations;
-      }
-
-      const content = String(state?.input?.content ?? "");
-      const additions = content.length > 0 ? content.split(/\r?\n/g).length : 0;
-      const exists = Boolean(state?.metadata?.exists);
-      operations.push({
-        kind: exists ? "edit" : "create",
-        absolutePath: targetPath,
-        additions,
-        deletions: 0,
-        diff: String(state?.metadata?.diff ?? ""),
-        before: exists ? String(state?.metadata?.before ?? "") : "",
-        after: String(state?.input?.content ?? "")
-      });
-      return operations;
-    }
-
-    if (toolName === "edit") {
-      const filediff = state?.metadata?.filediff;
-      const targetPath = String(filediff?.file ?? "").trim();
-      if (!targetPath) {
-        return operations;
-      }
-      const additions = Number(filediff?.additions ?? 0) || 0;
-      const deletions = Number(filediff?.deletions ?? 0) || 0;
-      operations.push({
-        kind: "edit",
-        absolutePath: targetPath,
-        additions,
-        deletions,
-        diff: String(filediff?.diff ?? state?.metadata?.diff ?? ""),
-        before: typeof filediff?.before === "string" ? filediff.before : undefined,
-        after: typeof filediff?.after === "string" ? filediff.after : undefined
-      });
-      return operations;
-    }
-
-    if (toolName === "apply_patch") {
-      const files = Array.isArray(state?.metadata?.files) ? state.metadata.files : [];
-      if (files.length === 0) {
-        return operations;
-      }
-      files.forEach((rawFile: any) => {
-        const targetPath = String(rawFile?.movePath ?? rawFile?.filePath ?? "").trim();
-        if (!targetPath) {
-          return;
-        }
-
-        const additions = Number(rawFile?.additions ?? 0) || 0;
-        const deletions = Number(rawFile?.deletions ?? 0) || 0;
-        const rawKind = String(rawFile?.type ?? "update");
-        const kind: ExtractedFileOperation["kind"] =
-          rawKind === "add" ? "create" : rawKind === "delete" ? "delete" : "edit";
-        operations.push({
-          kind,
-          absolutePath: targetPath,
-          additions,
-          deletions,
-          diff: String(rawFile?.diff ?? state?.metadata?.diff ?? ""),
-          before: typeof rawFile?.before === "string" ? rawFile.before : undefined,
-          after: typeof rawFile?.after === "string" ? rawFile.after : undefined
-        });
-      });
-
-      return operations;
-    }
-
-    return operations;
-  }
-
-  private async emitFileOperations(
-    part: any,
-    route: {
-      adminId: number;
-      directory: string;
-    }
-  ): Promise<void> {
-    /* Build deep-links and emit formatted HTML lines for each file operation. */
-    const operations = this.extractFileOperations(part);
-    for (const operation of operations) {
-      const preview = this.diffPreviews.create({
-        adminId: route.adminId,
-        operation: operation.kind,
-        absolutePath: operation.absolutePath,
-        additions: operation.additions,
-        deletions: operation.deletions,
-        diff: operation.diff,
-        before: operation.before,
-        after: operation.after
-      });
-
-      const deepLink = await this.buildDiffDeepLink(preview.token);
-      const text = formatFileOperationMessageHtml({
-        kind: operation.kind,
-        absolutePath: operation.absolutePath,
-        additions: operation.additions,
-        deletions: operation.deletions,
-        deepLink
-      });
-
-      this.outbox.enqueueStreamNotification({
-        adminId: route.adminId,
-        text,
-        parseMode: "HTML"
-      });
-    }
-  }
-
-  private async buildDiffDeepLink(token: string): Promise<string> {
-    /* Prefer Telegram native deep-link to open Mini App in chat context. */
-    const startParam = `${DIFF_START_PARAM_PREFIX}${token}`;
-    const username = await this.resolveBotUsername();
-    if (username) {
-      const shortName = this.config.telegramMiniappShortName?.trim();
-      if (shortName) {
-        return `${TELEGRAM_DEEP_LINK_BASE}/${encodeURIComponent(username)}/${encodeURIComponent(shortName)}?startapp=${encodeURIComponent(startParam)}`;
-      }
-
-      return `${TELEGRAM_DEEP_LINK_BASE}/${encodeURIComponent(username)}?startapp=${encodeURIComponent(startParam)}`;
-    }
-
-    return `${this.config.publicBaseUrl}/miniapp/#startapp=${encodeURIComponent(startParam)}`;
-  }
-
-  private async resolveBotUsername(): Promise<string | null> {
-    /* Resolve bot username once via Telegram API and cache it. */
-    if (this.botUsernamePromise) {
-      return this.botUsernamePromise;
-    }
-
-    this.botUsernamePromise = (async () => {
-      const url = `${TELEGRAM_API_BASE_URL}/bot${this.config.telegramBotToken}/getMe`;
-      const response = await fetch(url);
-      if (!response.ok) {
-        return null;
-      }
-
-      const body = (await response.json()) as { ok?: boolean; result?: { username?: string } };
-      if (!body.ok || typeof body.result?.username !== "string" || body.result.username.trim().length === 0) {
-        return null;
-      }
-
-      return body.result.username.trim();
-    })().catch(() => null);
-
-    return this.botUsernamePromise;
-  }
-
   private handleQuestionAsked(properties: Record<string, unknown>): void {
-    /* Convert OpenCode question tool prompt into Telegram inline buttons. */
-    const sessionID = String(properties.sessionID ?? "");
-    const requestID = String(properties.id ?? "");
-    const route = this.routes.resolve(sessionID);
-    if (!route || !requestID) {
-      return;
-    }
-
-    /* Question pause means no active thinking spinner until user choice. */
-    this.setThinking(route.adminId, sessionID, false);
-    this.closeAssistantStreamSegment(sessionID);
-
-    /* Preserve the whole questionnaire because Telegram may need to walk through several consecutive steps. */
-    const questions = Array.isArray(properties.questions)
-      ? properties.questions
-          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-          .map((item) => ({
-            header: String(item.header ?? "Question"),
-            question: String(item.question ?? ""),
-            options: Array.isArray(item.options)
-              ? item.options
-                  .filter((option): option is Record<string, unknown> => Boolean(option && typeof option === "object"))
-                  .map((option) => String(option.label ?? "").trim())
-                  .filter((label) => label.length > 0)
-              : [],
-            multiple: Boolean(item.multiple)
-          }))
-          .filter((item) => item.question.trim().length > 0)
-      : [];
-    const first = questions[0];
-    if (!first || typeof first.question !== "string") {
-      return;
-    }
-
-    const options = Array.isArray(first.options) ? first.options : [];
-    if (options.length === 0) {
-      this.outbox.enqueueStreamNotification({
-        adminId: route.adminId,
-        text: formatTelegramQuestionPrompt({
-          header: first.header,
-          question: first.question,
-          index: 1,
-          total: questions.length
-        })
-      });
-      return;
-    }
-
-    const token = this.routes.bindQuestion({
-      requestID,
-      sessionID,
-      adminId: route.adminId,
-      directory: route.directory,
-      questions
-    });
-
-    const keyboard = options.map((label, index) => {
-      const callbackData = `${QUESTION_CALLBACK_PREFIX}|${token}|0|${index}`;
-      return [{ text: label, callback_data: callbackData }];
-    });
-
-    const text = formatTelegramQuestionPrompt({
-      header: first.header,
-      question: first.question,
-      index: 1,
-      total: questions.length
-    });
-    this.outbox.enqueueProgressReplace({
-      adminId: route.adminId,
-      progressKey: `question:${route.adminId}:${requestID}`,
-      text,
-      replyMarkup: { inlineKeyboard: keyboard }
-    });
+    /* Delegate interactive question rendering to a focused formatter. */
+    this.interactions.handleQuestionAsked(properties);
   }
 
   private handlePermissionUpdated(properties: Record<string, unknown>): void {
-    /* Convert pending permission prompt into Telegram inline approval buttons. */
-    const normalized = this.normalizePermissionPayload(properties);
-    if (!normalized || normalized.status !== "pending") {
-      return;
-    }
-
-    const route = this.routes.resolve(normalized.sessionID);
-    if (!route) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `[telegram-permission] route missing for session=${normalized.sessionID}; permission message not delivered`
-      );
-      return;
-    }
-
-    /* Permission pause means no active typing indicator until user choice. */
-    this.setThinking(route.adminId, normalized.sessionID, false);
-    this.closeAssistantStreamSegment(normalized.sessionID);
-
-    const routeID = `${normalized.sessionID}:${normalized.permissionID}`;
-    const token = this.routes.bindPermission({
-      routeID,
-      sessionID: normalized.sessionID,
-      adminId: route.adminId,
-      directory: route.directory,
-      permissionID: normalized.permissionID
-    });
-
-    const keyboard = [
-      [
-        { text: "Разрешить один раз", callback_data: `${PERMISSION_CALLBACK_PREFIX}|${token}|once` },
-        { text: "Всегда разрешать", callback_data: `${PERMISSION_CALLBACK_PREFIX}|${token}|always` }
-      ],
-      [{ text: "Отклонить", callback_data: `${PERMISSION_CALLBACK_PREFIX}|${token}|reject` }]
-    ];
-
-    const title = normalized.title ?? "OpenCode запрашивает подтверждение на выполнение действия.";
-    const detailParts = [normalized.tool ? `tool=${normalized.tool}` : null, normalized.target ? `target=${normalized.target}` : null].filter(
-      (item): item is string => Boolean(item)
-    );
-    const details = detailParts.length > 0 ? `\n${detailParts.join(" | ")}` : "";
-    const text = `OpenCode запрашивает права:\n${title}${details}`;
-    this.outbox.enqueueProgressReplace({
-      adminId: route.adminId,
-      progressKey: `permission:${route.adminId}:${normalized.permissionID}`,
-      text,
-      replyMarkup: { inlineKeyboard: keyboard }
-    });
-
-  }
-
-  private normalizePermissionPayload(properties: Record<string, unknown>): {
-    permissionID: string;
-    sessionID: string;
-    status: "pending" | "resolved";
-    title: string | null;
-    tool: string | null;
-    target: string | null;
-  } | null {
-    /* Handle both flat and nested permission payload shapes from OpenCode SSE. */
-    const nestedPermission = properties.permission;
-    const permission =
-      nestedPermission && typeof nestedPermission === "object"
-        ? (nestedPermission as Record<string, unknown>)
-        : properties;
-    const permissionID = String(permission.id ?? properties.permissionID ?? "").trim();
-    const sessionID = String(permission.sessionID ?? properties.sessionID ?? "").trim();
-    if (!permissionID || !sessionID) {
-      return null;
-    }
-
-    const statusRaw = String(permission.status ?? properties.status ?? "pending").trim().toLowerCase();
-    const status: "pending" | "resolved" =
-      statusRaw === "pending" || statusRaw === "ask" || statusRaw === "requested" ? "pending" : "resolved";
-
-    const metadata = (permission.metadata as Record<string, unknown> | undefined) ?? {};
-    const titleRaw = permission.title ?? permission.message ?? metadata.title;
-    const title = typeof titleRaw === "string" && titleRaw.trim().length > 0 ? titleRaw.trim() : null;
-
-    const toolRaw = metadata.tool ?? permission.tool;
-    const tool = typeof toolRaw === "string" && toolRaw.trim().length > 0 ? toolRaw.trim() : null;
-
-    const targetRaw = metadata.path ?? metadata.filepath ?? metadata.target ?? permission.path;
-    const target = typeof targetRaw === "string" && targetRaw.trim().length > 0 ? targetRaw.trim() : null;
-
-    return {
-      permissionID,
-      sessionID,
-      status,
-      title,
-      tool,
-      target
-    };
+    /* Delegate permission prompt rendering to a focused formatter. */
+    this.interactions.handlePermissionUpdated(properties);
   }
 }

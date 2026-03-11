@@ -7,7 +7,7 @@
  * - Enqueue chunks into the persistent outbox.
  *
  * Exports:
- * - TelegramOutboxService (L23) - Enqueue helpers for event producers.
+ * - TelegramOutboxService - Enqueue helpers for event producers.
  */
 
 import { Injectable } from "@nestjs/common";
@@ -293,26 +293,6 @@ export class TelegramOutboxService {
     });
   }
 
-  public enqueueAssistantStreamDelta(input: { adminId: number; sessionId: string; text: string; progressKey?: string }): void {
-    /* Route one assistant delta into the currently active live Telegram message for this response. */
-    const progressKey = this.resolveAssistantProgressKey({
-      adminId: input.adminId,
-      sessionId: input.sessionId,
-      progressKey: (input as { progressKey?: string }).progressKey,
-      createIfMissing: true
-    });
-    if (!progressKey) {
-      return;
-    }
-
-    this.enqueueProgressReplace({
-      adminId: input.adminId,
-      progressKey,
-      text: input.text,
-      disableNotification: true
-    });
-  }
-
   public enqueueStreamNotification(input: { adminId: number; text: string; parseMode?: "HTML" }): void {
     /* Only deliver when stream is enabled for the admin. */
     const binding = this.streamStore.get(input.adminId);
@@ -382,27 +362,6 @@ export class TelegramOutboxService {
       mode: "replace",
       progressKey: input.progressKey,
       replyMarkup: input.replyMarkup
-    });
-  }
-
-  public enqueueProgressDraft(input: {
-    adminId: number;
-    progressKey: string;
-    text: string;
-  }): void {
-    /* Stream partial assistant text through Telegram drafts with one stable key per response. */
-    const binding = this.streamStore.get(input.adminId);
-    if (!binding || !binding.streamEnabled) {
-      return;
-    }
-
-    this.outbox.enqueue({
-      adminId: input.adminId,
-      chatId: binding.chatId,
-      text: input.text,
-      disableNotification: true,
-      mode: "draft",
-      progressKey: input.progressKey
     });
   }
 

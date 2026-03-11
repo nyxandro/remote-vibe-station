@@ -2,13 +2,13 @@
  * @fileoverview Telegram outbox types and constants.
  *
  * Exports:
- * - TELEGRAM_MAX_TEXT_CHARS (L18) - Hard Telegram limit for text messages.
- * - TELEGRAM_SAFE_CHUNK_CHARS (L21) - Conservative chunk size to avoid edge cases.
- * - OUTBOX_MAX_ATTEMPTS (L24) - Bounded retry limit for delivery.
- * - OUTBOX_LEASE_MS (L27) - Lease time for pulled messages.
- * - TelegramOutboxItem (L36) - Persistent outbox record.
- * - OutboxPullItem (L63) - DTO returned to bot.
- * - OutboxReportResult (L71) - Delivery report from bot.
+ * - TELEGRAM_MAX_TEXT_CHARS - Hard Telegram limit for text messages.
+ * - TELEGRAM_SAFE_CHUNK_CHARS - Conservative chunk size to avoid edge cases.
+ * - OUTBOX_MAX_ATTEMPTS - Bounded retry limit for delivery.
+ * - OUTBOX_LEASE_MS - Lease time for pulled messages.
+ * - TelegramOutboxItem - Persistent outbox record.
+ * - OutboxPullItem - DTO returned to bot.
+ * - OutboxReportResult - Delivery report from bot.
  */
 
 export const TELEGRAM_MAX_TEXT_CHARS = 4096;
@@ -35,7 +35,7 @@ export type TelegramOutboxItem = {
   text: string;
   parseMode?: "HTML";
   disableNotification?: boolean;
-  mode?: "send" | "replace" | "draft";
+  mode?: "send" | "replace";
   progressKey?: string;
   control?: {
     kind: "thinking";
@@ -73,7 +73,7 @@ export type OutboxPullItem = {
   text: string;
   parseMode?: "HTML";
   disableNotification?: boolean;
-  mode?: "send" | "replace" | "draft";
+  mode?: "send" | "replace";
   progressKey?: string;
   control?: {
     kind: "thinking";

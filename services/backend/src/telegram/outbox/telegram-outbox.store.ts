@@ -7,11 +7,10 @@
  * - Backend has a mounted `./data` volume in docker-compose; store lives there.
  *
  * Exports:
- * - TelegramOutboxStore (L33) - Append/pull/report operations with leasing.
+ * - TelegramOutboxStore - Append/pull/report operations with leasing.
  */
 
 import * as crypto from "node:crypto";
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
@@ -23,6 +22,7 @@ import {
   OutboxReportResult,
   TelegramOutboxItem
 } from "./telegram-outbox.types";
+import { readJsonFileSync, writeJsonFileSyncAtomic } from "../../storage/json-file";
 
 const DATA_DIR = "data";
 const FILE_NAME = "telegram.outbox.json";
@@ -85,7 +85,7 @@ export class TelegramOutboxStore {
     parseMode?: "HTML";
     disableNotification?: boolean;
     nowMs?: number;
-    mode?: "send" | "replace" | "draft";
+      mode?: "send" | "replace";
     progressKey?: string;
     control?: {
       kind: "thinking";
@@ -113,7 +113,7 @@ export class TelegramOutboxStore {
     }
 
     /* Coalesce pending live-progress snapshots so Telegram stream follows the newest text only. */
-    if ((input.mode === "draft" || input.mode === "replace") && input.progressKey) {
+    if (input.mode === "replace" && input.progressKey) {
       const existing = file.items.find(
         (item) =>
           item.status === "pending" &&
@@ -370,22 +370,25 @@ export class TelegramOutboxStore {
   }
 
   private readAll(): OutboxFile {
-    /* Ensure data directory exists. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    if (!fs.existsSync(this.filePath)) {
-      return { items: [] };
-    }
-
-    return JSON.parse(fs.readFileSync(this.filePath, "utf-8")) as OutboxFile;
+    /* Recover from malformed JSON while preserving the broken file for manual inspection. */
+    return readJsonFileSync({
+      filePath: this.filePath,
+      label: "telegram-outbox",
+      createEmptyValue: () => ({ items: [] }),
+      normalize: (parsed) => {
+        const file = parsed as OutboxFile | null | undefined;
+        return {
+          items: Array.isArray(file?.items) ? file.items : []
+        };
+      },
+      parseErrorStrategy: "recover",
+      normalizeErrorStrategy: "recover"
+    });
   }
 
   private writeAll(file: OutboxFile): void {
-    /* Persist stable JSON for manual debugging. */
-    fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), "utf-8");
+    /* Persist stable JSON for manual debugging and crash-safe recovery. */
+    writeJsonFileSyncAtomic(this.filePath, file);
   }
 
   private findRecentPlainDuplicate(input: {

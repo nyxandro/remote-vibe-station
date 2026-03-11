@@ -19,6 +19,29 @@ Backend writes JSON files under `data/` (relative to backend working directory):
 - `runtime-overrides/*.docker.override.json` - generated docker deploy overrides per project slug.
 - `runtime-overrides/*.static.compose.json` - generated static deploy compose files per project slug.
 
+## JSON Storage Policy
+
+All backend JSON stores now use the same persistence rules:
+
+- Writes are atomic (`*.tmp` -> rename) to reduce partial-write corruption.
+- Corrupted recoverable files are moved aside as `*.corrupt-<timestamp>` before the app continues.
+- Recovery is used only for operational/cache-like stores where reset is acceptable:
+  - `telegram.outbox.json`
+  - `telegram.prompt-queue.json`
+  - `telegram.stream.json`
+  - `telegram.preferences.json`
+  - `telegram.diff-previews.json`
+  - `active-project.json`
+  - `projects.state.json`
+  - `github.token.json`
+- Strict fail-fast parsing is used for authoritative/business settings stores:
+  - `projects.json`
+  - `project-runtime.settings.json`
+  - `proxy.settings.json`
+  - `kanban.tasks.json`
+
+This keeps operator-facing settings durable and explicit, while allowing transient UX/runtime state to self-heal after malformed writes.
+
 ## Retention / Cleanup
 
 The backend runs a best-effort periodic maintenance job (`DataMaintenanceService`) that:

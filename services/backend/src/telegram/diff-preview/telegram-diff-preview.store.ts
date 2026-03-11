@@ -2,15 +2,15 @@
  * @fileoverview Persistent store for Mini App diff-preview tokens.
  *
  * Exports:
- * - DiffPreviewRecord (L23) - Stored diff preview payload.
- * - TelegramDiffPreviewStore (L49) - Create/get tokenized diff previews.
+ * - DiffPreviewRecord - Stored diff preview payload.
+ * - TelegramDiffPreviewStore - Create/get tokenized diff previews.
  */
 
 import * as crypto from "node:crypto";
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
+import { readJsonFileSync, writeJsonFileSyncAtomic } from "../../storage/json-file";
 
 const DATA_DIR = "data";
 const FILE_NAME = "telegram.diff-previews.json";
@@ -135,27 +135,24 @@ export class TelegramDiffPreviewStore {
   }
 
   private readAll(): StoreFile {
-    /* Initialize directory/file lazily for first start. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    if (!fs.existsSync(this.filePath)) {
-      return { items: [] };
-    }
-
-    const raw = fs.readFileSync(this.filePath, "utf-8");
-    try {
-      const parsed = JSON.parse(raw) as StoreFile;
-      return parsed && Array.isArray(parsed.items) ? parsed : { items: [] };
-    } catch {
-      return { items: [] };
-    }
+    /* Diff previews are disposable UI cache, so malformed JSON can reset safely. */
+    return readJsonFileSync({
+      filePath: this.filePath,
+      label: "telegram-diff-previews",
+      createEmptyValue: () => ({ items: [] }),
+      normalize: (parsed) => {
+        const file = parsed as StoreFile | null | undefined;
+        return {
+          items: Array.isArray(file?.items) ? file.items : []
+        };
+      },
+      parseErrorStrategy: "recover",
+      normalizeErrorStrategy: "recover"
+    });
   }
 
   private writeAll(file: StoreFile): void {
     /* Persist pretty JSON for easier manual debugging. */
-    fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), "utf-8");
+    writeJsonFileSyncAtomic(this.filePath, file);
   }
 }

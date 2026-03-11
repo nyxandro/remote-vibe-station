@@ -6,13 +6,13 @@
  * - KanbanStore - Serialized read/write access for kanban task records.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { z } from "zod";
 
 import { KANBAN_PRIORITIES, KANBAN_STATUSES, KanbanTaskRecord } from "./kanban.types";
+import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-file";
 
 const DATA_DIR = "data";
 const STORE_FILE = "kanban.tasks.json";
@@ -83,30 +83,19 @@ export class KanbanStore {
   }
 
   private async readRaw(): Promise<KanbanStoreFile> {
-    /* Create parent directory lazily because the board may be unused on fresh installations. */
-    await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
-
-    let raw: string;
-    try {
-      raw = await fs.promises.readFile(this.filePath, "utf-8");
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") {
-        return { tasks: [] };
-      }
-      throw error;
-    }
-
-    try {
-      return storeSchema.parse(JSON.parse(raw));
-    } catch (error) {
-      throw new Error(`Failed to parse kanban store JSON at '${this.filePath}': ${String(error)}`);
-    }
+    /* Kanban state is durable product data, so malformed JSON must fail loudly. */
+    return readJsonFileAsync({
+      filePath: this.filePath,
+      label: "kanban store",
+      createEmptyValue: () => ({ tasks: [] }),
+      normalize: (parsed) => storeSchema.parse(parsed),
+      parseErrorStrategy: "throw",
+      normalizeErrorStrategy: "throw"
+    });
   }
 
   private async writeRaw(record: KanbanStoreFile): Promise<void> {
     /* Persist readable JSON so operators can inspect board state directly on the host when needed. */
-    await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.promises.writeFile(this.filePath, JSON.stringify(record, null, 2), "utf-8");
+    await writeJsonFileAsyncAtomic(this.filePath, record);
   }
 }

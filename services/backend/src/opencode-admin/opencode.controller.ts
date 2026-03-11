@@ -2,7 +2,7 @@
  * @fileoverview OpenCode integration endpoints.
  *
  * Exports:
- * - OpenCodeController (L17) - Routes for OpenCode-related actions.
+ * - OpenCodeController - Routes for OpenCode-related actions.
  */
 
 import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
@@ -24,13 +24,21 @@ export class OpenCodeController {
   @Post("sync-projects")
   public async syncProjects() {
     /* Sync PROJECTS_ROOT folders into OpenCode storage (best-effort hack). */
-    return this.sync.sync();
+    try {
+      return await this.sync.sync();
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+    }
   }
 
   @Post("warm-recents")
   public async warmRecents() {
     /* Populate OpenCode "recent projects" by opening directories once. */
-    return this.sync.warmRecents();
+    try {
+      return await this.sync.warmRecents();
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+    }
   }
 
   @Post("restart")

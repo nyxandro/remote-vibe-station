@@ -16,7 +16,7 @@ import { PromptService } from "../../prompt/prompt.service";
 import { ProjectGitService } from "../../projects/project-git.service";
 import { ProjectsService } from "../../projects/projects.service";
 import { AdminHeaderGuard } from "../../security/admin-header.guard";
-import { OpenCodeRuntimeService } from "../../opencode/opencode-runtime.service";
+import { OpenCodeRuntimeService } from "../../opencode-admin/opencode-runtime.service";
 import { TelegramDiffPreviewStore } from "../diff-preview/telegram-diff-preview.store";
 import { TelegramController } from "../telegram.controller";
 import { TelegramCommandCatalogService } from "../telegram-command-catalog.service";

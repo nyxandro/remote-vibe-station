@@ -2,8 +2,8 @@
  * @fileoverview OpenCode settings file browser/editor service for Mini App.
  *
  * Exports:
- * - OpenCodeSettingsKind (L16) - Editable settings groups.
- * - OpenCodeSettingsService (L52) - Lists, reads, saves, and creates OpenCode-related files.
+ * - OpenCodeSettingsKind - Editable settings groups.
+ * - OpenCodeSettingsService - Lists, reads, saves, and creates OpenCode-related files.
  */
 
 import * as fs from "node:fs";

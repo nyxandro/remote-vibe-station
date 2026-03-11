@@ -2,15 +2,15 @@
  * @fileoverview JSON store for Telegram model/agent/thinking preferences.
  *
  * Exports:
- * - TelegramPreferencesStore (L23) - Persist and load per-admin preferences.
+ * - TelegramPreferencesStore - Persist and load per-admin preferences.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
 
 import { AdminPreferences } from "./telegram-preferences.types";
+import { readJsonFileSync, writeJsonFileSyncAtomic } from "../../storage/json-file";
 
 const DATA_DIR = "data";
 const STORE_FILE = "telegram.preferences.json";
@@ -67,35 +67,27 @@ export class TelegramPreferencesStore {
   }
 
   private readAll(): StoreShape {
-    /* Ensure data directory exists before reading. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    if (!fs.existsSync(this.filePath)) {
-      return { byAdminId: {} };
-    }
-
-    const raw = fs.readFileSync(this.filePath, "utf-8");
-    try {
-      const parsed = JSON.parse(raw) as StoreShape;
-      if (!parsed || typeof parsed !== "object" || !parsed.byAdminId) {
-        return { byAdminId: {} };
-      }
-      return parsed;
-    } catch {
-      return { byAdminId: {} };
-    }
+    /* Preferences are per-admin UX state, so malformed JSON should recover to empty state. */
+    return readJsonFileSync({
+      filePath: this.filePath,
+      label: "telegram-preferences",
+      createEmptyValue: () => ({ byAdminId: {} }),
+      normalize: (parsed) => {
+        const file = parsed as StoreShape | null | undefined;
+        return {
+          byAdminId:
+            file?.byAdminId && typeof file.byAdminId === "object" && !Array.isArray(file.byAdminId)
+              ? file.byAdminId
+              : {}
+        };
+      },
+      parseErrorStrategy: "recover",
+      normalizeErrorStrategy: "recover"
+    });
   }
 
   private writeAll(file: StoreShape): void {
     /* Persist pretty JSON for manual debugging. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), "utf-8");
+    writeJsonFileSyncAtomic(this.filePath, file);
   }
 }

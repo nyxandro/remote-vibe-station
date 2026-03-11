@@ -33,4 +33,28 @@ describe("TelegramStreamStore", () => {
       process.chdir(prev);
     }
   });
+
+  test("recovers from corrupted JSON by moving it aside", () => {
+    /* Telegram chat binding state should survive malformed file recovery on restart. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-tg-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      const filePath = path.join(tmp, "data", "telegram.stream.json");
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, "{broken-json", "utf-8");
+
+      const store = new TelegramStreamStore();
+
+      expect(store.get(123)).toBeNull();
+      const backups = fs.readdirSync(path.join(tmp, "data")).filter((name) => name.startsWith("telegram.stream.json.corrupt-"));
+      expect(backups).toHaveLength(1);
+      expect(fs.existsSync(filePath)).toBe(false);
+    } finally {
+      errorSpy.mockRestore();
+      process.chdir(prev);
+    }
+  });
 });

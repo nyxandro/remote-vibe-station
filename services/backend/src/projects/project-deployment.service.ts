@@ -16,6 +16,7 @@ import * as path from "node:path";
 import { Inject, Injectable } from "@nestjs/common";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import { writeJsonFileSyncAtomic } from "../storage/json-file";
 import { discoverProjects, DEFAULT_COMPOSE_FILENAMES } from "./project-discovery";
 import { DockerComposeService } from "./docker-compose.service";
 import {
@@ -406,7 +407,7 @@ export class ProjectDeploymentService {
     }
 
     const targetPath = this.resolveRuntimeFilePath(fileName);
-    fs.writeFileSync(targetPath, JSON.stringify(payload, null, 2), "utf-8");
+    writeJsonFileSyncAtomic(targetPath, payload);
     return targetPath;
   }
 

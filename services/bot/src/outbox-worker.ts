@@ -5,7 +5,7 @@
  * Backend is the source of truth and persists message state.
  *
  * Exports:
- * - OutboxWorker (L23) - Starts polling loop.
+ * - OutboxWorker - Starts polling loop.
  */
 
 import * as crypto from "node:crypto";
@@ -25,7 +25,7 @@ type PullResponse = {
     text: string;
     parseMode?: "HTML";
     disableNotification?: boolean;
-    mode?: "send" | "replace" | "draft";
+    mode?: "send" | "replace";
     progressKey?: string;
     control?: {
       kind: "thinking";
@@ -40,10 +40,6 @@ type PullResponse = {
 const WORKER_HEADER = "x-bot-worker-id";
 const POLL_INTERVAL_MS = 300;
 const PULL_LIMIT = 10;
-const TELEGRAM_DRAFT_UNSUPPORTED = /sendMessageDraft|method .*not found|unsupported/i;
-const TELEGRAM_DRAFT_MAX_CHARS = 3900;
-const TELEGRAM_DRAFT_ID_MAX = 2147483646;
-
 const isMessageCantBeEditedError = (error: unknown): boolean => {
   /* Telegram returns this text when edit target is not editable anymore. */
   const message = error instanceof Error ? error.message : "";
@@ -64,7 +60,6 @@ export class OutboxWorker {
       updatedAtMs: number;
     }
   >();
-  private draftDeliverySupported = true;
   private readonly modeProjectByChatId = new Map<number, string>();
   private readonly deliveryState = new OutboxDeliveryState();
 
@@ -277,7 +272,7 @@ export class OutboxWorker {
     text: string;
     parseMode?: "HTML";
     disableNotification?: boolean;
-    mode?: "send" | "replace" | "draft";
+    mode?: "send" | "replace";
     progressKey?: string;
     control?: {
       kind: "thinking";
@@ -311,17 +306,6 @@ export class OutboxWorker {
       }
 
       let sentMessageId: number;
-
-      if (item.mode === "draft" && item.progressKey) {
-        result = await this.deliverDraft({
-          id: item.id,
-          chatId: item.chatId,
-          text: item.text,
-          progressKey: item.progressKey
-        });
-        this.deliveryState.rememberSuccessful(result);
-        return result;
-      }
 
       if (item.mode === "replace" && item.progressKey) {
         /* Replace mode preserves one live progress message in chat history. */
@@ -432,65 +416,4 @@ export class OutboxWorker {
     return sent.message_id;
   }
 
-  private async deliverDraft(item: {
-    id: string;
-    chatId: number;
-    text: string;
-    progressKey: string;
-  }): Promise<OutboxDeliveryResult> {
-    /* Draft mode uses Telegram native streaming previews and falls back when unsupported. */
-    if (!this.draftDeliverySupported || typeof this.bot.telegram.callApi !== "function") {
-      this.draftDeliverySupported = false;
-      const telegramMessageId = await this.deliverReplace({
-        chatId: item.chatId,
-        text: this.normalizeDraftText(item.text),
-        disableNotification: true,
-        progressKey: item.progressKey
-      });
-      return { id: item.id, ok: true, telegramMessageId };
-    }
-
-    try {
-      await (this.bot.telegram.callApi as any)("sendMessageDraft", {
-        chat_id: item.chatId,
-        draft_id: this.resolveDraftId(item.progressKey),
-        text: this.normalizeDraftText(item.text)
-      });
-      return { id: item.id, ok: true };
-    } catch (error) {
-      if (!this.isDraftUnsupportedError(error)) {
-        throw error;
-      }
-
-      this.draftDeliverySupported = false;
-      const telegramMessageId = await this.deliverReplace({
-        chatId: item.chatId,
-        text: this.normalizeDraftText(item.text),
-        disableNotification: true,
-        progressKey: item.progressKey
-      });
-      return { id: item.id, ok: true, telegramMessageId };
-    }
-  }
-
-  private resolveDraftId(progressKey: string): number {
-    /* Keep one stable positive draft id per logical stream key. */
-    const hash = crypto.createHash("sha256").update(progressKey).digest();
-    return (hash.readUInt32BE(0) % TELEGRAM_DRAFT_ID_MAX) + 1;
-  }
-
-  private normalizeDraftText(text: string): string {
-    /* Keep live draft preview inside Telegram limits while preserving the newest tail. */
-    if (text.length <= TELEGRAM_DRAFT_MAX_CHARS) {
-      return text;
-    }
-
-    return `...\n${text.slice(text.length - (TELEGRAM_DRAFT_MAX_CHARS - 4))}`;
-  }
-
-  private isDraftUnsupportedError(error: unknown): boolean {
-    /* Disable draft path permanently when Telegram runtime does not support the new method. */
-    const message = error instanceof Error ? error.message : "";
-    return typeof message === "string" && TELEGRAM_DRAFT_UNSUPPORTED.test(message);
-  }
 }

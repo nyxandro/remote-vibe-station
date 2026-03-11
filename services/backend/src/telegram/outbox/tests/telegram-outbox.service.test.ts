@@ -46,8 +46,8 @@ describe("TelegramOutboxService", () => {
     }
   });
 
-  test("reuses explicit stream progress key for final assistant reply", () => {
-    /* Final answer must replace the latest streamed part message instead of reopening an older session-wide one. */
+  test("uses replace progress key for streamed final assistant reply", () => {
+    /* Stream-enabled final answer should land in one replaceable Telegram bubble. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
     const prev = process.cwd();
     process.chdir(tmp);
@@ -58,13 +58,6 @@ describe("TelegramOutboxService", () => {
       streamStore.setStreamEnabled(1, true);
 
       const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
-
-      service.enqueueAssistantStreamDelta({
-        adminId: 1,
-        sessionId: "session-1",
-        progressKey: "assistant:1:session-1:assistant-part-2",
-        text: "Промежуточный текст"
-      });
 
       service.enqueueAssistantReply({
         adminId: 1,
@@ -81,7 +74,7 @@ describe("TelegramOutboxService", () => {
 
       const assistantItems = readItems().filter((item) => item.control == null);
       expect(assistantItems).toHaveLength(1);
-      expect(assistantItems[0].progressKey).toBe("assistant:1:session-1:assistant-part-2");
+      expect(assistantItems[0].progressKey).toBe("assistant:1:session-1:1");
       expect(assistantItems[0].mode).toBe("replace");
       expect(assistantItems[0].text).toContain("Финальный ответ");
       expect(assistantItems[0].text).toContain("<blockquote>");
@@ -136,8 +129,8 @@ describe("TelegramOutboxService", () => {
     }
   });
 
-  test("starts a fresh streamed message after a blocking question pause", () => {
-    /* Question/permission pauses must close the old assistant stream slot so the resumed answer does not rewrite history. */
+  test("starts a fresh final reply bubble after a blocking question pause", () => {
+    /* Question/permission pauses must close the old replace slot so the resumed answer does not rewrite history. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
     const prev = process.cwd();
     process.chdir(tmp);
@@ -149,16 +142,32 @@ describe("TelegramOutboxService", () => {
 
       const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
 
-      service.enqueueAssistantStreamDelta({
+      service.enqueueAssistantReply({
         adminId: 1,
-        sessionId: "session-1",
-        text: "Первый фрагмент"
+        delivery: {
+          sessionId: "session-1",
+          text: "Первый ответ",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: null,
+          agent: "build",
+          tokens: { input: 1, output: 2, reasoning: 0 }
+        }
       });
+
       service.closeAssistantProgress({ sessionId: "session-1" });
-      service.enqueueAssistantStreamDelta({
+
+      service.enqueueAssistantReply({
         adminId: 1,
-        sessionId: "session-1",
-        text: "Новый ответ после вопроса"
+        delivery: {
+          sessionId: "session-1",
+          text: "Новый ответ после вопроса",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: null,
+          agent: "build",
+          tokens: { input: 3, output: 4, reasoning: 0 }
+        }
       });
 
       const assistantItems = readItems().filter((item) => item.control == null);

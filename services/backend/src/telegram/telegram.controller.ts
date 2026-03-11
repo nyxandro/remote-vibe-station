@@ -11,7 +11,7 @@ import { Request } from "express";
 import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
-import { OpenCodeRuntimeService } from "../opencode/opencode-runtime.service";
+import { OpenCodeRuntimeService } from "../opencode-admin/opencode-runtime.service";
 import { PromptService } from "../prompt/prompt.service";
 import { ProjectGitService } from "../projects/project-git.service";
 import { ProjectsService } from "../projects/projects.service";

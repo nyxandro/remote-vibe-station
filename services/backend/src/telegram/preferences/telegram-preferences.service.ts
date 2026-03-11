@@ -14,7 +14,7 @@ import {
   OpenCodeProviderSummary
 } from "../../open-code/opencode.types";
 import { OpenCodeClient } from "../../open-code/opencode-client";
-import { OpenCodeSettingsService } from "../../opencode/opencode-settings.service";
+import { OpenCodeSettingsService } from "../../opencode-admin/opencode-settings.service";
 import {
   AdminPreferences,
   GROQ_TRANSCRIPTION_MODELS,

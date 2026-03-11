@@ -2,13 +2,13 @@
  * @fileoverview Persistent mapping of Telegram chats to stream settings.
  *
  * Exports:
- * - TelegramStreamStore (L24) - Stores last chatId per admin and stream enabled flag.
+ * - TelegramStreamStore - Stores last chatId per admin and stream enabled flag.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
+import { readJsonFileSync, writeJsonFileSyncAtomic } from "../storage/json-file";
 
 const DATA_DIR = "data";
 const FILE_NAME = "telegram.stream.json";
@@ -99,21 +99,27 @@ export class TelegramStreamStore {
   }
 
   private readAll(): StreamFile {
-    /* Ensure data directory exists. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    if (!fs.existsSync(this.filePath)) {
-      return { byAdminId: {} };
-    }
-
-    return JSON.parse(fs.readFileSync(this.filePath, "utf-8")) as StreamFile;
+    /* Chat binding state is operational cache and can recover from malformed JSON safely. */
+    return readJsonFileSync({
+      filePath: this.filePath,
+      label: "telegram-stream",
+      createEmptyValue: () => ({ byAdminId: {} }),
+      normalize: (parsed) => {
+        const file = parsed as StreamFile | null | undefined;
+        return {
+          byAdminId:
+            file?.byAdminId && typeof file.byAdminId === "object" && !Array.isArray(file.byAdminId)
+              ? file.byAdminId
+              : {}
+        };
+      },
+      parseErrorStrategy: "recover",
+      normalizeErrorStrategy: "recover"
+    });
   }
 
   private writeAll(file: StreamFile): void {
     /* Persist stable JSON for manual debugging. */
-    fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), "utf-8");
+    writeJsonFileSyncAtomic(this.filePath, file);
   }
 }

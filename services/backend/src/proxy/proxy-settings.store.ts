@@ -5,13 +5,13 @@
  * - ProxySettingsStore - Reads/writes proxy profile in backend data volume.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
 import { z } from "zod";
 
 import { ProxySettingsInput, ProxySettingsRecord } from "./proxy-settings.types";
+import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-file";
 
 const DATA_DIR = "data";
 const SETTINGS_FILE = "proxy.settings.json";
@@ -72,32 +72,22 @@ export class ProxySettingsStore {
   }
 
   private async readRaw(): Promise<ProxySettingsRecord | null> {
-    /* Lazily create directory and treat missing settings file as not configured yet. */
-    const directory = path.dirname(this.filePath);
-    await fs.promises.mkdir(directory, { recursive: true });
+    /* Proxy settings are explicit operator input, so malformed JSON must fail fast. */
+    const emptySentinel = Symbol("proxy-settings-empty");
+    const loaded = await readJsonFileAsync<ProxySettingsRecord | typeof emptySentinel>({
+      filePath: this.filePath,
+      label: "proxy settings",
+      createEmptyValue: () => emptySentinel,
+      normalize: (parsed) => storedSchema.parse(parsed),
+      parseErrorStrategy: "throw",
+      normalizeErrorStrategy: "throw"
+    });
 
-    let raw: string;
-    try {
-      raw = await fs.promises.readFile(this.filePath, "utf-8");
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") {
-        return null;
-      }
-      throw error;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      return storedSchema.parse(parsed);
-    } catch (error) {
-      throw new Error(`Failed to parse proxy settings JSON at '${this.filePath}': ${String(error)}`);
-    }
+    return loaded === emptySentinel ? null : loaded;
   }
 
   private async writeRaw(record: ProxySettingsRecord): Promise<void> {
     /* Persist human-readable JSON to simplify on-host troubleshooting. */
-    await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.promises.writeFile(this.filePath, JSON.stringify(record, null, 2), "utf-8");
+    await writeJsonFileAsyncAtomic(this.filePath, record);
   }
 }

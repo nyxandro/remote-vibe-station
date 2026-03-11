@@ -2,8 +2,8 @@
  * @fileoverview OpenCode project storage file format helpers.
  *
  * Exports:
- * - OpenCodeProjectRecord (L16) - Minimal project schema used by OpenCode.
- * - toOpenCodeProjectRecord (L31) - Creates a record from a folder path.
+ * - OpenCodeProjectRecord - Minimal project schema used by OpenCode.
+ * - toOpenCodeProjectRecord - Creates a record from a folder path.
  */
 
 export type OpenCodeProjectRecord = {

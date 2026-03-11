@@ -2,11 +2,10 @@
  * @fileoverview JSON-backed store for Telegram prompt buffers and queued items.
  *
  * Exports:
- * - TelegramPromptQueueStore (L29) - Persists debounce buffers and sequential queue state.
+ * - TelegramPromptQueueStore - Persists debounce buffers and sequential queue state.
  */
 
 import * as crypto from "node:crypto";
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
@@ -18,6 +17,7 @@ import {
   TelegramPromptQueueItem,
   TelegramQueuedAttachment
 } from "./telegram-prompt-queue.types";
+import { readJsonFileSync, writeJsonFileSyncAtomic } from "../../storage/json-file";
 
 const DATA_DIR = "data";
 const STORE_FILE = "telegram.prompt-queue.json";
@@ -238,42 +238,25 @@ export class TelegramPromptQueueStore {
   }
 
   private readAll(): TelegramPromptQueueFile {
-    /* Missing or broken files should not block the runtime queue. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    if (!fs.existsSync(this.filePath)) {
-      return { buffers: [], items: [] };
-    }
-
-    try {
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf-8")) as TelegramPromptQueueFile;
-      return {
-        buffers: Array.isArray(parsed?.buffers) ? parsed.buffers : [],
-        items: Array.isArray(parsed?.items) ? parsed.items : []
-      };
-    } catch {
-      return { buffers: [], items: [] };
-    }
+    /* Missing or broken files should not block the runtime queue after backend restart. */
+    return readJsonFileSync({
+      filePath: this.filePath,
+      label: "telegram-prompt-queue",
+      createEmptyValue: () => ({ buffers: [], items: [] }),
+      normalize: (parsed) => {
+        const file = parsed as TelegramPromptQueueFile | null | undefined;
+        return {
+          buffers: Array.isArray(file?.buffers) ? file.buffers : [],
+          items: Array.isArray(file?.items) ? file.items : []
+        };
+      },
+      parseErrorStrategy: "recover",
+      normalizeErrorStrategy: "recover"
+    });
   }
 
   private writeAll(file: TelegramPromptQueueFile): void {
     /* Pretty JSON keeps manual debugging straightforward in mounted data volume. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    const tempPath = `${this.filePath}.${process.pid}.tmp`;
-    try {
-      fs.writeFileSync(tempPath, JSON.stringify(file, null, 2), "utf-8");
-      fs.renameSync(tempPath, this.filePath);
-    } finally {
-      if (fs.existsSync(tempPath)) {
-        fs.rmSync(tempPath, { force: true });
-      }
-    }
+    writeJsonFileSyncAtomic(this.filePath, file);
   }
 }

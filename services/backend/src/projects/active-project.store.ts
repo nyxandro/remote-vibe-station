@@ -2,13 +2,13 @@
  * @fileoverview Store for the currently selected/active project.
  *
  * Exports:
- * - ActiveProjectStore (L17) - Persist active project slug across restarts.
+ * - ActiveProjectStore - Persist active project slug across restarts.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
+import { readJsonFileSync, writeJsonFileSyncAtomic } from "../storage/json-file";
 
 const DATA_DIR = "data";
 const ACTIVE_FILE = "active-project.json";
@@ -96,46 +96,43 @@ export class ActiveProjectStore {
   }
 
   private readFile(): ActiveFile {
-    /* Ensure directory exists. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    /* Active selection is recoverable operational state, so prefer cleanup over crashing startup. */
+    return readJsonFileSync({
+      filePath: this.filePath,
+      label: "active-project",
+      createEmptyValue: () => ({ byAdminId: {}, global: { slug: null, updatedAt: new Date().toISOString() } }),
+      normalize: (parsed) => {
+        if (parsed && typeof parsed === "object" && "slug" in (parsed as Record<string, unknown>)) {
+          const v1 = parsed as ActiveFileV1;
+          return {
+            byAdminId: {},
+            global: { slug: v1.slug ?? null, updatedAt: new Date().toISOString() }
+          };
+        }
 
-    if (!fs.existsSync(this.filePath)) {
-      return { byAdminId: {}, global: { slug: null, updatedAt: new Date().toISOString() } };
-    }
-
-    const raw = fs.readFileSync(this.filePath, "utf-8");
-    const parsed = JSON.parse(raw) as unknown;
-
-    /* Backward compatibility: v1 stored only { slug }. */
-    if (parsed && typeof parsed === "object" && "slug" in (parsed as any)) {
-      const v1 = parsed as ActiveFileV1;
-      return {
-        byAdminId: {},
-        global: { slug: v1.slug ?? null, updatedAt: new Date().toISOString() }
-      };
-    }
-
-    /* Default to the new schema. */
-    const next = parsed as ActiveFile;
-    if (!next.byAdminId) {
-      next.byAdminId = {};
-    }
-    if (!next.global) {
-      next.global = { slug: null, updatedAt: new Date().toISOString() };
-    }
-    return next;
+        const next = parsed as Partial<ActiveFile> | null | undefined;
+        return {
+          byAdminId:
+            next?.byAdminId && typeof next.byAdminId === "object" && !Array.isArray(next.byAdminId)
+              ? next.byAdminId
+              : {},
+          global:
+            next?.global && typeof next.global === "object"
+              ? {
+                  slug: typeof next.global.slug === "string" || next.global.slug === null ? next.global.slug : null,
+                  updatedAt:
+                    typeof next.global.updatedAt === "string" ? next.global.updatedAt : new Date().toISOString()
+                }
+              : { slug: null, updatedAt: new Date().toISOString() }
+        };
+      },
+      parseErrorStrategy: "recover",
+      normalizeErrorStrategy: "recover"
+    });
   }
 
   private writeFile(file: ActiveFile): void {
     /* Persist stable JSON. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(this.filePath, JSON.stringify(file, null, 2), "utf-8");
+    writeJsonFileSyncAtomic(this.filePath, file);
   }
 }

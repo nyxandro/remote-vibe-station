@@ -2,15 +2,15 @@
  * @fileoverview Persistent JSON store for per-project runtime settings.
  *
  * Exports:
- * - ProjectRuntimeSettingsStore (L24) - Read/write settings by project slug.
+ * - ProjectRuntimeSettingsStore - Read/write settings by project slug.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
 
 import { ProjectRuntimeSettings } from "./project-runtime.types";
+import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-file";
 
 const DATA_DIR = "data";
 const SETTINGS_FILE = "project-runtime.settings.json";
@@ -52,24 +52,24 @@ export class ProjectRuntimeSettingsStore {
   }
 
   private async readAll(): Promise<SettingsStateFile> {
-    /* Lazily create data dir and treat missing file as empty state. */
-    const directory = path.dirname(this.filePath);
-    await fs.promises.mkdir(directory, { recursive: true });
-
-    if (!fs.existsSync(this.filePath)) {
-      return {};
-    }
-
-    const raw = await fs.promises.readFile(this.filePath, "utf-8");
-    try {
-      return JSON.parse(raw) as SettingsStateFile;
-    } catch (error) {
-      throw new Error(`Failed to parse runtime settings JSON at '${this.filePath}': ${String(error)}`);
-    }
+    /* Runtime settings are authoritative deploy state, so broken JSON must stop the flow explicitly. */
+    return readJsonFileAsync({
+      filePath: this.filePath,
+      label: "runtime settings",
+      createEmptyValue: () => ({}),
+      normalize: (parsed) => {
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("Expected object map");
+        }
+        return parsed as SettingsStateFile;
+      },
+      parseErrorStrategy: "throw",
+      normalizeErrorStrategy: "throw"
+    });
   }
 
   private async writeAll(state: SettingsStateFile): Promise<void> {
     /* Persist human-readable settings to simplify manual debugging. */
-    await fs.promises.writeFile(this.filePath, JSON.stringify(state, null, 2), "utf-8");
+    await writeJsonFileAsyncAtomic(this.filePath, state);
   }
 }

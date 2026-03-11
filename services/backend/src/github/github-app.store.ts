@@ -2,15 +2,15 @@
  * @fileoverview JSON store for the global GitHub PAT used by backend and OpenCode git helpers.
  *
  * Exports:
- * - GithubStoredToken (type) - Persisted GitHub PAT metadata plus secret.
- * - GithubTokenSummary (type) - Safe token metadata returned to service callers.
- * - GithubAppStore (class) - Reads and writes the global GitHub PAT payload.
+ * - GithubStoredToken - Persisted GitHub PAT metadata plus secret.
+ * - GithubTokenSummary - Safe token metadata returned to service callers.
+ * - GithubAppStore - Reads and writes the global GitHub PAT payload.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Injectable } from "@nestjs/common";
+import { readJsonFileSync, writeJsonFileSyncAtomic } from "../storage/json-file";
 
 const DATA_DIR = "data";
 const STORE_FILE = "github.token.json";
@@ -79,44 +79,32 @@ export class GithubAppStore {
   }
 
   private readAll(): StoreShape {
-    /* Ensure target directory exists before reading JSON payload. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+    /* PAT storage should recover to empty state when the file is malformed instead of crashing runtime helpers. */
+    return readJsonFileSync({
+      filePath: this.filePath,
+      label: "github-token",
+      createEmptyValue: buildEmptyStore,
+      normalize: (parsed) => {
+        const store = parsed as Partial<StoreShape> | null | undefined;
+        const token = store?.token;
+        if (
+          token &&
+          typeof token.adminId === "number" &&
+          typeof token.token === "string" &&
+          typeof token.updatedAt === "string"
+        ) {
+          return { token };
+        }
 
-    if (!fs.existsSync(this.filePath)) {
-      return buildEmptyStore();
-    }
-
-    try {
-      const raw = fs.readFileSync(this.filePath, "utf-8");
-      const parsed = JSON.parse(raw) as Partial<StoreShape>;
-      const token = parsed?.token;
-      if (
-        token &&
-        typeof token.adminId === "number" &&
-        typeof token.token === "string" &&
-        typeof token.updatedAt === "string"
-      ) {
-        return { token };
-      }
-
-      return buildEmptyStore();
-    } catch (error) {
-      /* Surface malformed/corrupted store reads while still preserving service uptime. */
-      const details = error instanceof Error ? error.message : String(error);
-      console.error(`[GithubAppStore] Failed to read store JSON: ${details}`);
-      return buildEmptyStore();
-    }
+        return buildEmptyStore();
+      },
+      parseErrorStrategy: "recover",
+      normalizeErrorStrategy: "recover"
+    });
   }
 
   private writeAll(data: StoreShape): void {
     /* Persist human-readable JSON for easier self-hosted operations/debug on server. */
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), "utf-8");
+    writeJsonFileSyncAtomic(this.filePath, data);
   }
 }
