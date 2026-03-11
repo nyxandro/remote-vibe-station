@@ -20,6 +20,8 @@ import "./git-tab.css";
 import "./providers-tab.css";
 import "./miniapp-blocking-overlay.css";
 import "./kanban.css";
+import "./kanban-criteria.css";
+import "./files-ui.css";
 
 const container = document.getElementById("root");
 if (!container) {

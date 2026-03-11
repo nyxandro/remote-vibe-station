@@ -1,30 +1,39 @@
 /**
- * @fileoverview Files tab UI.
+ * @fileoverview Files tab UI with folder path strip, compact action toolbar, upload modal, and fullscreen preview.
  *
  * Exports:
- * - FilesTab (L24) - Renders file tree and syntax-highlighted preview.
+ * - FilesTab - Renders project file list and delegates upload/preview actions.
  */
 
-import { ArrowUp, RefreshCw, FolderOpen } from "lucide-react";
+import { useState } from "react";
+import { ArrowUp, FolderOpen, Plus, RefreshCw } from "lucide-react";
 
 import { FileListResponse, FileReadResponse } from "../types";
+import { ThemeMode } from "../utils/theme";
+import { FilePreviewModal } from "./FilePreviewModal";
+import { FileUploadModal } from "./FileUploadModal";
 
 type Props = {
   activeId: string | null;
   filePath: string;
   fileList: FileListResponse | null;
   filePreview: FileReadResponse | null;
-  filePreviewHtml: string;
+  themeMode: ThemeMode;
   iconForEntry: (name: string, kind: "file" | "dir") => JSX.Element;
   onUp: () => void;
   onRefresh: () => void;
   onOpenEntry: (nextPath: string, kind: "file" | "dir") => void;
+  onClosePreview: () => void;
+  onDownloadPreview: (relativePath: string) => Promise<void> | void;
+  onUploadFromDevice: (currentPath: string, file: File) => Promise<void> | void;
+  onImportFromUrl: (currentPath: string, url: string) => Promise<void> | void;
 };
 
 const BYTE_UNIT = 1;
 const KILOBYTE_UNIT = 1024;
 const MEGABYTE_UNIT = 1024 * 1024;
 const GIGABYTE_UNIT = 1024 * 1024 * 1024;
+const ROOT_PATH_LABEL = "/";
 
 const formatFileSize = (sizeBytes?: number): string | null => {
   /* Directory rows and unknown metadata should keep the trailing slot empty. */
@@ -55,57 +64,84 @@ const formatFileSize = (sizeBytes?: number): string | null => {
   return formatCompactUnit(sizeBytes / GIGABYTE_UNIT, "GB");
 };
 
+const joinEntryPath = (basePath: string, entryName: string): string => {
+  /* Compose nested entry paths without leaking duplicate slashes into API requests. */
+  const base = basePath.trim();
+  if (!base) {
+    return entryName;
+  }
+
+  if (base === ROOT_PATH_LABEL) {
+    return `/${entryName}`;
+  }
+
+  return `${base.replace(/\/+$/g, "")}/${entryName}`;
+};
+
 export const FilesTab = (props: Props) => {
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
+
   /* Disable parent navigation when explorer is already at project root. */
   const normalizedPath = props.filePath.trim().replace(/^\/+|\/+$/g, "");
   const canGoUp = Boolean(props.activeId) && normalizedPath.length > 0;
+  const currentFolderLabel = normalizedPath || ROOT_PATH_LABEL;
 
-  /* File explorer and preview. */
   return (
     <div className="files-shell">
+      <div className="files-location-strip">{currentFolderLabel}</div>
+
       <div className="files-toolbar">
-        <button
-          className="icon-tool-btn"
-          onClick={props.onUp}
-          disabled={!canGoUp}
-          type="button"
-          title="Go to parent folder"
-          aria-label="Go up"
-        >
-          <ArrowUp size={16} className="btn-icon" />
-        </button>
-        <div className="files-path">{props.filePath || "/"}</div>
-        <button
-          className="icon-tool-btn"
-          onClick={props.onRefresh}
-          disabled={!props.activeId}
-          type="button"
-          title="Refresh current folder"
-          aria-label="Refresh"
-        >
-          <RefreshCw size={16} className="btn-icon" />
-        </button>
+        <div className="files-toolbar-actions">
+          <button
+            aria-label="Add file"
+            className="icon-tool-btn"
+            disabled={!props.activeId}
+            onClick={() => setIsUploadModalOpen(true)}
+            title="Add new file"
+            type="button"
+          >
+            <Plus size={16} className="btn-icon" />
+          </button>
+
+          <button
+            aria-label="Refresh"
+            className="icon-tool-btn"
+            disabled={!props.activeId}
+            onClick={props.onRefresh}
+            title="Refresh current folder"
+            type="button"
+          >
+            <RefreshCw size={16} className="btn-icon" />
+          </button>
+
+          <button
+            aria-label="Go up"
+            className="icon-tool-btn"
+            disabled={!canGoUp}
+            onClick={props.onUp}
+            title="Go to parent folder"
+            type="button"
+          >
+            <ArrowUp size={16} className="btn-icon" />
+          </button>
+        </div>
       </div>
 
       <div className="files-grid">
         <div className="files-list">
           {props.fileList?.entries?.length ? (
-            props.fileList.entries.map((e) => (
+            props.fileList.entries.map((entry) => (
               <button
-                key={`${e.kind}:${e.name}`}
-                className={e.kind === "dir" ? "file-item dir" : "file-item"}
-                onClick={() => {
-                  /* Compose next path without duplicating slashes when navigating deep folders. */
-                  const base = props.filePath.trim();
-                  const next = !base ? e.name : base === "/" ? `/${e.name}` : `${base.replace(/\/+$/, "")}/${e.name}`;
-                  props.onOpenEntry(next, e.kind);
-                }}
+                key={`${entry.kind}:${entry.name}`}
+                className={entry.kind === "dir" ? "file-item dir" : "file-item"}
+                onClick={() => props.onOpenEntry(joinEntryPath(props.filePath, entry.name), entry.kind)}
+                type="button"
               >
-                <span className="file-icon">{props.iconForEntry(e.name, e.kind)}</span>
-                <span className="file-name">{e.name}</span>
+                <span className="file-icon">{props.iconForEntry(entry.name, entry.kind)}</span>
+                <span className="file-name">{entry.name}</span>
                 <span className="file-trailing">
-                  {e.kind === "file" ? <span className="file-size">{formatFileSize(e.sizeBytes)}</span> : null}
-                  {e.kind === "dir" ? <FolderOpen size={16} className="icon hint" /> : null}
+                  {entry.kind === "file" ? <span className="file-size">{formatFileSize(entry.sizeBytes)}</span> : null}
+                  {entry.kind === "dir" ? <FolderOpen size={16} className="icon hint" /> : null}
                 </span>
               </button>
             ))
@@ -113,24 +149,30 @@ export const FilesTab = (props: Props) => {
             <div className="placeholder">No entries (or not loaded yet).</div>
           )}
         </div>
-
-        <div className="files-preview">
-          {props.filePreview ? (
-            <>
-              <div className="files-preview-title">{props.filePreview.path}</div>
-              <div className="files-preview-body">
-                <div
-                  className="codebox"
-                  // Shiki emits already-escaped HTML with spans.
-                  dangerouslySetInnerHTML={{ __html: props.filePreviewHtml }}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="placeholder">Select a file to preview.</div>
-          )}
-        </div>
       </div>
+
+      <FileUploadModal
+        currentPath={currentFolderLabel}
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onImportFromUrl={(url) => props.onImportFromUrl(props.filePath, url)}
+        onUploadFile={(file) => props.onUploadFromDevice(props.filePath, file)}
+      />
+
+      <FilePreviewModal
+        content={props.filePreview?.content ?? ""}
+        filePath={props.filePreview?.path ?? ""}
+        isOpen={Boolean(props.filePreview)}
+        onClose={props.onClosePreview}
+        onDownload={() => {
+          if (!props.filePreview) {
+            return;
+          }
+
+          void props.onDownloadPreview(props.filePreview.path);
+        }}
+        themeMode={props.themeMode}
+      />
     </div>
   );
 };

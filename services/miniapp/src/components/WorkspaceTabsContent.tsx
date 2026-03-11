@@ -51,7 +51,6 @@ type Props = {
   filePath: string;
   fileList: FileListResponse | null;
   filePreview: FileReadResponse | null;
-  filePreviewHtml: string;
   terminalBuffer: string;
   terminalInput: string;
   themeMode: "light" | "dark";
@@ -77,6 +76,10 @@ type Props = {
   onFilesUp: () => void;
   onFilesRefresh: () => void;
   onOpenEntry: (nextPath: string, kind: "file" | "dir") => void;
+  onCloseFilePreview: () => void;
+  onDownloadFilePreview: (relativePath: string) => Promise<void> | void;
+  onUploadFileFromDevice: (currentPath: string, file: File) => Promise<void> | void;
+  onImportFileFromUrl: (currentPath: string, url: string) => Promise<void> | void;
   onInputChange: (value: string) => void;
   onSendTerminal: () => void;
   onChangeTheme: (mode: "light" | "dark") => void;
@@ -229,11 +232,15 @@ export const WorkspaceTabsContent = (props: Props) => {
         filePath={props.filePath}
         fileList={props.fileList}
         filePreview={props.filePreview}
-        filePreviewHtml={props.filePreviewHtml}
+        themeMode={props.themeMode}
         iconForEntry={props.iconForEntry}
         onUp={props.onFilesUp}
         onRefresh={props.onFilesRefresh}
         onOpenEntry={props.onOpenEntry}
+        onClosePreview={props.onCloseFilePreview}
+        onDownloadPreview={props.onDownloadFilePreview}
+        onUploadFromDevice={props.onUploadFileFromDevice}
+        onImportFromUrl={props.onImportFileFromUrl}
       />
     );
   }

@@ -1,0 +1,217 @@
+.files-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.files-location-strip {
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, #dbe8ff 14%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 82%, #f5f9ff 18%);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.files-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.files-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.files-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.files-list {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #ffffff;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.file-item {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  align-items: center;
+}
+
+.file-item:last-child {
+  border-bottom: 0;
+}
+
+.file-item:hover {
+  background: #f7f9ff;
+}
+
+.file-item:focus,
+.file-item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(27, 108, 255, 0.24);
+}
+
+.file-item.dir {
+  background: #fbfdff;
+}
+
+.files-upload-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 8, 20, 0.62);
+}
+
+.files-upload-modal {
+  width: min(560px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.18);
+}
+
+.files-upload-modal-header,
+.files-upload-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.files-upload-modal-title {
+  margin: 0;
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.files-upload-target,
+.files-upload-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.files-upload-mode-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.files-upload-mode-btn {
+  justify-content: center;
+}
+
+.files-upload-mode-btn-active {
+  background: linear-gradient(135deg, #1b6cff 0%, #0b2a6d 100%);
+  color: #ffffff;
+}
+
+.files-upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.files-upload-field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #243b68;
+}
+
+html[data-theme="dark"] .files-location-strip {
+  border-color: #223354;
+  background: rgba(20, 31, 53, 0.88);
+  color: #a9b8d3;
+}
+
+html[data-theme="dark"] .files-list,
+html[data-theme="dark"] .files-upload-modal,
+html[data-theme="dark"] .file-item,
+html[data-theme="dark"] .file-item.dir {
+  background: #131d31;
+  border-color: #233352;
+  color: #d9e3f5;
+}
+
+html[data-theme="dark"] .files-upload-modal-title,
+html[data-theme="dark"] .files-upload-field-label {
+  color: #eef4ff;
+}
+
+html[data-theme="dark"] .file-item:hover {
+  background: #1b2a45;
+}
+
+html[data-theme="dark"] .file-item:focus,
+html[data-theme="dark"] .file-item:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(130, 164, 255, 0.34);
+}
+
+html[data-theme="dark"] .file-item.dir {
+  background: #18243b;
+}
+
+html[data-theme="dark"] .files-upload-modal-backdrop {
+  background: rgba(3, 8, 20, 0.82);
+}
+
+@media (max-width: 640px) {
+  .files-location-strip {
+    border-radius: 18px;
+    padding: 12px 14px;
+  }
+
+  .files-toolbar-actions {
+    width: 100%;
+  }
+
+  .files-upload-modal-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .files-upload-modal {
+    width: 100vw;
+    min-height: 100vh;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+    padding: 18px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .files-upload-modal-header,
+  .files-upload-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .files-upload-mode-row {
+    grid-template-columns: 1fr;
+  }
+}

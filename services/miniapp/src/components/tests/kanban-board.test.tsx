@@ -63,7 +63,7 @@ describe("KanbanBoard", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New task" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create new task" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Prepare queue" } });
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "Move reviewed backlog item to queue" }

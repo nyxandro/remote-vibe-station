@@ -25,11 +25,11 @@ import { ProjectRecord } from "../types";
 export type TabKey =
   | "projects"
   | "files"
-  | "tasks"
-  | "providers"
   | "github"
-  | "terminal"
+  | "tasks"
   | "containers"
+  | "providers"
+  | "terminal"
   | "settings";
 
 type Props = {
@@ -46,11 +46,11 @@ type Props = {
 const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: LucideIcon }> = [
   { key: "projects", title: "Projects", icon: Folder },
   { key: "files", title: "Files", icon: FileText },
-  { key: "tasks", title: "Tasks", icon: ListTodo },
-  { key: "providers", title: "Providers", icon: Plug },
   { key: "github", title: "GitHub", icon: Github },
-  { key: "terminal", title: "Terminal", icon: Terminal },
+  { key: "tasks", title: "Tasks", icon: ListTodo },
   { key: "containers", title: "Containers", icon: Box },
+  { key: "providers", title: "Providers", icon: Plug },
+  { key: "terminal", title: "Terminal", icon: Terminal },
   { key: "settings", title: "Settings", icon: Settings }
 ];
 

@@ -17,6 +17,7 @@ import {
   SettingsFileSummary,
   VoiceControlSettings
 } from "../types";
+import { inferTextEditorLanguage } from "../utils/text-editor-language";
 import { ThemeMode } from "../utils/theme";
 import { GitHubAuthSettingsSection } from "./GitHubAuthSettingsSection";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
@@ -104,15 +105,9 @@ export const SettingsTab = (props: Props) => {
   const hasMountedRef = useRef<boolean>(false);
 
   const language = useMemo(() => {
-    /* Infer editor language from file extension for better editing UX. */
+    /* Reuse shared file-extension mapping so settings editors and file previews behave consistently. */
     const name = props.activeFile?.relativePath ?? props.activeFile?.absolutePath ?? "";
-    if (name.toLowerCase().endsWith(".json")) {
-      return "json" as const;
-    }
-    if (name.toLowerCase().endsWith(".md")) {
-      return "markdown" as const;
-    }
-    return "text" as const;
+    return inferTextEditorLanguage(name);
   }, [props.activeFile]);
 
   useEffect(() => {

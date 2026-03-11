@@ -4,7 +4,7 @@
 
 /* @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WorkspaceHeader } from "../WorkspaceHeader";
@@ -15,8 +15,8 @@ describe("WorkspaceHeader", () => {
     cleanup();
   });
 
-  it("renders eight icon-only tab buttons", () => {
-    /* Top menu should expose Tasks together with the existing workspace sections. */
+  it("renders eight icon-only tab buttons in the expected order", () => {
+    /* Top menu order should match the operator workflow from project context to settings. */
     render(
       <WorkspaceHeader
         activeProject={null}
@@ -30,15 +30,23 @@ describe("WorkspaceHeader", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Files" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Tasks" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Providers" })).toBeTruthy();
+    const navigation = screen.getByRole("navigation", { name: "Workspace navigation" });
+    const labels = within(navigation)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+
+    expect(labels).toEqual([
+      "Projects",
+      "Files",
+      "GitHub",
+      "Tasks",
+      "Containers",
+      "Providers",
+      "Terminal",
+      "Settings"
+    ]);
+
     expect(screen.queryByRole("button", { name: "CLI/Proxy" })).toBeNull();
-    expect(screen.getByRole("button", { name: "GitHub" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Terminal" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Containers" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeTruthy();
   });
 
   it("does not render legacy workspace title text", () => {

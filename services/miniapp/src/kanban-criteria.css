@@ -1,0 +1,98 @@
+.kanban-criteria-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kanban-criteria-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.kanban-criteria-add-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.kanban-criteria-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.kanban-criteria-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kanban-criteria-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--kanban-column-border);
+  border-radius: 14px;
+  background: var(--kanban-empty-bg);
+}
+
+.kanban-criteria-item-copy {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.kanban-criteria-item-bullet {
+  color: var(--kanban-note);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.kanban-criteria-item-text {
+  color: var(--kanban-title);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.kanban-criteria-remove-button {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  flex: 0 0 auto;
+}
+
+.kanban-criteria-empty {
+  border: 1px dashed var(--kanban-empty-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--kanban-empty-bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .kanban-criteria-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .kanban-criteria-add-button {
+    width: 100%;
+  }
+}

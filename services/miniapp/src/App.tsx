@@ -13,8 +13,6 @@ import { WorkspaceTabsContent } from "./components/WorkspaceTabsContent";
 import { apiGet, apiPost } from "./api/client";
 import {
   ContainerAction,
-  FileListResponse,
-  FileReadResponse,
   ProjectGitSummary,
   ProjectRecord,
   ProjectStatus
@@ -24,6 +22,7 @@ import { useContainerStatusPolling } from "./hooks/use-container-status-polling"
 import { useGithubAuth } from "./hooks/use-github-auth";
 import { useOpenCodeSettings } from "./hooks/use-opencode-settings";
 import { useOpenCodeVersion } from "./hooks/use-opencode-version";
+import { useProjectFiles } from "./hooks/use-project-files";
 import { useProviderAuth } from "./hooks/use-provider-auth";
 import { useProjectGit } from "./hooks/use-project-git";
 import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
@@ -37,7 +36,6 @@ import { useTerminalEvents } from "./hooks/use-terminal-events";
 import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
 import { loadProjectMetadata } from "./utils/project-metadata";
-import { highlightToHtml } from "./utils/syntax";
 
 type ProjectStatusMap = Record<string, ProjectStatus[]>;
 type ProjectLogsMap = Record<string, string>;
@@ -57,15 +55,23 @@ export const App = () => {
   const [activeTab, setActiveTab] = useState<TabKey>(() => restoredTabState.activeTab);
   const [query, setQuery] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const [filePath, setFilePath] = useState<string>("");
-  const [fileList, setFileList] = useState<FileListResponse | null>(null);
-  const [filePreview, setFilePreview] = useState<FileReadResponse | null>(null);
-  const [filePreviewHtml, setFilePreviewHtml] = useState<string>("");
   const [terminalInput, setTerminalInput] = useState<string>("");
   const { canControlTelegramStream } = useAuthControl();
   const { terminalBuffer, clearTerminalBuffer } = useTerminalEvents(activeId);
   const { gitOverviewMap, loadGitOverview, runGitOperation, checkoutBranch, mergeBranch, commitAll } =
     useProjectGit(setError);
+  const {
+    filePath,
+    fileList,
+    filePreview,
+    loadFiles,
+    openFile,
+    closeFilePreview,
+    resetFiles,
+    downloadFile,
+    uploadFileFromDevice,
+    importFileFromUrl
+  } = useProjectFiles(setError);
   const {
     overview: settingsOverview,
     activeFile: settingsActiveFile,
@@ -91,10 +97,7 @@ export const App = () => {
   const clearActiveSelection = (): void => {
     setActiveId(null);
     setActiveTab("projects");
-    setFileList(null);
-    setFilePath("");
-    setFilePreview(null);
-    setFilePreviewHtml("");
+    resetFiles();
     setSettingsActiveFile(null);
   };
   const [telegramStreamEnabled, setTelegramStreamEnabled] = useState<boolean>(false);
@@ -306,31 +309,6 @@ export const App = () => {
     }
   };
 
-  const loadFiles = async (projectId: string, nextPath: string): Promise<void> => {
-    try {
-      setError(null);
-      const query = nextPath ? `?path=${encodeURIComponent(nextPath)}` : "";
-      const data = await apiGet<FileListResponse>(`/api/projects/${projectId}/files${query}`);
-      setFileList(data);
-      setFilePath(nextPath);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load files");
-    }
-  };
-
-  const openFile = async (projectId: string, relativePath: string): Promise<void> => {
-    try {
-      setError(null);
-      const query = `?path=${encodeURIComponent(relativePath)}`;
-      const data = await apiGet<FileReadResponse>(`/api/projects/${projectId}/file${query}`);
-      setFilePreview(data);
-      const html = await highlightToHtml(data.content, data.path);
-      setFilePreviewHtml(html);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to read file");
-    }
-  };
-
   const sendTerminal = async (projectId: string): Promise<void> => {
     const input = terminalInput;
     if (!input.trim()) {
@@ -377,8 +355,7 @@ export const App = () => {
         void loadFiles(projectId, "");
       }
 
-      setFilePreview(null);
-      setFilePreviewHtml("");
+      closeFilePreview();
       setSettingsActiveFile(null);
       setLogsMap((prev) => {
         const next = { ...prev };
@@ -527,6 +504,15 @@ export const App = () => {
     }
   };
 
+  const withActiveProjectAsync = async <T,>(run: (projectId: string) => Promise<T>): Promise<T | undefined> => {
+    /* Upload/download helpers need the active project id and must preserve the async lifecycle for modal UX. */
+    if (!activeId) {
+      return undefined;
+    }
+
+    return run(activeId);
+  };
+
   return (
     <div className="app-shell">
       <section className="panel">
@@ -556,7 +542,6 @@ export const App = () => {
           filePath={filePath}
           fileList={fileList}
           filePreview={filePreview}
-          filePreviewHtml={filePreviewHtml}
           terminalBuffer={terminalBuffer}
           terminalInput={terminalInput}
           themeMode={themeMode}
@@ -596,6 +581,10 @@ export const App = () => {
             }
             void openFile(activeId, nextPath);
           }}
+          onCloseFilePreview={closeFilePreview}
+          onDownloadFilePreview={(relativePath) => withActiveProjectAsync((id) => downloadFile(id, relativePath))}
+          onUploadFileFromDevice={(currentPath, file) => withActiveProjectAsync((id) => uploadFileFromDevice(id, currentPath, file))}
+          onImportFileFromUrl={(currentPath, url) => withActiveProjectAsync((id) => importFileFromUrl(id, currentPath, url))}
           onInputChange={setTerminalInput}
           onSendTerminal={() => withActiveProject((id) => void sendTerminal(id))}
           onChangeTheme={setThemeMode}

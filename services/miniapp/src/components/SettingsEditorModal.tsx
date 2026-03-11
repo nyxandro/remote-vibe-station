@@ -6,12 +6,13 @@
  */
 
 import { ThemeMode } from "../utils/theme";
-import { CodeEditor } from "./CodeEditor";
+import { TextEditorLanguage } from "../utils/text-editor-language";
+import { FullscreenCodeModal } from "./FullscreenCodeModal";
 
 type Props = {
   isOpen: boolean;
   filePath: string;
-  language: "markdown" | "json" | "text";
+  language: TextEditorLanguage;
   themeMode: ThemeMode;
   draft: string;
   isDirty: boolean;
@@ -41,46 +42,12 @@ const saveStatusLabel = (input: {
 };
 
 export const SettingsEditorModal = (props: Props) => {
-  if (!props.isOpen) {
-    return null;
-  }
-
   return (
-    <div
-      className="settings-editor-modal-backdrop"
-      onClick={props.onClose}
-      role="presentation"
-    >
-      <div
-        className="settings-editor-modal"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="settings-editor-modal-header">
-          <div className="settings-editor-header-meta">
-            <div className="settings-editor-meta">{props.filePath}</div>
-            <div className="settings-editor-language">
-              {props.language.toUpperCase()}
-            </div>
-          </div>
-          <button className="btn outline" onClick={props.onClose} type="button">
-            Close
-          </button>
-        </div>
-
-        {/* Use calc() because height: 100% doesn't cascade through CodeMirror DOM in WebView */}
-        <div className="settings-editor-modal-body">
-          <CodeEditor
-            value={props.draft}
-            language={props.language}
-            height="calc(100dvh - 90px)"
-            themeMode={props.themeMode}
-            autoFocus
-            onSaveShortcut={props.onSave}
-            onChange={props.onChange}
-          />
-        </div>
-
-        <div className="settings-editor-modal-footer">
+    <FullscreenCodeModal
+      autoFocus
+      filePath={props.filePath}
+      footer={
+        <>
           <div
             className={
               props.saveResult === "error"
@@ -91,7 +58,7 @@ export const SettingsEditorModal = (props: Props) => {
             {saveStatusLabel({
               isDirty: props.isDirty,
               isSaving: props.isSaving,
-              saveResult: props.saveResult,
+              saveResult: props.saveResult
             })}
             <span className="settings-editor-shortcut">Ctrl/Cmd+S</span>
           </div>
@@ -117,8 +84,15 @@ export const SettingsEditorModal = (props: Props) => {
               {props.isSaving ? "Saving..." : "Save"}
             </button>
           </div>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      isOpen={props.isOpen}
+      language={props.language}
+      onChange={props.onChange}
+      onClose={props.onClose}
+      onSaveShortcut={props.onSave}
+      themeMode={props.themeMode}
+      value={props.draft}
+    />
   );
 };

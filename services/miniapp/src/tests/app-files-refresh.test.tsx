@@ -9,14 +9,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 
-const { apiGetMock, apiPostMock } = vi.hoisted(() => ({
+const { apiGetMock, apiPostMock, apiDownloadMock, apiPostFormDataMock } = vi.hoisted(() => ({
   apiGetMock: vi.fn(),
-  apiPostMock: vi.fn()
+  apiPostMock: vi.fn(),
+  apiDownloadMock: vi.fn(),
+  apiPostFormDataMock: vi.fn()
 }));
 
 vi.mock("../api/client", () => ({
   apiGet: apiGetMock,
-  apiPost: apiPostMock
+  apiPost: apiPostMock,
+  apiDownload: apiDownloadMock,
+  apiPostFormData: apiPostFormDataMock
 }));
 
 vi.mock("../components/WorkspaceHeader", () => ({

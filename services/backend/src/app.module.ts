@@ -38,6 +38,7 @@ import { TelegramPromptQueueStore } from "./telegram/prompt-queue/telegram-promp
 import { PromptController } from "./prompt/prompt.controller";
 import { PromptService } from "./prompt/prompt.service";
 import { ProjectsController } from "./projects/projects.controller";
+import { ProjectFilesController } from "./projects/project-files.controller";
 import { ProjectsAdminController } from "./projects/projects-admin.controller";
 import { ProjectsService } from "./projects/projects.service";
 import { ProjectRegistry } from "./projects/project-registry";
@@ -82,6 +83,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
   controllers: [
     PromptController,
     ProjectsController,
+    ProjectFilesController,
     ProjectsAdminController,
     TerminalController,
     OpenCodeController,

@@ -6,9 +6,10 @@
  * - KanbanTaskEditorModal - Shared create/edit dialog for project and global boards.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
+import { KanbanCriteriaEditor } from "./KanbanCriteriaEditor";
 
 const STATUS_OPTIONS: Array<{ value: KanbanStatus; label: string }> = [
   { value: "backlog", label: "Backlog" },
@@ -46,12 +47,11 @@ type Props = {
   onSubmit: (payload: KanbanTaskEditorSubmit) => void;
 };
 
-const splitCriteria = (value: string): string[] => {
-  /* One criterion per line keeps both the UI textarea and agent tool payloads easy to reason about. */
-  return value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
+const DEFAULT_CRITERION_DRAFT = "";
+
+const normalizeCriterion = (value: string): string => {
+  /* Checklist criteria stay trimmed so stored task requirements remain stable across edits. */
+  return value.trim();
 };
 
 export const KanbanTaskEditorModal = (props: Props) => {
@@ -60,7 +60,8 @@ export const KanbanTaskEditorModal = (props: Props) => {
   const [description, setDescription] = useState<string>("");
   const [status, setStatus] = useState<KanbanStatus>("backlog");
   const [priority, setPriority] = useState<KanbanPriority>("medium");
-  const [criteriaText, setCriteriaText] = useState<string>("");
+  const [criteriaItems, setCriteriaItems] = useState<string[]>([]);
+  const [criterionDraft, setCriterionDraft] = useState<string>(DEFAULT_CRITERION_DRAFT);
   const [resultSummary, setResultSummary] = useState<string>("");
   const [blockedReason, setBlockedReason] = useState<string>("");
 
@@ -72,7 +73,8 @@ export const KanbanTaskEditorModal = (props: Props) => {
       setDescription(props.task.description);
       setStatus(props.task.status);
       setPriority(props.task.priority);
-      setCriteriaText(props.task.acceptanceCriteria.join("\n"));
+      setCriteriaItems(props.task.acceptanceCriteria);
+      setCriterionDraft(DEFAULT_CRITERION_DRAFT);
       setResultSummary(props.task.resultSummary ?? "");
       setBlockedReason(props.task.blockedReason ?? "");
       return;
@@ -83,10 +85,27 @@ export const KanbanTaskEditorModal = (props: Props) => {
     setDescription("");
     setStatus("backlog");
     setPriority("medium");
-    setCriteriaText("");
+    setCriteriaItems([]);
+    setCriterionDraft(DEFAULT_CRITERION_DRAFT);
     setResultSummary("");
     setBlockedReason("");
   }, [props.activeProjectSlug, props.mode, props.task]);
+
+  const handleAddCriterion = useCallback(() => {
+    /* New checklist items are appended explicitly so the user sees the exact done-definition being saved. */
+    const normalized = normalizeCriterion(criterionDraft);
+    if (!normalized) {
+      return;
+    }
+
+    setCriteriaItems((current) => [...current, normalized]);
+    setCriterionDraft(DEFAULT_CRITERION_DRAFT);
+  }, [criterionDraft]);
+
+  const handleRemoveCriterion = useCallback((indexToRemove: number) => {
+    /* Removal is index-based because persisted criteria are plain ordered strings without ids. */
+    setCriteriaItems((current) => current.filter((_, index) => index !== indexToRemove));
+  }, []);
 
   const showProjectSelector = props.scope === "global";
   const submitLabel = props.mode === "create" ? "Create task" : "Save task";
@@ -152,16 +171,14 @@ export const KanbanTaskEditorModal = (props: Props) => {
             </select>
           </label>
 
-          <label className="kanban-field kanban-field-span-2">
-            <span className="kanban-field-label">Acceptance criteria</span>
-            <textarea
-              className="input kanban-textarea"
-              aria-label="Acceptance criteria"
-              value={criteriaText}
-              onChange={(event) => setCriteriaText(event.target.value)}
-              placeholder="One criterion per line"
-            />
-          </label>
+          <KanbanCriteriaEditor
+            criteria={criteriaItems}
+            draftValue={criterionDraft}
+            isSaving={props.isSaving}
+            onDraftChange={setCriterionDraft}
+            onAddCriterion={handleAddCriterion}
+            onRemoveCriterion={handleRemoveCriterion}
+          />
 
           {status === "done" ? (
             <label className="kanban-field kanban-field-span-2">
@@ -203,7 +220,7 @@ export const KanbanTaskEditorModal = (props: Props) => {
                 description: description.trim(),
                 status,
                 priority,
-                acceptanceCriteria: splitCriteria(criteriaText),
+                acceptanceCriteria: criteriaItems,
                 resultSummary: status === "done" ? resultSummary.trim() || null : null,
                 blockedReason: status === "blocked" ? blockedReason.trim() || null : null
               });
