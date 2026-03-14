@@ -42,7 +42,7 @@ export const KanbanBoardScreen = (props: Props) => {
       <section className="panel">
         <div className="kanban-standalone-header">
           <div>
-            <div className="panel-title">Shared Kanban</div>
+            <div className="panel-title">Shared Kanban [REFRESHED]</div>
             <div className="kanban-standalone-copy">
               One secure board for backlog storage, task refinement, execution readiness, queue management, and agent work across all projects.
             </div>
@@ -75,9 +75,9 @@ export const KanbanBoardScreen = (props: Props) => {
             void reloadTasks();
             void loadProjects();
           }}
-          onCreateTask={(payload) => void createTask(payload)}
-          onUpdateTask={(taskId, patch) => void updateTask(taskId, patch)}
-          onMoveTask={(taskId, status) => void moveTask(taskId, status)}
+          onCreateTask={(payload) => createTask(payload)}
+          onUpdateTask={(taskId, patch) => updateTask(taskId, patch)}
+          onMoveTask={(taskId, status) => moveTask(taskId, status)}
         />
       </section>
     </div>

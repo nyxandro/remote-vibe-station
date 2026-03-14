@@ -96,6 +96,7 @@ describe("KanbanRunnerService", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(async () => ({ id: "session-1" })),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
         sessionId: "session-existing",
         responseText: "Continuing task",
@@ -174,6 +175,7 @@ describe("KanbanRunnerService", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(async () => ({ id: "session-2" })),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
         sessionId: "session-2",
         responseText: "Started task",
@@ -259,6 +261,7 @@ describe("KanbanRunnerService", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(async () => ({ id: "session-3" })),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
         sessionId: "session-returned",
         responseText: "Resumed queued task",
@@ -327,6 +330,7 @@ describe("KanbanRunnerService", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(async () => ({ id: "session-1" })),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest
         .fn()
         .mockResolvedValueOnce({
@@ -415,6 +419,7 @@ describe("KanbanRunnerService", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(async () => ({ id: "session-created" })),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
         sessionId: "session-created",
         responseText: "Стартую задачу",
@@ -492,6 +497,7 @@ describe("KanbanRunnerService", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn()
     };
     const opencodeEvents = {

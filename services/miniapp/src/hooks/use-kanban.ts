@@ -102,6 +102,7 @@ export const useKanban = () => {
   const createTask = useCallback(
     async (payload: CreateKanbanTaskPayload): Promise<void> => {
       /* New tasks are posted through the Mini App API and then the visible board refreshes in-place. */
+      console.info("[useKanban] createTask", payload);
       await mutate(async () => {
         await apiPost("/api/kanban/tasks", payload);
       });
@@ -112,6 +113,7 @@ export const useKanban = () => {
   const updateTask = useCallback(
     async (taskId: string, patch: UpdateKanbanTaskPayload): Promise<void> => {
       /* Backlog refinement and card edits share the same update endpoint. */
+      console.info("[useKanban] updateTask", taskId, patch);
       await mutate(async () => {
         await apiPost(`/api/kanban/tasks/${encodeURIComponent(taskId)}/update`, patch);
       });

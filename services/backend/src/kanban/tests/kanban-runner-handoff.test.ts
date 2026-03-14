@@ -105,6 +105,7 @@ describe("Kanban runner handoff", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn()
     };
     const opencodeEvents = {
@@ -185,6 +186,7 @@ describe("Kanban runner handoff", () => {
     };
     const opencode = {
       createDetachedSession: jest.fn(async () => ({ id: "session-queued" })),
+      rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => {
         projectTasks = [blockedTask, doneTask];
         return {

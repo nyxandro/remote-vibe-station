@@ -51,12 +51,13 @@ describe("ServerParametersAccordion", () => {
     );
 
     fireEvent.click(screen.getByText("8. Параметры сервера"));
-    expect(screen.getByText("CPU cores: 8")).toBeTruthy();
-    expect(screen.getByText("RAM free: 4.00 GB")).toBeTruthy();
-    expect(screen.getByText("Disk free: 100.00 GB")).toBeTruthy();
-    expect(screen.getByText("Network RX: 117.74 MB")).toBeTruthy();
+    expect(screen.getByText("8 cores")).toBeTruthy();
+    expect(screen.getByText("Свободно:")).toBeTruthy();
+    expect(screen.getByText("4.00 GB")).toBeTruthy();
+    expect(screen.getByText("100.00 GB")).toBeTruthy();
+    expect(screen.getByText("117.74 MB")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Reload server metrics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Обновить метрики" }));
     expect(onReload).toHaveBeenCalledTimes(1);
   });
 });

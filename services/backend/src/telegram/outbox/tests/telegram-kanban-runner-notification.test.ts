@@ -26,8 +26,8 @@ const readOutboxItems = (): any[] => {
 };
 
 describe("Telegram kanban runner notifications", () => {
-  test("routes kanban.runner.finished with started action to all configured admins with chat bindings", () => {
-    /* Telegram should announce only successful runner steps, with a distinct verb for first claim vs continuation. */
+  test("routes kanban.runner.finished with started action and new-session note to all configured admins with chat bindings", () => {
+    /* Fresh runner-owned work should explicitly tell Telegram that the active thread changed to a new session. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-kanban-runner-started-"));
     const prev = process.cwd();
     process.chdir(tmp);
@@ -58,6 +58,7 @@ describe("Telegram kanban runner notifications", () => {
         ts: new Date().toISOString(),
         data: {
           action: "started",
+          startedNewSession: true,
           projectSlug: "auto-v-arendu",
           taskId: "task-123",
           taskTitle: "Diagnose and fix smoke E2E failure"
@@ -66,8 +67,59 @@ describe("Telegram kanban runner notifications", () => {
 
       const items = readOutboxItems();
       expect(items).toHaveLength(2);
-      expect(items[0].text).toBe("🤖 Kanban runner взял в работу задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
-      expect(items[1].text).toBe("🤖 Kanban runner взял в работу задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
+      expect(items[0].text).toBe(
+        "🤖 Kanban runner взял в работу задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.\n🆕 Начата новая сессия (проект: auto-v-arendu)."
+      );
+      expect(items[1].text).toBe(
+        "🤖 Kanban runner взял в работу задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.\n🆕 Начата новая сессия (проект: auto-v-arendu)."
+      );
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("routes kanban.runner.finished without new-session note when runner reused an existing thread", () => {
+    /* Telegram copy should stay precise and avoid claiming a new session when the runner simply resumed an existing one. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-kanban-runner-reused-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 111);
+
+      const outboxStore = new TelegramOutboxStore();
+      const outboxService = new TelegramOutboxService(streamStore, outboxStore);
+      const events = new EventsService(config as any);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, { finalizeAssistantReply: jest.fn() } as any, config as any);
+      bridge.onModuleInit();
+
+      events.publish({
+        type: "kanban.runner.finished",
+        ts: new Date().toISOString(),
+        data: {
+          action: "started",
+          startedNewSession: false,
+          projectSlug: "auto-v-arendu",
+          taskId: "task-124",
+          taskTitle: "Resume existing runner context"
+        }
+      });
+
+      const items = readOutboxItems();
+      expect(items).toHaveLength(1);
+      expect(items[0].text).toBe("🤖 Kanban runner взял в работу задачу \"Resume existing runner context\" в проекте auto-v-arendu.");
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });

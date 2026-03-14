@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Plus, RefreshCw, Search, X } from "lucide-react";
 
+import { useDraggableScroll } from "../hooks/use-draggable-scroll";
 import { CreateKanbanTaskPayload, UpdateKanbanTaskPayload } from "../hooks/use-kanban";
 import { KanbanTaskEditorModal, KanbanTaskEditorSubmit } from "./KanbanTaskEditorModal";
 import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
@@ -55,20 +56,7 @@ type Props = {
   onOpenGlobalBoard?: () => void;
 };
 
-const formatTaskTimestamp = (value: string): string => {
-  /* Compact timestamp keeps cards informative without turning them into log entries. */
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
-};
 
-const formatCriteriaSummary = (task: KanbanTask): string => {
-  /* Card summaries should show completion progress at a glance without opening the full editor. */
-  const doneCount = task.acceptanceCriteria.filter((criterion) => criterion.status === "done").length;
-  return `Criteria: ${doneCount}/${task.acceptanceCriteria.length} done`;
-};
 
 export const KanbanBoard = (props: Props) => {
   const [search, setSearch] = useState<string>("");
@@ -80,6 +68,8 @@ export const KanbanBoard = (props: Props) => {
   const [editingTask, setEditingTask] = useState<KanbanTask | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { ref: boardRef, isDragging: isBoardDragging, handlers: boardHandlers } = useDraggableScroll();
 
   useEffect(() => {
     /* Project-scoped boards follow the active project selection automatically. */
@@ -270,7 +260,11 @@ export const KanbanBoard = (props: Props) => {
       </div>
       {editorError ? <div className="alert">{editorError}</div> : null}
 
-      <div className="kanban-columns">
+      <div 
+        ref={boardRef}
+        {...boardHandlers}
+        className={isBoardDragging ? "kanban-columns kanban-columns-dragging" : "kanban-columns"}
+      >
         {COLUMNS.map((column) => (
           <section
             key={column.status}
@@ -295,12 +289,14 @@ export const KanbanBoard = (props: Props) => {
             }}
           >
             <header className="kanban-column-header">
-              <div>
+              <div className="kanban-column-header-content">
                 <div className="kanban-column-title">{column.label}</div>
-                <div className="kanban-column-subtitle">{column.emptyText}</div>
+                {tasksByStatus[column.status].length > 0 ? (
+                  <span className="kanban-column-count">
+                    {tasksByStatus[column.status].length > 99 ? "99+" : tasksByStatus[column.status].length}
+                  </span>
+                ) : <span className="kanban-column-count-empty" />}
               </div>
-
-              <span className="kanban-column-count">{tasksByStatus[column.status].length}</span>
             </header>
 
             <div className="kanban-column-body">
@@ -332,25 +328,22 @@ export const KanbanBoard = (props: Props) => {
                     setDropStatus(null);
                   }}
                 >
-                  <div className="kanban-card-topline">
-                    <span className={`kanban-priority-badge kanban-priority-${task.priority}`}>
-                      {PRIORITY_LABELS[task.priority]}
-                    </span>
-                    {props.scope === "global" ? (
-                      <span className="kanban-project-badge">{task.projectName}</span>
-                    ) : null}
-                  </div>
-
                   <div className="kanban-card-title">{task.title}</div>
 
-                  {task.description ? <div className="kanban-card-description">{task.description}</div> : null}
+                  <div className="kanban-card-topline">
+                    <div className="kanban-card-topline-left">
+                      <span className={`kanban-priority-badge kanban-priority-${task.priority}`}>
+                        {PRIORITY_LABELS[task.priority]}
+                      </span>
+                      {props.scope === "global" ? (
+                        <span className="kanban-project-badge">{task.projectName}</span>
+                      ) : null}
+                    </div>
 
-                  {task.acceptanceCriteria.length > 0 ? (
-                    <div className="kanban-card-meta">{formatCriteriaSummary(task)}</div>
-                  ) : null}
+                  </div>
 
                   {task.claimedBy ? (
-                    <div className="kanban-card-meta">Claimed by: {task.claimedBy}</div>
+                    <div className="kanban-card-meta">Claimed: {task.claimedBy}</div>
                   ) : null}
 
                   {task.blockedReason ? (
@@ -361,9 +354,25 @@ export const KanbanBoard = (props: Props) => {
                     <div className="kanban-card-note">Result: {task.resultSummary}</div>
                   ) : null}
 
-                  <div className="kanban-card-footer">
-                    <span className="kanban-card-updated">Updated {formatTaskTimestamp(task.updatedAt)}</span>
-                  </div>
+
+
+                  {task.acceptanceCriteria.length > 0 ? (
+                    <div className="kanban-card-progress">
+                      {task.acceptanceCriteria.map((criterion, index) => (
+                        <div
+                          key={criterion.id || index}
+                          className={
+                            criterion.status === "blocked"
+                              ? "kanban-card-progress-segment kanban-card-progress-segment-blocked"
+                              : criterion.status === "done"
+                              ? `kanban-card-progress-segment kanban-card-progress-segment-done kanban-card-progress-segment-done-${task.status}`
+                              : "kanban-card-progress-segment"
+                          }
+                          title={criterion.text}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>

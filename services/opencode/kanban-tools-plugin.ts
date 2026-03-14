@@ -2,7 +2,13 @@
  * @fileoverview OpenCode local plugin that exposes kanban task tools backed by the backend API.
  *
  * Exports:
- * - KanbanToolsPlugin - Registers task listing, refinement, criterion updates, claiming, and completion tools.
+ * - KanbanToolsPlugin - Registers task listing, creation, refinement, criterion updates, claiming, and completion tools.
+ *
+ * Key constructs:
+ * - CREATE_TASK_DESCRIPTION - LLM-facing contract for single-task creation payloads.
+ * - REFINE_TASK_DESCRIPTION - LLM-facing contract for safe task refinement payloads.
+ * - criterionInputSchema - Shared criterion schema that accepts string or structured checklist items.
+ * - formatTaskDetails - Renders stable task identifiers and checklist state for agent follow-up calls.
  */
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
@@ -13,6 +19,49 @@ const CRITERION_STATUS_OPTIONS = ["pending", "done", "blocked"] as const;
 const DEFAULT_AGENT_ID = "opencode-agent";
 const DEFAULT_LIMIT = 20;
 const DEFAULT_LEASE_MS = 2 * 60 * 60 * 1000;
+
+/* Tool descriptions are the first line of defense against malformed LLM-generated payload shapes. */
+const CREATE_TASK_DESCRIPTION = [
+  "Create exactly one kanban task per call.",
+  "Send a single JSON object, never an array and never { tasks: [...] }.",
+  "Required: title.",
+  "Optional: projectSlug, description, status, priority, acceptanceCriteria.",
+  "acceptanceCriteria may be plain strings or full criterion objects with text plus optional id/status/blockedReason.",
+  "Allowed status values: backlog, refinement, ready, queued, in_progress, blocked, done.",
+  "Allowed priority values: low, medium, high.",
+  "Omit projectSlug only when the current directory already maps to the project."
+].join(" ");
+
+const REFINE_TASK_DESCRIPTION = [
+  "Refine exactly one existing task.",
+  "Send taskId plus only the fields you want to change.",
+  "If you replace acceptanceCriteria, send the full list; plain strings are preferred, but criterion objects with id/text/status/blockedReason are accepted.",
+  "Use kanban_update_criterion to change the status of one existing criterion during execution instead of sending a partial criterion-status patch here.",
+  "Use this tool to tighten scope, move cards through refinement/ready/queue stages, and keep the checklist accurate before or during execution."
+].join(" ");
+
+type KanbanCriterionInput =
+  | string
+  | {
+      id?: string;
+      text: string;
+      status?: (typeof CRITERION_STATUS_OPTIONS)[number];
+      blockedReason?: string | null;
+    };
+
+/* Mirror the backend criterion contract so models can safely echo structured checklist items from prior tool output. */
+const criterionInputSchema = tool.schema.union([
+  tool.schema.string(),
+  tool.schema.object({
+    id: tool.schema.string().optional(),
+    text: tool.schema.string(),
+    status: tool.schema.enum(CRITERION_STATUS_OPTIONS).optional(),
+    blockedReason: tool.schema.string().nullable().optional()
+  })
+]);
+
+/* Reuse the same array schema across create/refine so the agent sees one stable input shape. */
+const criterionInputsSchema = tool.schema.array(criterionInputSchema).optional();
 
 type KanbanCriterion = {
   id: string;
@@ -247,14 +296,14 @@ export const KanbanToolsPlugin: Plugin = async () => {
       }),
 
       kanban_create_task: tool({
-        description: "Create a new kanban task with explicit acceptance criteria; new criteria start as pending.",
+        description: CREATE_TASK_DESCRIPTION,
         args: {
           projectSlug: tool.schema.string().optional(),
           title: tool.schema.string(),
           description: tool.schema.string().optional(),
           status: tool.schema.enum(STATUS_OPTIONS).optional(),
           priority: tool.schema.enum(PRIORITY_OPTIONS).optional(),
-          acceptanceCriteria: tool.schema.array(tool.schema.string()).optional()
+          acceptanceCriteria: criterionInputsSchema
         },
         async execute(args, context) {
           const task = await postJson<KanbanTask>("/api/kanban/agent/create", {
@@ -264,7 +313,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
             description: args.description ?? "",
             status: args.status ?? "backlog",
             priority: args.priority ?? "medium",
-            acceptanceCriteria: args.acceptanceCriteria ?? []
+            acceptanceCriteria: (args.acceptanceCriteria ?? []) as KanbanCriterionInput[]
           });
           if (!task) {
             throw new Error("Kanban backend returned an empty response for task creation");
@@ -274,8 +323,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
       }),
 
       kanban_refine_task: tool({
-        description:
-          "Refine an existing task: tighten scope, move backlog cards through refinement/ready/queue stages, and keep acceptance criteria accurate before or during execution.",
+        description: REFINE_TASK_DESCRIPTION,
         args: {
           agentId: tool.schema.string().optional(),
           taskId: tool.schema.string(),
@@ -283,7 +331,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
           description: tool.schema.string().optional(),
           status: tool.schema.enum(STATUS_OPTIONS).optional(),
           priority: tool.schema.enum(PRIORITY_OPTIONS).optional(),
-          acceptanceCriteria: tool.schema.array(tool.schema.string()).optional(),
+          acceptanceCriteria: criterionInputsSchema,
           resultSummary: tool.schema.string().optional(),
           blockedReason: tool.schema.string().optional()
         },

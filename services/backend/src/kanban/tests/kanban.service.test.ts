@@ -429,6 +429,60 @@ describe("KanbanService", () => {
     expect(completed.status).toBe("done");
   });
 
+  test("createTask preserves structured acceptance criteria payloads from the UI", async () => {
+    /* Mini App create flow sends checklist objects, so backend must persist them without collapsing the array to empty. */
+    const file = {
+      tasks: [] as MutableTask[]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "Alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    const created = await service.createTask({
+      projectSlug: "alpha",
+      title: "Preserve criteria",
+      description: "",
+      status: "backlog",
+      priority: "medium",
+      acceptanceCriteria: [{ id: "criterion-ui", text: "UI criterion survives", status: "pending" }]
+    });
+
+    expect(created.acceptanceCriteria).toEqual([
+      {
+        id: "criterion-ui",
+        text: "UI criterion survives",
+        status: "pending",
+        blockedReason: null
+      }
+    ]);
+    expect(file.tasks[0]?.acceptanceCriteria).toEqual(created.acceptanceCriteria);
+  });
+
   test("startTaskExecution atomically marks a queued task as session-owned in progress", async () => {
     /* Session-started work needs an explicit owner so runner automation does not launch a duplicate session. */
     const file = {

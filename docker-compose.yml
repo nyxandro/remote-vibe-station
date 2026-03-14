@@ -183,7 +183,7 @@ services:
       - cliproxy_auth:/root/.cli-proxy-api
       - cliproxy_logs:/CLIProxyAPI/logs
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8317/v1/models"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8317/v1/models"]
       interval: 10s
       timeout: 3s
       retries: 30

@@ -58,3 +58,22 @@ test("kanban plugin source exposes refinement and ready workflow stages", () => 
   assert.match(pluginSource, /"refinement"/);
   assert.match(pluginSource, /"ready"/);
 });
+
+test("kanban create tool description warns agents to send exactly one task payload", () => {
+  /* Batched or wrapper payloads cause local tool-schema failures before the backend ever sees the request. */
+  assert.match(pluginSource, /Create exactly one kanban task per call/);
+  assert.match(pluginSource, /never an array/);
+  assert.match(pluginSource, /never \{ tasks: \[\.\.\.] \}/);
+});
+
+test("kanban refine tool description redirects criterion status edits to the dedicated criterion tool", () => {
+  /* Agents should not overload refine with per-criterion status objects once execution has started. */
+  assert.match(pluginSource, /Use kanban_update_criterion to change the status of one existing criterion/);
+});
+
+test("kanban plugin source accepts both string and structured criterion inputs", () => {
+  /* The tool schema should tolerate criterion objects because prior tool output already exposes ids and statuses. */
+  assert.match(pluginSource, /tool\.schema\.union\(\[/);
+  assert.match(pluginSource, /tool\.schema\.object\(\{/);
+  assert.match(pluginSource, /blockedReason: tool\.schema\.string\(\)\.nullable\(\)\.optional\(\)/);
+});

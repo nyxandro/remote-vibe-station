@@ -10,6 +10,7 @@ import { CanActivate, ExecutionContext, Inject, UnauthorizedException } from "@n
 import { Request } from "express";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import { isUnsafeLocalRequestAllowed } from "./local-dev-auth";
 import { extractUserId, verifyInitData } from "./telegram-init-data";
 
 const INIT_DATA_HEADER = "x-telegram-init-data";
@@ -27,12 +28,8 @@ export class TelegramInitDataGuard implements CanActivate {
       * When PUBLIC_BASE_URL points to localhost, allow requests without initData.
       * This stays behind explicit config because these routes can still expose admin data.
       */
-    const isLocalPublicBaseUrl =
-      this.config.publicBaseUrl.startsWith("http://localhost") ||
-      this.config.publicBaseUrl.startsWith("http://127.0.0.1");
-
     if (!initData) {
-      if (isLocalPublicBaseUrl && this.config.allowUnsafeLocalAuth) {
+      if (isUnsafeLocalRequestAllowed({ request, config: this.config })) {
         return true;
       }
       throw new UnauthorizedException("Missing Telegram initData");

@@ -15,6 +15,7 @@ import {
   resolveOptionalKanbanProjectSlug,
   resolveRequiredKanbanProjectSlug
 } from "./kanban-project-utils";
+import { buildKanbanBoardUrl } from "./kanban-board-link";
 import { createWebToken } from "../security/web-token";
 import { ProjectsService } from "../projects/projects.service";
 import { normalizeCriterionInputs } from "./kanban-criteria";
@@ -386,6 +387,7 @@ export class KanbanService {
   public async createBoardLink(input: {
     adminId: number;
     projectSlug?: string | null;
+    localDevOrigin?: string | null;
     nowMs?: number;
   }): Promise<{ url: string }> {
     /* Shared board link reuses signed browser auth token instead of exposing internal agent endpoints. */
@@ -395,13 +397,15 @@ export class KanbanService {
       nowMs: input.nowMs
     });
 
-    /* Use the canonical trailing-slash Mini App URL so nginx/traefik do not strip board query params on redirect. */
-    const url = new URL("/miniapp/", this.config.publicBaseUrl);
-      url.searchParams.set("view", "kanban");
-    if (input.projectSlug) {
-      url.searchParams.set("project", requireKanbanProjectSlug(input.projectSlug));
-    }
-    return { url: `${url.toString()}#token=${token}` };
+    /* Local dev may intentionally override the public base so shared-board debugging stays on localhost. */
+    return {
+      url: buildKanbanBoardUrl({
+        token,
+        publicBaseUrl: this.config.publicBaseUrl,
+        localDevOrigin: input.localDevOrigin,
+        projectSlug: input.projectSlug
+      })
+    };
   }
 
   private async decorateTask(task: KanbanTaskRecord): Promise<KanbanTaskView> {

@@ -5,6 +5,7 @@
  * - OpenCodeSessionSummary - Normalized session row used by Telegram picker.
  * - listSessionsViaApi - Builds session list from OpenCode session and status endpoints.
  * - createSessionViaApi - Creates and stores active session id for directory.
+ * - rememberSelectedSessionInCache - Updates selected-session cache for already known session ids.
  * - selectSessionViaApi - Validates and sets selected active session id.
  * - isSessionBusyViaApi - Checks busy state for cached session.
  * - waitForSessionToSettleViaApi - Waits until a session leaves busy state after transport errors.
@@ -84,6 +85,31 @@ export const createSessionViaApi = async (input: {
 
   input.sessionIdsByDirectory.set(input.directory, response.id);
   return { id: response.id };
+};
+
+export const rememberSelectedSessionInCache = (input: {
+  directory: string;
+  sessionID: string;
+  sessionIdsByDirectory: Map<string, string>;
+}): void => {
+  /* Detached flows can promote a session to active context after they already created or validated that session elsewhere. */
+  const rawDirectory = String(input.directory ?? "");
+  if (!rawDirectory.trim()) {
+    throw new Error(
+      "APP_OPENCODE_DIRECTORY_REQUIRED: Cannot remember selected session because project directory is empty. Retry after selecting a valid project."
+    );
+  }
+
+  /* Empty ids must fail fast so Telegram never points to an implicit fallback thread. */
+  const sessionID = String(input.sessionID ?? "").trim();
+  if (!sessionID) {
+    throw new Error(
+      "APP_OPENCODE_SESSION_ID_REQUIRED: Cannot remember selected session because session id is empty. Retry after a new session is created."
+    );
+  }
+
+  /* Keep directory key semantics aligned with create/select helpers that store the original project root string. */
+  input.sessionIdsByDirectory.set(rawDirectory, sessionID);
 };
 
 export const selectSessionViaApi = async (input: {

@@ -13,6 +13,7 @@ import { CanActivate, ExecutionContext, Inject, UnauthorizedException } from "@n
 import { Request } from "express";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import { isUnsafeLocalRequestAllowed } from "./local-dev-auth";
 import { extractUserId, verifyInitData } from "./telegram-init-data";
 import { verifyWebToken } from "./web-token";
 
@@ -44,10 +45,7 @@ export class AppAuthGuard implements CanActivate {
      * - If multiple admins are configured, we allow browsing but identity-dependent
      *   endpoints will fail fast.
      */
-    const isLocalPublicBaseUrl =
-      this.config.publicBaseUrl.startsWith("http://localhost") ||
-      this.config.publicBaseUrl.startsWith("http://127.0.0.1");
-    if (isLocalPublicBaseUrl && this.config.allowUnsafeLocalAuth) {
+    if (isUnsafeLocalRequestAllowed({ request, config: this.config })) {
       if ((request as any).authAdminId == null && this.config.adminIds.length === 1) {
         (request as any).authAdminId = this.config.adminIds[0];
       }

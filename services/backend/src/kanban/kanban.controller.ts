@@ -5,10 +5,12 @@
  * - KanbanController - CRUD, workflow, and secure-link routes for Mini App/browser board access.
  */
 
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Query, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
+import { AppConfig, ConfigToken } from "../config/config.types";
 import { EventsService } from "../events/events.service";
+import { isUnsafeLocalRequestAllowed } from "../security/local-dev-auth";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { KanbanValidationError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
@@ -27,6 +29,7 @@ import {
 @UseGuards(AppAuthGuard)
 export class KanbanController {
   public constructor(
+    @Inject(ConfigToken) private readonly config: AppConfig,
     private readonly kanban: KanbanService,
     private readonly events: EventsService
   ) {}
@@ -36,12 +39,29 @@ export class KanbanController {
     return request as Request & { authAdminId?: number };
   }
 
+  private resolveLocalBoardOrigin(request: Request): string | null {
+    /* Local dev should open shared boards inside the same localhost origin instead of bouncing to the remote public domain. */
+    if (!isUnsafeLocalRequestAllowed({ request, config: this.config })) {
+      return null;
+    }
+
+    const host = typeof request.headers?.host === "string" ? request.headers.host.trim() : "";
+    if (!host) {
+      return null;
+    }
+
+    /* Browser-facing miniapp proxy already terminates local HTTP, so request.protocol is the right origin for local debugging. */
+    const protocol = request.protocol || "http";
+    return `${protocol}://${host}`;
+  }
+
   @Get("tasks")
   public async listTasks(
     @Query("projectSlug") projectSlug?: string,
     @Query("status") statusRaw?: string
   ) {
     /* Mini App reads project-scoped or global board state through one filtered list endpoint. */
+    console.log(`[KanbanController] listTasks: projectSlug=${projectSlug}, statusRaw=${statusRaw}`);
     try {
       return await this.kanban.listTasks({
         projectSlug: projectSlug ?? null,
@@ -65,6 +85,7 @@ export class KanbanController {
       }
   ) {
     /* Task creation stays explicit so cards are always tied to a concrete project + workflow state. */
+    console.log(`[KanbanController] createTask: body=${JSON.stringify(body)}`);
     if (typeof body?.projectSlug !== "string" || body.projectSlug.trim().length === 0) {
       throw new BadRequestException("projectSlug is required");
     }
@@ -103,6 +124,7 @@ export class KanbanController {
       }
   ) {
     /* Card editing reuses one patch route instead of many narrow field-specific endpoints. */
+    console.log(`[KanbanController] updateTask: id=${id}, body=${JSON.stringify(body)}`);
     try {
       const task = await this.kanban.updateTask(id, {
         ...(typeof body?.title === "string" ? { title: body.title } : {}),
@@ -194,7 +216,11 @@ export class KanbanController {
     }
 
     try {
-      return await this.kanban.createBoardLink({ adminId, projectSlug: body?.projectSlug ?? null });
+      return await this.kanban.createBoardLink({
+        adminId,
+        projectSlug: body?.projectSlug ?? null,
+        localDevOrigin: this.resolveLocalBoardOrigin(req)
+      });
     } catch (error) {
       this.rethrowAsHttp(error);
     }

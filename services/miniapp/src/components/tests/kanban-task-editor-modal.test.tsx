@@ -111,6 +111,41 @@ describe("KanbanTaskEditorModal", () => {
     });
   });
 
+  it("flushes the last drafted criterion on submit during task creation", () => {
+    /* Users often type the final criterion and click Create immediately, so submit must persist the pending draft too. */
+    const onSubmit = vi.fn();
+
+    render(
+      <KanbanTaskEditorModal
+        mode="create"
+        scope="project"
+        activeProjectSlug="alpha"
+        projects={[buildProject()]}
+        isSaving={false}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Prepare release" } });
+    fireEvent.change(screen.getByLabelText("Acceptance criterion"), {
+      target: { value: "Smoke test passes" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      projectSlug: "alpha",
+      title: "Prepare release",
+      description: "",
+      status: "backlog",
+      priority: "medium",
+      acceptanceCriteria: [{ id: expect.any(String), text: "Smoke test passes", status: "pending" }],
+      resultSummary: null,
+      blockedReason: null
+    });
+  });
+
   it("renders existing criteria as separate items, preserves status controls, and allows removing one", () => {
     /* Edit flow should expose persisted criteria as individual checklist rows instead of textarea lines. */
     const onSubmit = vi.fn();

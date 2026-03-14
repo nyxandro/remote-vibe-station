@@ -13,6 +13,7 @@ import {
   isSessionBusyViaApi,
   listSessionsViaApi,
   OpenCodeSessionSummary,
+  rememberSelectedSessionInCache,
   selectSessionViaApi,
   waitForSessionToSettleViaApi
 } from "./opencode-session-state";
@@ -511,6 +512,15 @@ export class OpenCodeClient {
       directory: input.directory,
       sessionID: input.sessionID,
       limit: input.limit,
+      sessionIdsByDirectory: this.sessionIdsByDirectory
+    });
+  }
+
+  public rememberSelectedSession(input: { directory: string; sessionID: string }): void {
+    /* Runner-created sessions may already be known, so Telegram can switch active context without reloading session list. */
+    rememberSelectedSessionInCache({
+      directory: input.directory,
+      sessionID: input.sessionID,
       sessionIdsByDirectory: this.sessionIdsByDirectory
     });
   }

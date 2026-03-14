@@ -29,6 +29,10 @@ const RUNNER_FETCH_SETTLE_TIMEOUT_MS = 30_000;
 
 type KanbanRunnerReason = "startup" | "task-event" | "runner-finished";
 type KanbanRunnerAction = "started" | "continued";
+type KanbanRunnerSession = {
+  sessionId: string;
+  startedNewSession: boolean;
+};
 
 export const KANBAN_RUNNER_AGENT_ID = "kanban-runner";
 
@@ -111,11 +115,12 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
 
       /* Keep the same session for the same task; queued work is claimed only after its dedicated session exists. */
       const taskId = task.id;
-      const sessionId = await this.ensureTaskSession({
+      const taskSession = await this.ensureTaskSession({
         taskId: task.id,
         directory,
         preferredSessionId: task.executionSessionId ?? null
       });
+      const sessionId = taskSession.sessionId;
       if (selection.action === "started") {
         try {
           task = await this.kanban.startTaskExecution({
@@ -133,6 +138,12 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           throw error;
         }
       }
+
+      /* Fresh runner sessions should become Telegram-visible immediately so follow-up messages land in the same thread. */
+      if (taskSession.startedNewSession) {
+        this.opencode.rememberSelectedSession({ directory, sessionID: sessionId });
+      }
+
       const prompt = buildKanbanRunnerPrompt(task);
 
       this.events.publish({
@@ -144,7 +155,8 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           projectSlug: input.projectSlug,
           taskId,
           taskTitle: task.title,
-          sessionId
+          sessionId,
+          startedNewSession: taskSession.startedNewSession
         }
       });
 
@@ -161,6 +173,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           taskId,
           taskTitle: refreshedTask?.title ?? task.title,
           sessionId: promptResult.sessionId,
+          startedNewSession: taskSession.startedNewSession,
           status: refreshedTask?.status ?? null,
           claimedBy: refreshedTask?.claimedBy ?? null,
           executionSource: refreshedTask?.executionSource ?? null,
@@ -291,21 +304,34 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     void this.runProject({ projectSlug, reason });
   }
 
-  private async ensureTaskSession(input: { taskId: string; directory: string; preferredSessionId?: string | null }): Promise<string> {
+  private async ensureTaskSession(input: {
+    taskId: string;
+    directory: string;
+    preferredSessionId?: string | null;
+  }): Promise<KanbanRunnerSession> {
     /* Reuse stored task sessions whenever possible so unfinished work keeps its accumulated context. */
     const preferredSessionId = input.preferredSessionId?.trim();
     if (preferredSessionId) {
-      return preferredSessionId;
+      return {
+        sessionId: preferredSessionId,
+        startedNewSession: false
+      };
     }
 
     const existingSessionId = await this.runnerSessions.getTaskSessionId(input.taskId);
     if (existingSessionId) {
-      return existingSessionId;
+      return {
+        sessionId: existingSessionId,
+        startedNewSession: false
+      };
     }
 
     const created = await this.opencode.createDetachedSession({ directory: input.directory });
     await this.runnerSessions.setTaskSessionId(input.taskId, created.id);
-    return created.id;
+    return {
+      sessionId: created.id,
+      startedNewSession: true
+    };
   }
 
   private async sendPromptWithSettle(input: {

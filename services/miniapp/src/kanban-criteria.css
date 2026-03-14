@@ -7,23 +7,24 @@
 .kanban-criteria-input-row {
   display: flex;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 8px;
-  border-radius: 16px;
-  border: 1px dashed var(--kanban-empty-border);
-  transition: all 0.2s;
+  background: var(--kanban-column-bg);
+  padding: 6px 6px 6px 16px;
+  border-radius: 18px;
+  border: 1px dashed var(--kanban-column-border);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  align-items: center;
 }
 
 .kanban-criteria-input-row:focus-within {
   border-style: solid;
-  border-color: var(--accent);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--kanban-column-border);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .kanban-criteria-add-button {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
   border-radius: 12px;
   padding: 0;
   display: flex;
@@ -32,6 +33,13 @@
   background: var(--accent);
   color: #ffffff;
   border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.kanban-criteria-add-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(27, 108, 255, 0.3);
 }
 
 .kanban-criteria-input-field {
@@ -68,17 +76,16 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--kanban-column-border);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .kanban-criteria-item:hover {
-  transform: translateX(4px);
   background: rgba(255, 255, 255, 0.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: var(--kanban-column-border);
 }
 
 .kanban-criteria-item-copy {
@@ -105,8 +112,7 @@
 
 .kanban-criteria-toggle-row:focus,
 .kanban-criteria-toggle-row:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent 30%);
-  outline-offset: 3px;
+  outline: none;
 }
 
 .kanban-criteria-checkbox-wrapper {
@@ -122,9 +128,10 @@
 }
 
 .kanban-criteria-item.is-done .kanban-criteria-checkbox-wrapper {
-  background: #3db07a;
-  border-color: #3db07a;
+  background: #00d2ff;
+  border-color: #00d2ff;
   color: #ffffff;
+  box-shadow: 0 0 10px rgba(0, 210, 255, 0.4);
 }
 
 .kanban-criteria-item.is-blocked .kanban-criteria-checkbox-wrapper {
@@ -138,6 +145,8 @@
   font-weight: 500;
   color: var(--kanban-title);
   transition: color 0.2s;
+  line-height: 1.4;
+  padding: 4px 0;
 }
 
 .kanban-criteria-item.is-done .kanban-criteria-item-text {
@@ -147,9 +156,10 @@
 
 .kanban-criteria-item-actions {
   display: flex;
-  gap: 6px;
-  opacity: 0;
+  gap: 4px;
+  opacity: 0.4;
   transition: opacity 0.2s;
+  margin-left: auto;
 }
 
 .kanban-criteria-item:hover .kanban-criteria-item-actions,
@@ -158,31 +168,39 @@
 }
 
 .kanban-criteria-action-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
   transition: all 0.2s;
+  padding: 0;
 }
 
 .kanban-criteria-action-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-normal);
+}
+
+html[data-theme="dark"] .kanban-criteria-action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .kanban-criteria-action-btn:focus,
 .kanban-criteria-action-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent 30%);
-  outline-offset: 2px;
+  outline: none;
   background: rgba(255, 255, 255, 0.1);
-  color: var(--text-normal);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .kanban-criteria-action-btn.is-active {
   color: #df6a5f;
+  background: rgba(223, 106, 95, 0.15);
 }
 
 @media (max-width: 640px) {

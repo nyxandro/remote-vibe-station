@@ -33,7 +33,9 @@ describe("KanbanStore", () => {
           createdAt: "2026-03-10T09:00:00.000Z",
           updatedAt: "2026-03-10T09:00:00.000Z",
           claimedBy: null,
-          leaseUntil: null
+          leaseUntil: null,
+          executionSource: null,
+          executionSessionId: null
         });
       });
 
@@ -69,7 +71,9 @@ describe("KanbanStore", () => {
               createdAt: "2026-03-10T09:00:00.000Z",
               updatedAt: "2026-03-10T09:00:00.000Z",
               claimedBy: null,
-              leaseUntil: null
+              leaseUntil: null,
+              executionSource: null,
+              executionSessionId: null
             }
           ]
         }),

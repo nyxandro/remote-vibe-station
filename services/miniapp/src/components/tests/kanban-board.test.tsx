@@ -87,6 +87,42 @@ describe("KanbanBoard", () => {
     });
   });
 
+  it("persists the drafted criterion when creating a new task without clicking add first", () => {
+    /* Board-level create flow should not drop the last typed criterion when the user submits right away. */
+    const onCreateTask = vi.fn();
+
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={onCreateTask}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create new task" }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Prepare queue" } });
+    fireEvent.change(screen.getByLabelText("Acceptance criterion"), {
+      target: { value: "Queue entry has clear scope" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    expect(onCreateTask).toHaveBeenCalledWith({
+      projectSlug: "alpha",
+      title: "Prepare queue",
+      description: "",
+      status: "backlog",
+      priority: "medium",
+      acceptanceCriteria: [{ id: expect.any(String), text: "Queue entry has clear scope", status: "pending" }]
+    });
+  });
+
   it("renders all workflow columns including agent execution states", () => {
     /* Human and agent users need one board that separates raw ideas, refinement, readiness, queueing, and execution. */
     render(
@@ -112,7 +148,9 @@ describe("KanbanBoard", () => {
     expect(screen.getByText("Blocked")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Discuss backlog item")).toBeTruthy();
-    expect(screen.getByText("Criteria: 1/2 done")).toBeTruthy();
+    expect(screen.getByTitle("One").className).toContain("kanban-card-progress-segment-done");
+    expect(screen.getByTitle("One").className).toContain("kanban-card-progress-segment-done-backlog");
+    expect(screen.getByTitle("Two").className).toBe("kanban-card-progress-segment");
   });
 
   it("opens task editor by clicking the whole card and hides the legacy Edit button", () => {
@@ -138,5 +176,39 @@ describe("KanbanBoard", () => {
 
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(screen.getByDisplayValue("Discuss backlog item")).toBeTruthy();
+  });
+
+  it("renders criterion progress segments with per-status neon classes", () => {
+    /* Dense cards should expose criterion health at a glance, so each segment gets a status-specific color channel. */
+    const neonTask: KanbanTask = {
+      ...buildTask(),
+      id: "task-neon",
+      title: "Criterion neon card",
+      acceptanceCriteria: [
+        buildCriterion({ id: "criterion-pending", status: "pending", text: "Criterion pending" }),
+        buildCriterion({ id: "criterion-done", status: "done", text: "Criterion done" }),
+        buildCriterion({ id: "criterion-blocked", status: "blocked", text: "Criterion blocked" })
+      ]
+    };
+
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[neonTask]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTitle("Criterion pending").className).toBe("kanban-card-progress-segment");
+    expect(screen.getByTitle("Criterion blocked").className).toContain("kanban-card-progress-segment-blocked");
+    expect(screen.getByTitle("Criterion done").className).toContain("kanban-card-progress-segment-done");
+    expect(screen.getByTitle("Criterion done").className).toContain("kanban-card-progress-segment-done-backlog");
   });
 });

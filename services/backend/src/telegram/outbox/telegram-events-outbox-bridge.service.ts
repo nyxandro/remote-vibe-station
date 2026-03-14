@@ -146,12 +146,20 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
       const taskTitle = String((event.data as any)?.taskTitle ?? "").trim();
       const action = String((event.data as any)?.action ?? "continued").trim();
+      const startedNewSession = (event.data as any)?.startedNewSession === true;
       if (!projectSlug || !taskTitle) {
         return;
       }
 
       const verb = action === "started" ? "взял в работу" : "продолжил";
-      this.enqueueForBoundAdmins(`🤖 Kanban runner ${verb} задачу "${taskTitle}" в проекте ${projectSlug}.`);
+      const lines = [`🤖 Kanban runner ${verb} задачу "${taskTitle}" в проекте ${projectSlug}.`];
+
+      /* Fresh runner sessions should be explicit so Telegram users understand why the active thread just changed. */
+      if (startedNewSession) {
+        lines.push(`🆕 Начата новая сессия (проект: ${projectSlug}).`);
+      }
+
+      this.enqueueForBoundAdmins(lines.join("\n"));
       return;
     }
 

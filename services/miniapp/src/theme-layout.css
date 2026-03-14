@@ -179,18 +179,26 @@
 .server-metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
 /* Card styling mirrors other settings surfaces for visual consistency. */
 .server-metrics-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #ffffff;
-  padding: 10px;
-  display: grid;
-  gap: 4px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   font-size: 0.8125rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.server-metrics-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
 /* Compact section title separates metric categories inside each card. */
@@ -199,7 +207,112 @@
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Metric value container helps align label and number. */
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.metric-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.metric-value {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* Progress bar system for RAM and Disk usage. */
+.metric-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.metric-progress-bar {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.metric-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--accent);
+}
+
+/* Visual status colors for usage levels. */
+.metric-progress-fill.success { background: #10b981; }
+.metric-progress-fill.warning { background: #f59e0b; }
+.metric-progress-fill.error { background: #ef4444; }
+
+/* CPU Load mini chart styling. */
+.cpu-load-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 48px;
+  padding: 4px 0;
+  margin-top: 4px;
+}
+
+.cpu-load-bar-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.cpu-load-bar-track {
+  width: 100%;
+  height: 100%;
+  background: #f1f5f9;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+
+.cpu-load-bar-fill {
+  width: 100%;
+  border-radius: 2px;
+  transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cpu-load-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* Status dots for active indicators. */
+.metric-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.metric-status-dot.active {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
 }
 
 .settings-editor-card {

@@ -57,9 +57,9 @@ export const KanbanProjectTab = (props: Props) => {
         isSaving={isSaving}
         themeMode={props.themeMode}
         onRefresh={() => void reloadTasks()}
-        onCreateTask={(payload) => void createTask(payload)}
-        onUpdateTask={(taskId, patch) => void updateTask(taskId, patch)}
-        onMoveTask={(taskId, status) => void moveTask(taskId, status)}
+        onCreateTask={(payload) => createTask(payload)}
+        onUpdateTask={(taskId, patch) => updateTask(taskId, patch)}
+        onMoveTask={(taskId, status) => moveTask(taskId, status)}
         onOpenGlobalBoard={() => {
           void (async () => {
             try {
