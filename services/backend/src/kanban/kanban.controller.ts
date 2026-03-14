@@ -11,7 +11,15 @@ import { Request } from "express";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { KanbanValidationError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
-import { KANBAN_PRIORITIES, KANBAN_STATUSES, KanbanPriority, KanbanStatus } from "./kanban.types";
+import {
+  KANBAN_CRITERION_STATUSES,
+  KANBAN_PRIORITIES,
+  KANBAN_STATUSES,
+  KanbanCriterionInput,
+  KanbanCriterionStatus,
+  KanbanPriority,
+  KanbanStatus
+} from "./kanban.types";
 
 @Controller("api/kanban")
 @UseGuards(AppAuthGuard)
@@ -42,14 +50,14 @@ export class KanbanController {
   @Post("tasks")
   public async createTask(
     @Body()
-    body: {
-      projectSlug?: string;
-      title?: string;
-      description?: string;
-      status?: KanbanStatus;
-      priority?: KanbanPriority;
-      acceptanceCriteria?: string[];
-    }
+      body: {
+        projectSlug?: string;
+        title?: string;
+        description?: string;
+        status?: KanbanStatus;
+        priority?: KanbanPriority;
+        acceptanceCriteria?: KanbanCriterionInput[];
+      }
   ) {
     /* Task creation stays explicit so cards are always tied to a concrete project + workflow state. */
     if (typeof body?.projectSlug !== "string" || body.projectSlug.trim().length === 0) {
@@ -77,15 +85,15 @@ export class KanbanController {
   public async updateTask(
     @Param("id") id: string,
     @Body()
-    body: {
-      title?: string;
-      description?: string;
-      status?: KanbanStatus;
-      priority?: KanbanPriority;
-      acceptanceCriteria?: string[];
-      resultSummary?: string | null;
-      blockedReason?: string | null;
-    }
+      body: {
+        title?: string;
+        description?: string;
+        status?: KanbanStatus;
+        priority?: KanbanPriority;
+        acceptanceCriteria?: KanbanCriterionInput[];
+        resultSummary?: string | null;
+        blockedReason?: string | null;
+      }
   ) {
     /* Card editing reuses one patch route instead of many narrow field-specific endpoints. */
     try {
@@ -99,6 +107,25 @@ export class KanbanController {
           : {}),
         ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
         ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
+      });
+    } catch (error) {
+      this.rethrowAsHttp(error);
+    }
+  }
+
+  @Post("tasks/:taskId/criteria/:criterionId/update")
+  public async updateCriterion(
+    @Param("taskId") taskId: string,
+    @Param("criterionId") criterionId: string,
+    @Body() body: { status: KanbanCriterionStatus; blockedReason?: string | null }
+  ) {
+    /* Criterion-level progress updates let humans and automation share the same completion checklist. */
+    try {
+      return await this.kanban.updateCriterion({
+        taskId,
+        criterionId,
+        status: this.parseRequiredCriterionStatus(body?.status),
+        blockedReason: body?.blockedReason
       });
     } catch (error) {
       this.rethrowAsHttp(error);
@@ -178,6 +205,14 @@ export class KanbanController {
       throw new KanbanValidationError("Valid kanban priority is required");
     }
     return value as KanbanPriority;
+  }
+
+  private parseRequiredCriterionStatus(value?: string): KanbanCriterionStatus {
+    /* Criterion state changes stay explicit so task completion rules remain deterministic. */
+    if (!value || !KANBAN_CRITERION_STATUSES.includes(value as KanbanCriterionStatus)) {
+      throw new KanbanValidationError("Valid kanban criterion status is required");
+    }
+    return value as KanbanCriterionStatus;
   }
 
   private rethrowAsHttp(error: unknown): never {

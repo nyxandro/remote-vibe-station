@@ -7,6 +7,13 @@
 
 import { KanbanService } from "../kanban.service";
 
+type MutableCriterion = {
+  id: string;
+  text: string;
+  status: "pending" | "done" | "blocked";
+  blockedReason?: string | null;
+};
+
 type MutableTask = {
   id: string;
   projectSlug: string;
@@ -14,7 +21,7 @@ type MutableTask = {
   description: string;
   status: "backlog" | "queued" | "in_progress" | "blocked" | "done";
   priority: "low" | "medium" | "high";
-  acceptanceCriteria: string[];
+  acceptanceCriteria: MutableCriterion[];
   resultSummary: string | null;
   blockedReason: string | null;
   createdAt: string;
@@ -22,6 +29,14 @@ type MutableTask = {
   claimedBy: string | null;
   leaseUntil: string | null;
 };
+
+const createCriterion = (overrides?: Partial<MutableCriterion>): MutableCriterion => ({
+  id: "criterion-1",
+  text: "Criterion",
+  status: "pending",
+  blockedReason: null,
+  ...overrides
+});
 
 const createTask = (overrides?: Partial<MutableTask>): MutableTask => ({
   id: "task-1",
@@ -100,6 +115,168 @@ describe("KanbanService", () => {
     expect(claimed?.leaseUntil).toBeTruthy();
     expect(file.tasks.find((task) => task.id === "alpha-high")?.status).toBe("in_progress");
     expect(file.tasks.find((task) => task.id === "beta-high")?.status).toBe("queued");
+  });
+
+  test("claimNextTask rejects a second queued claim when the same agent already has active work", async () => {
+    /* One agent should keep a single active task so queue claims cannot silently fragment focus. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "active-task",
+          status: "in_progress",
+          claimedBy: "opencode-agent",
+          leaseUntil: "2026-03-10T12:00:00.000Z"
+        }),
+        createTask({
+          id: "queued-task",
+          status: "queued",
+          priority: "high"
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    await expect(
+      service.claimNextTask({
+        agentId: "opencode-agent",
+        projectSlug: "alpha",
+        nowMs: Date.parse("2026-03-10T10:00:00.000Z")
+      })
+    ).rejects.toThrow(
+      'Cannot claim the next queued task in project "alpha" because agent "opencode-agent" already has active task "active-task" in progress. Complete or block that task before claiming another one.'
+    );
+    expect(file.tasks.find((task) => task.id === "queued-task")?.status).toBe("queued");
+    expect(file.tasks.find((task) => task.id === "queued-task")?.claimedBy).toBeNull();
+  });
+
+  test("completeTask rejects completion while at least one acceptance criterion is still pending", async () => {
+    /* Done must remain impossible until every explicit criterion has been verified as complete. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "task-pending-criteria",
+          status: "in_progress",
+          acceptanceCriteria: [
+            createCriterion({ id: "criterion-done", status: "done", text: "API implemented" }),
+            createCriterion({ id: "criterion-pending", status: "pending", text: "Tests updated" })
+          ]
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    await expect(
+      service.completeTask({ taskId: "task-pending-criteria", resultSummary: "Done" })
+    ).rejects.toThrow("Task cannot be marked done until every acceptance criterion is done");
+  });
+
+  test("updateCriterion blocks the whole task when one criterion becomes blocked", async () => {
+    /* Any blocked criterion should stop the task so the runner can move on to other queued work safely. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "task-with-blocker",
+          status: "in_progress",
+          acceptanceCriteria: [
+            createCriterion({ id: "criterion-open", status: "pending", text: "Need deployment access" })
+          ]
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    const updated = await service.updateCriterion({
+      taskId: "task-with-blocker",
+      criterionId: "criterion-open",
+      status: "blocked",
+      blockedReason: "Production credentials are missing"
+    });
+
+    expect(updated.status).toBe("blocked");
+    expect(updated.blockedReason).toBe("Production credentials are missing");
+    expect(updated.acceptanceCriteria[0]?.status).toBe("blocked");
+    expect(updated.acceptanceCriteria[0]?.blockedReason).toBe("Production credentials are missing");
   });
 
   test("listTasks releases expired in-progress leases back to queued", async () => {
@@ -221,12 +398,24 @@ describe("KanbanService", () => {
     });
     const refined = await service.updateTask(created.id, {
       description: "Verify docs, code, and examples",
-      acceptanceCriteria: ["README matches code", "Examples still work"]
+      acceptanceCriteria: [
+        {
+          id: created.acceptanceCriteria[0]?.id,
+          text: "README matches code",
+          status: "done"
+        },
+        {
+          text: "Examples still work",
+          status: "pending"
+        }
+      ]
     });
-    const completed = await service.completeTask({
+    await service.updateCriterion({
       taskId: created.id,
-      resultSummary: "Done"
+      criterionId: refined.acceptanceCriteria[1]?.id ?? "",
+      status: "done"
     });
+    const completed = await service.completeTask({ taskId: created.id, resultSummary: "Done" });
     const listed = await service.listTasks({ projectSlug: "alpha" });
 
     expect(claimed?.id).toBe(created.id);

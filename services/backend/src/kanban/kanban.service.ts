@@ -1,8 +1,8 @@
 /**
- * @fileoverview Domain service for kanban task CRUD, claiming, and share links.
+ * @fileoverview Domain service for kanban task CRUD, criterion tracking, claiming, and share links.
  *
  * Exports:
- * - KanbanService - Orchestrates project-aware board operations for UI and agent tools.
+ * - KanbanService - Orchestrates project-aware board operations for UI, agents, and automation runner.
  */
 
 import * as crypto from "node:crypto";
@@ -13,8 +13,14 @@ import { Inject, Injectable } from "@nestjs/common";
 import { AppConfig, ConfigToken } from "../config/config.types";
 import { createWebToken } from "../security/web-token";
 import { ProjectsService } from "../projects/projects.service";
+import { normalizeCriterionInputs } from "./kanban-criteria";
 import { KanbanValidationError } from "./kanban.errors";
 import { KanbanStore } from "./kanban.store";
+import {
+  compareKanbanTasks,
+  releaseExpiredKanbanLeases,
+  resolveKanbanTaskStatus
+} from "./kanban-task-state";
 import {
   KANBAN_PRIORITIES,
   KANBAN_STATUSES,
@@ -23,16 +29,11 @@ import {
   KanbanStatus,
   KanbanTaskRecord,
   KanbanTaskView,
+  UpdateKanbanCriterionInput,
   UpdateKanbanTaskInput
 } from "./kanban.types";
 
 const DEFAULT_CLAIM_LEASE_MS = 2 * 60 * 60 * 1000;
-
-const PRIORITY_WEIGHT: Record<KanbanPriority, number> = {
-  low: 1,
-  medium: 2,
-  high: 3
-};
 
 @Injectable()
 export class KanbanService {
@@ -61,12 +62,12 @@ export class KanbanService {
     const limit = this.normalizeOptionalLimit(input?.limit);
 
     return this.store.transact((draft) => {
-      this.releaseExpiredLeases(draft.tasks, nowMs);
+      releaseExpiredKanbanLeases(draft.tasks, nowMs);
 
       const filtered = draft.tasks
         .filter((task) => (resolvedProjectSlug ? task.projectSlug === resolvedProjectSlug : true))
         .filter((task) => (status ? task.status === status : true))
-        .sort((left, right) => this.compareTasks(left, right));
+        .sort(compareKanbanTasks);
 
       const sliced = typeof limit === "number" ? filtered.slice(0, limit) : filtered;
       return this.decorateTasks(sliced, projects);
@@ -98,13 +99,18 @@ export class KanbanService {
   public async createTask(input: CreateKanbanTaskInput): Promise<KanbanTaskView> {
     /* New tasks always validate the target project explicitly to avoid orphaned cards. */
     const projectSlug = this.requireProjectSlug(input.projectSlug);
-    await this.requireExistingProject(projectSlug);
+    this.requireExistingProject(projectSlug);
 
     const title = this.requireTitle(input.title);
     const description = this.normalizeText(input.description);
-    const status = this.requireStatus(input.status);
     const priority = this.requirePriority(input.priority);
-    const acceptanceCriteria = this.normalizeCriteria(input.acceptanceCriteria);
+    const acceptanceCriteria = normalizeCriterionInputs(input.acceptanceCriteria, {
+      createId: () => crypto.randomUUID()
+    });
+    const status = resolveKanbanTaskStatus({
+      requestedStatus: this.requireStatus(input.status),
+      acceptanceCriteria
+    });
     const nowIso = new Date().toISOString();
 
     const created = await this.store.transact((draft) => {
@@ -133,25 +139,30 @@ export class KanbanService {
 
   public async updateTask(taskId: string, patch: UpdateKanbanTaskInput): Promise<KanbanTaskView> {
     /* Backlog refinement and manual edits both flow through the same explicit patch surface. */
-    const normalizedPatch = this.normalizeUpdatePatch(patch);
-
     const updated = await this.store.transact((draft) => {
       const task = this.findTaskOrThrow(draft.tasks, taskId);
-      const nextStatus = normalizedPatch.status ?? task.status;
+      const nextCriteria = Array.isArray(patch.acceptanceCriteria)
+        ? normalizeCriterionInputs(patch.acceptanceCriteria, {
+            existingCriteria: task.acceptanceCriteria,
+            createId: () => crypto.randomUUID()
+          })
+        : task.acceptanceCriteria;
+      const nextStatus = resolveKanbanTaskStatus({
+        requestedStatus: patch.status ? this.requireStatus(patch.status) : task.status,
+        acceptanceCriteria: nextCriteria
+      });
 
-      if (typeof normalizedPatch.title === "string") {
-        task.title = normalizedPatch.title;
+      if (typeof patch.title === "string") {
+        task.title = this.requireTitle(patch.title);
       }
-      if (typeof normalizedPatch.description === "string") {
-        task.description = normalizedPatch.description;
+      if (typeof patch.description === "string") {
+        task.description = this.normalizeText(patch.description);
       }
-      if (typeof normalizedPatch.priority === "string") {
-        task.priority = normalizedPatch.priority;
-      }
-      if (Array.isArray(normalizedPatch.acceptanceCriteria)) {
-        task.acceptanceCriteria = normalizedPatch.acceptanceCriteria;
+      if (typeof patch.priority === "string") {
+        task.priority = this.requirePriority(patch.priority);
       }
 
+      task.acceptanceCriteria = nextCriteria;
       task.status = nextStatus;
 
       /* Clear agent lease whenever humans move a card out of active execution. */
@@ -161,8 +172,54 @@ export class KanbanService {
       }
 
       /* Keep status-specific notes explicit so stale blocker/result text does not leak into other phases. */
-      task.resultSummary = nextStatus === "done" ? normalizedPatch.resultSummary ?? null : null;
-      task.blockedReason = nextStatus === "blocked" ? normalizedPatch.blockedReason ?? null : null;
+      task.resultSummary =
+        nextStatus === "done"
+          ? patch.resultSummary !== undefined
+            ? this.normalizeNullableText(patch.resultSummary)
+            : task.resultSummary
+          : null;
+      task.blockedReason =
+        nextStatus === "blocked"
+          ? patch.blockedReason !== undefined
+            ? this.normalizeNullableText(patch.blockedReason)
+            : task.blockedReason
+          : null;
+      task.updatedAt = new Date().toISOString();
+      return task;
+    });
+
+    return this.decorateTask(updated);
+  }
+
+  public async updateCriterion(input: {
+    taskId: string;
+    criterionId: string;
+    status: UpdateKanbanCriterionInput["status"];
+    blockedReason?: string | null;
+  }): Promise<KanbanTaskView> {
+    /* Criterion updates drive resumable automation, so they are first-class mutations instead of free-form notes. */
+    const updated = await this.store.transact((draft) => {
+      const task = this.findTaskOrThrow(draft.tasks, input.taskId);
+      const criterion = task.acceptanceCriteria.find((item) => item.id === this.requireCriterionId(input.criterionId));
+      if (!criterion) {
+        throw new KanbanValidationError(`Kanban criterion not found: ${input.criterionId}`);
+      }
+
+      const nextStatus = this.requireCriterionStatus(input.status);
+      if (task.status === "done" && nextStatus !== "done") {
+        throw new KanbanValidationError("Done tasks must be reopened before changing criterion status");
+      }
+
+      criterion.status = nextStatus;
+      criterion.blockedReason = nextStatus === "blocked" ? this.normalizeNullableText(input.blockedReason) : null;
+
+      if (nextStatus === "blocked") {
+        task.status = "blocked";
+        task.blockedReason = this.normalizeNullableText(input.blockedReason) ?? task.blockedReason;
+        task.claimedBy = null;
+        task.leaseUntil = null;
+      }
+
       task.updatedAt = new Date().toISOString();
       return task;
     });
@@ -218,12 +275,21 @@ export class KanbanService {
     const leaseUntil = new Date(nowMs + leaseMs).toISOString();
 
     const claimed = await this.store.transact((draft) => {
-      this.releaseExpiredLeases(draft.tasks, nowMs);
+      releaseExpiredKanbanLeases(draft.tasks, nowMs);
+
+      /* Refuse a second claim while the same agent still owns active work in the current project. */
+      const activeTask = draft.tasks.find(
+        (task) => task.projectSlug === projectSlug && task.status === "in_progress" && task.claimedBy === agentId
+      );
+      if (activeTask) {
+        throw new KanbanValidationError(
+          `Cannot claim the next queued task in project "${projectSlug}" because agent "${agentId}" already has active task "${activeTask.id}" in progress. Complete or block that task before claiming another one.`
+        );
+      }
 
       const next = draft.tasks
         .filter((task) => task.projectSlug === projectSlug && task.status === "queued")
-        .sort((left, right) => this.compareTasks(left, right))[0] ?? null;
-
+        .sort(compareKanbanTasks)[0] ?? null;
       if (!next) {
         return null;
       }
@@ -277,45 +343,6 @@ export class KanbanService {
     }));
   }
 
-  private compareTasks(left: KanbanTaskRecord, right: KanbanTaskRecord): number {
-    /* Keep visual board order identical to claim order so humans understand what the agent will pick next. */
-    const priorityDelta = PRIORITY_WEIGHT[right.priority] - PRIORITY_WEIGHT[left.priority];
-    if (priorityDelta !== 0) {
-      return priorityDelta;
-    }
-
-    const updatedDelta = Date.parse(left.updatedAt) - Date.parse(right.updatedAt);
-    if (updatedDelta !== 0) {
-      return updatedDelta;
-    }
-
-    const createdDelta = Date.parse(left.createdAt) - Date.parse(right.createdAt);
-    if (createdDelta !== 0) {
-      return createdDelta;
-    }
-
-    return left.title.localeCompare(right.title);
-  }
-
-  private releaseExpiredLeases(tasks: KanbanTaskRecord[], nowMs: number): void {
-    /* Expired in-progress cards are returned to queued so another agent can continue the work. */
-    for (const task of tasks) {
-      if (task.status !== "in_progress" || !task.leaseUntil) {
-        continue;
-      }
-
-      const leaseUntilMs = Date.parse(task.leaseUntil);
-      if (!Number.isFinite(leaseUntilMs) || leaseUntilMs > nowMs) {
-        continue;
-      }
-
-      task.status = "queued";
-      task.claimedBy = null;
-      task.leaseUntil = null;
-      task.updatedAt = new Date(nowMs).toISOString();
-    }
-  }
-
   private async resolveOptionalProjectSlug(input: {
     projectSlug?: string | null;
     currentDirectory?: string | null;
@@ -335,9 +362,7 @@ export class KanbanService {
     const resolvedDirectory = path.resolve(currentDirectory);
     const matching = projects
       .map((project) => ({ project, rootPath: path.resolve(project.rootPath) }))
-      .filter(({ rootPath }) => {
-        return resolvedDirectory === rootPath || resolvedDirectory.startsWith(`${rootPath}${path.sep}`);
-      })
+      .filter(({ rootPath }) => resolvedDirectory === rootPath || resolvedDirectory.startsWith(`${rootPath}${path.sep}`))
       .sort((left, right) => right.rootPath.length - left.rootPath.length)[0];
 
     return matching?.project.slug ?? null;
@@ -401,38 +426,21 @@ export class KanbanService {
     return normalized;
   }
 
-  private normalizeCriteria(criteria: string[] | undefined): string[] {
-    /* Acceptance criteria use trimmed non-empty lines so discussion output stays predictable in UI and tools. */
-    if (!Array.isArray(criteria)) {
-      return [];
+  private requireCriterionId(value: string): string {
+    /* Criterion ids stay explicit so agents can update checklist progress deterministically across sessions. */
+    const normalized = this.normalizeText(value);
+    if (!normalized) {
+      throw new KanbanValidationError("Criterion id is required");
     }
-
-    return criteria
-      .map((item) => this.normalizeText(item))
-      .filter((item) => item.length > 0);
+    return normalized;
   }
 
-  private normalizeUpdatePatch(patch: UpdateKanbanTaskInput): UpdateKanbanTaskInput {
-    /* Patch normalization keeps controller validation minimal while preserving fail-fast semantics here. */
-    return {
-      ...(typeof patch.title === "string" ? { title: this.requireTitle(patch.title) } : {}),
-      ...(typeof patch.description === "string"
-        ? { description: this.normalizeText(patch.description) }
-        : {}),
-      ...(typeof patch.status === "string" ? { status: this.requireStatus(patch.status) } : {}),
-      ...(typeof patch.priority === "string"
-        ? { priority: this.requirePriority(patch.priority) }
-        : {}),
-      ...(Array.isArray(patch.acceptanceCriteria)
-        ? { acceptanceCriteria: this.normalizeCriteria(patch.acceptanceCriteria) }
-        : {}),
-      ...(patch.resultSummary !== undefined
-        ? { resultSummary: this.normalizeNullableText(patch.resultSummary) }
-        : {}),
-      ...(patch.blockedReason !== undefined
-        ? { blockedReason: this.normalizeNullableText(patch.blockedReason) }
-        : {})
-    };
+  private requireCriterionStatus(value: UpdateKanbanCriterionInput["status"]): UpdateKanbanCriterionInput["status"] {
+    /* Criterion statuses are intentionally tiny so completion logic stays binary and predictable. */
+    if (!["pending", "done", "blocked"].includes(value)) {
+      throw new KanbanValidationError(`Unsupported kanban criterion status: ${value}`);
+    }
+    return value;
   }
 
   private requireStatus(value: KanbanStatus): KanbanStatus {
@@ -445,10 +453,7 @@ export class KanbanService {
 
   private normalizeOptionalStatus(value: KanbanStatus | null): KanbanStatus | null {
     /* Optional filters keep null semantics explicit for list endpoints. */
-    if (!value) {
-      return null;
-    }
-    return this.requireStatus(value);
+    return value ? this.requireStatus(value) : null;
   }
 
   private requirePriority(value: KanbanPriority): KanbanPriority {

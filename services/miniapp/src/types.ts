@@ -50,6 +50,14 @@ export type KanbanStatus = "backlog" | "queued" | "in_progress" | "blocked" | "d
 
 export type KanbanPriority = "low" | "medium" | "high";
 
+export type KanbanCriterionStatus = "pending" | "done" | "blocked";
+
+export type KanbanCriterion = {
+  id: string;
+  text: string;
+  status: KanbanCriterionStatus;
+};
+
 export type KanbanTask = {
   id: string;
   projectSlug: string;
@@ -58,7 +66,7 @@ export type KanbanTask = {
   description: string;
   status: KanbanStatus;
   priority: KanbanPriority;
-  acceptanceCriteria: string[];
+  acceptanceCriteria: KanbanCriterion[];
   resultSummary: string | null;
   blockedReason: string | null;
   createdAt: string;

@@ -44,4 +44,47 @@ describe("KanbanStore", () => {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  test("read normalizes legacy string acceptance criteria into structured checklist records", async () => {
+    /* Existing stores should upgrade in memory so old kanban files stay readable after checklist status rollout. */
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-kanban-store-"));
+    const storePath = path.join(tempRoot, "data", "kanban.tasks.json");
+
+    try {
+      fs.mkdirSync(path.dirname(storePath), { recursive: true });
+      fs.writeFileSync(
+        storePath,
+        JSON.stringify({
+          tasks: [
+            {
+              id: "task-legacy",
+              projectSlug: "alpha",
+              title: "Legacy task",
+              description: "",
+              status: "backlog",
+              priority: "medium",
+              acceptanceCriteria: ["Docs updated", "Tests pass"],
+              resultSummary: null,
+              blockedReason: null,
+              createdAt: "2026-03-10T09:00:00.000Z",
+              updatedAt: "2026-03-10T09:00:00.000Z",
+              claimedBy: null,
+              leaseUntil: null
+            }
+          ]
+        }),
+        "utf-8"
+      );
+
+      const store = new KanbanStore(storePath);
+      const saved = await store.read();
+
+      expect(saved.tasks[0]?.acceptanceCriteria).toEqual([
+        expect.objectContaining({ text: "Docs updated", status: "pending" }),
+        expect.objectContaining({ text: "Tests pass", status: "pending" })
+      ]);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
 });

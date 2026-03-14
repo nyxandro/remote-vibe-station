@@ -11,7 +11,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { apiGet, apiPost } from "../api/client";
-import { KanbanPriority, KanbanStatus, KanbanTask } from "../types";
+import { KanbanCriterion, KanbanPriority, KanbanStatus, KanbanTask } from "../types";
 
 export type KanbanTaskFilter = {
   projectSlug?: string | null;
@@ -24,7 +24,7 @@ export type CreateKanbanTaskPayload = {
   description: string;
   status: KanbanStatus;
   priority: KanbanPriority;
-  acceptanceCriteria: string[];
+  acceptanceCriteria: KanbanCriterion[];
 };
 
 export type UpdateKanbanTaskPayload = {
@@ -32,8 +32,13 @@ export type UpdateKanbanTaskPayload = {
   description?: string;
   status?: KanbanStatus;
   priority?: KanbanPriority;
-  acceptanceCriteria?: string[];
+  acceptanceCriteria?: KanbanCriterion[];
   resultSummary?: string | null;
+  blockedReason?: string | null;
+};
+
+export type UpdateKanbanCriterionPayload = {
+  status: "pending" | "done" | "blocked";
   blockedReason?: string | null;
 };
 
@@ -124,6 +129,19 @@ export const useKanban = () => {
     [mutate]
   );
 
+  const updateCriterion = useCallback(
+    async (taskId: string, criterionId: string, payload: UpdateKanbanCriterionPayload): Promise<void> => {
+      /* Criterion toggles share the same mutation lifecycle as task-level edits. */
+      await mutate(async () => {
+        await apiPost(
+          `/api/kanban/tasks/${encodeURIComponent(taskId)}/criteria/${encodeURIComponent(criterionId)}/update`,
+          payload
+        );
+      });
+    },
+    [mutate]
+  );
+
   const createBoardLink = useCallback(async (projectSlug?: string | null): Promise<{ url: string }> => {
     /* Shared board links are generated on-demand so the browser token stays short-lived. */
     setError(null);
@@ -147,6 +165,7 @@ export const useKanban = () => {
     reloadTasks,
     createTask,
     updateTask,
+    updateCriterion,
     moveTask,
     createBoardLink
   };

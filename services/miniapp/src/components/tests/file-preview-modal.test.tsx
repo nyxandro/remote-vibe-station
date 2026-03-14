@@ -33,7 +33,7 @@ describe("FilePreviewModal", () => {
 
     expect(screen.getByText("public/uploads/debug_images.js")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+    fireEvent.click(screen.getByRole("button", { name: "Download file" }));
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     expect(onDownload).toHaveBeenCalledTimes(1);

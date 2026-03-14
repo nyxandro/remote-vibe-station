@@ -66,4 +66,46 @@ describe("WorkspaceHeader", () => {
 
     expect(screen.queryByText("Workspace")).toBeNull();
   });
+
+  it("keeps the Tasks tab disabled until a project is selected", () => {
+    /* Kanban task board is project-scoped, so the tab must stay unavailable without active project context. */
+    const { rerender } = render(
+      <WorkspaceHeader
+        activeProject={null}
+        activeTab="projects"
+        canUseProjectTabs={false}
+        canControlTelegramStream={false}
+        telegramStreamEnabled={false}
+        onSetTab={vi.fn()}
+        onStartStream={vi.fn()}
+        onStopStream={vi.fn()}
+      />
+    );
+
+    expect((screen.getByRole("button", { name: "Tasks" }) as HTMLButtonElement).disabled).toBe(true);
+
+    rerender(
+      <WorkspaceHeader
+        activeProject={{
+          id: "alpha",
+          slug: "alpha",
+          name: "Alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }}
+        activeTab="tasks"
+        canUseProjectTabs={true}
+        canControlTelegramStream={false}
+        telegramStreamEnabled={false}
+        onSetTab={vi.fn()}
+        onStartStream={vi.fn()}
+        onStopStream={vi.fn()}
+      />
+    );
+
+    expect((screen.getByRole("button", { name: "Tasks" }) as HTMLButtonElement).disabled).toBe(false);
+  });
 });

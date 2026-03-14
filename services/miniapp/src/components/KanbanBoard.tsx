@@ -58,6 +58,12 @@ const formatTaskTimestamp = (value: string): string => {
   return date.toLocaleString();
 };
 
+const formatCriteriaSummary = (task: KanbanTask): string => {
+  /* Card summaries should show completion progress at a glance without opening the full editor. */
+  const doneCount = task.acceptanceCriteria.filter((criterion) => criterion.status === "done").length;
+  return `Criteria: ${doneCount}/${task.acceptanceCriteria.length} done`;
+};
+
 export const KanbanBoard = (props: Props) => {
   const [search, setSearch] = useState<string>("");
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
@@ -104,7 +110,7 @@ export const KanbanBoard = (props: Props) => {
         return true;
       }
 
-      const haystack = [task.title, task.description, task.projectName]
+      const haystack = [task.title, task.description, task.projectName, ...task.acceptanceCriteria.map((criterion) => criterion.text)]
         .join("\n")
         .toLowerCase();
       return haystack.includes(normalizedSearch);
@@ -332,7 +338,7 @@ export const KanbanBoard = (props: Props) => {
                   {task.description ? <div className="kanban-card-description">{task.description}</div> : null}
 
                   {task.acceptanceCriteria.length > 0 ? (
-                    <div className="kanban-card-meta">Criteria: {task.acceptanceCriteria.length}</div>
+                    <div className="kanban-card-meta">{formatCriteriaSummary(task)}</div>
                   ) : null}
 
                   {task.claimedBy ? (

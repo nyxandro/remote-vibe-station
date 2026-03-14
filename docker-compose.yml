@@ -37,6 +37,8 @@ services:
       - OPENCODE_SERVER_URL=${OPENCODE_SERVER_URL}
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+      - KANBAN_RUNNER_ENABLED=${KANBAN_RUNNER_ENABLED:-false}
+      - KANBAN_RUNNER_INTERVAL_MS=${KANBAN_RUNNER_INTERVAL_MS:-60000}
       # Ask backend for short-lived GitHub App credentials so git auth stays global across all projects.
       - GIT_CONFIG_COUNT=1
       - GIT_CONFIG_KEY_0=credential.https://github.com.helper

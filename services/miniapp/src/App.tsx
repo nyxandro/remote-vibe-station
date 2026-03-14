@@ -43,6 +43,11 @@ type ProjectGitSummaryMap = Record<string, ProjectGitSummary | null>;
 
 const STORAGE_KEY_ACTIVE_PROJECT = "tvoc.miniapp.activeProject";
 
+const isProjectScopedTab = (tab: TabKey): boolean => {
+  /* Providers/settings stay useful without an active project, but kanban remains project-specific. */
+  return tab === "files" || tab === "github" || tab === "tasks" || tab === "containers" || tab === "terminal";
+};
+
 export const App = () => {
   const restoredTabState = readTabPersistenceState();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
@@ -432,6 +437,13 @@ export const App = () => {
   useEffect(() => {
     persistTabSelection(activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    /* Clear stale restored workspace tabs when startup no longer has an active project selected. */
+    if (!canUseProjectTabs && isProjectScopedTab(activeTab)) {
+      setActiveTab("projects");
+    }
+  }, [activeTab, canUseProjectTabs]);
 
   useEffect(() => {
     if (activeId) {

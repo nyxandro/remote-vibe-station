@@ -10,6 +10,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { KanbanBoard } from "../KanbanBoard";
 import { KanbanTask, ProjectRecord } from "../../types";
 
+const buildCriterion = (overrides?: Partial<KanbanTask["acceptanceCriteria"][number]>) => ({
+  id: "criterion-1",
+  text: "Criterion",
+  status: "pending" as const,
+  ...overrides
+});
+
 const buildProject = (overrides?: Partial<ProjectRecord>): ProjectRecord => ({
   id: "alpha",
   slug: "alpha",
@@ -29,7 +36,10 @@ const buildTask = (overrides?: Partial<KanbanTask>): KanbanTask => ({
   description: "Clarify acceptance criteria",
   status: "backlog",
   priority: "medium",
-  acceptanceCriteria: ["One", "Two"],
+  acceptanceCriteria: [
+    buildCriterion({ id: "criterion-one", text: "One", status: "done" }),
+    buildCriterion({ id: "criterion-two", text: "Two", status: "pending" })
+  ],
   resultSummary: null,
   blockedReason: null,
   createdAt: "2026-03-10T09:00:00.000Z",
@@ -103,6 +113,7 @@ describe("KanbanBoard", () => {
     expect(screen.getByText("Blocked")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Discuss backlog item")).toBeTruthy();
+    expect(screen.getByText("Criteria: 1/2 done")).toBeTruthy();
   });
 
   it("opens task editor by clicking the whole card and hides the legacy Edit button", () => {

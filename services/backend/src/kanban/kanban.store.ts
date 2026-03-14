@@ -11,6 +11,7 @@ import * as path from "node:path";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { z } from "zod";
 
+import { normalizeStoredCriteria } from "./kanban-criteria";
 import { KANBAN_PRIORITIES, KANBAN_STATUSES, KanbanTaskRecord } from "./kanban.types";
 import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-file";
 
@@ -26,13 +27,14 @@ const taskSchema = z.object({
   description: z.string(),
   status: z.enum(KANBAN_STATUSES),
   priority: z.enum(KANBAN_PRIORITIES),
-  acceptanceCriteria: z.array(z.string()),
+  acceptanceCriteria: z.array(z.unknown()).transform((value) => normalizeStoredCriteria(value)),
   resultSummary: z.string().nullable(),
   blockedReason: z.string().nullable(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   claimedBy: z.string().nullable(),
-  leaseUntil: z.string().nullable()
+  leaseUntil: z.string().nullable(),
+  runnerSessionId: z.string().nullable().optional()
 });
 
 const storeSchema = z.object({

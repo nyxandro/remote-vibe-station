@@ -24,3 +24,20 @@ test("kanban plugin source includes explicit taskId in task list lines", () => {
   /* List output must surface ids so agents can safely refine or complete backlog items selected from the board. */
   assert.match(pluginSource, /Task ID: \$\{task\.id\}/);
 });
+
+test("kanban plugin source includes per-criterion ids and statuses in task details", () => {
+  /* Agents need stable criterion ids plus visible states so they can update checklist progress deterministically. */
+  assert.match(pluginSource, /criterion\.id/);
+  assert.match(pluginSource, /humanizeCriterionStatus/);
+});
+
+test("kanban plugin source exposes an explicit criterion update tool", () => {
+  /* Progress automation depends on a dedicated tool instead of overloading generic task refinement calls. */
+  assert.match(pluginSource, /kanban_update_criterion/);
+});
+
+test("kanban plugin source prefers backend message text for failed tool calls", () => {
+  /* Human-readable backend validation messages should survive plugin transport without raw JSON noise. */
+  assert.match(pluginSource, /payload\.message/);
+  assert.match(pluginSource, /Kanban backend request failed with status \$\{response\.status\}: \$\{message\}/);
+});

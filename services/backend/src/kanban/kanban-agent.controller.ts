@@ -10,7 +10,15 @@ import { BadRequestException, Body, Controller, Param, Post, UseGuards } from "@
 import { KanbanAgentGuard } from "../security/kanban-agent.guard";
 import { KanbanValidationError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
-import { KANBAN_PRIORITIES, KANBAN_STATUSES, KanbanPriority, KanbanStatus } from "./kanban.types";
+import {
+  KANBAN_CRITERION_STATUSES,
+  KANBAN_PRIORITIES,
+  KANBAN_STATUSES,
+  KanbanCriterionInput,
+  KanbanCriterionStatus,
+  KanbanPriority,
+  KanbanStatus
+} from "./kanban.types";
 
 @Controller("api/kanban/agent")
 @UseGuards(KanbanAgentGuard)
@@ -51,7 +59,7 @@ export class KanbanAgentController {
       description?: string;
       status?: KanbanStatus;
       priority?: KanbanPriority;
-      acceptanceCriteria?: string[];
+      acceptanceCriteria?: KanbanCriterionInput[];
     }
   ) {
     /* Agents can capture newly discussed work directly into backlog or queue without opening the UI. */
@@ -91,7 +99,7 @@ export class KanbanAgentController {
       description?: string;
       status?: KanbanStatus;
       priority?: KanbanPriority;
-      acceptanceCriteria?: string[];
+      acceptanceCriteria?: KanbanCriterionInput[];
       resultSummary?: string | null;
       blockedReason?: string | null;
     }
@@ -108,6 +116,29 @@ export class KanbanAgentController {
           : {}),
         ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
         ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
+      });
+    } catch (error) {
+      this.rethrowAsHttp(error);
+    }
+  }
+
+  @Post("tasks/:taskId/criteria/:criterionId/update")
+  public async updateCriterion(
+    @Param("taskId") taskId: string,
+    @Param("criterionId") criterionId: string,
+    @Body() body: { status: KanbanCriterionStatus; blockedReason?: string | null }
+  ) {
+    /* Agents update checklist truth directly so the external runner can decide whether to resume or stop. */
+    if (!body?.status) {
+      throw new BadRequestException("status is required");
+    }
+
+    try {
+      return await this.kanban.updateCriterion({
+        taskId,
+        criterionId,
+        status: this.parseCriterionStatus(body.status),
+        blockedReason: body?.blockedReason
       });
     } catch (error) {
       this.rethrowAsHttp(error);
@@ -180,6 +211,14 @@ export class KanbanAgentController {
       throw new KanbanValidationError("Valid kanban priority is required");
     }
     return value as KanbanPriority;
+  }
+
+  private parseCriterionStatus(value: string): KanbanCriterionStatus {
+    /* Criterion states stay tightly bounded so agents cannot invent intermediate checklist phases. */
+    if (!KANBAN_CRITERION_STATUSES.includes(value as KanbanCriterionStatus)) {
+      throw new KanbanValidationError("Valid kanban criterion status is required");
+    }
+    return value as KanbanCriterionStatus;
   }
 
   private rethrowAsHttp(error: unknown): never {

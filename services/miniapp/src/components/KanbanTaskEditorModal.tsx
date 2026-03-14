@@ -6,9 +6,9 @@
  * - KanbanTaskEditorModal - Shared create/edit dialog for project and global boards.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
+import { KanbanCriterion, KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
 import { KanbanCriteriaEditor } from "./KanbanCriteriaEditor";
 
 const STATUS_OPTIONS: Array<{ value: KanbanStatus; label: string }> = [
@@ -31,7 +31,7 @@ export type KanbanTaskEditorSubmit = {
   description: string;
   status: KanbanStatus;
   priority: KanbanPriority;
-  acceptanceCriteria: string[];
+  acceptanceCriteria: KanbanCriterion[];
   resultSummary: string | null;
   blockedReason: string | null;
 };
@@ -54,16 +54,35 @@ const normalizeCriterion = (value: string): string => {
   return value.trim();
 };
 
+const createLocalCriterionId = (): string => {
+  /* UI ids only need to survive one editing session until the backend persists them. */
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `criterion-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const hasBlockedCriteria = (criteria: KanbanCriterion[]): boolean => {
+  /* Criterion blockers should lift the entire task into blocked so the board reflects reality immediately. */
+  return criteria.some((criterion) => criterion.status === "blocked");
+};
+
 export const KanbanTaskEditorModal = (props: Props) => {
   const [projectSlug, setProjectSlug] = useState<string>(props.activeProjectSlug ?? "");
   const [title, setTitle] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [status, setStatus] = useState<KanbanStatus>("backlog");
   const [priority, setPriority] = useState<KanbanPriority>("medium");
-  const [criteriaItems, setCriteriaItems] = useState<string[]>([]);
+  const [criteriaItems, setCriteriaItems] = useState<KanbanCriterion[]>([]);
+  const criteriaItemsRef = useRef<KanbanCriterion[]>([]);
   const [criterionDraft, setCriterionDraft] = useState<string>(DEFAULT_CRITERION_DRAFT);
   const [resultSummary, setResultSummary] = useState<string>("");
   const [blockedReason, setBlockedReason] = useState<string>("");
+
+  useEffect(() => {
+    /* Handlers read the ref to avoid stale criterion state during rapid consecutive toggles. */
+    criteriaItemsRef.current = criteriaItems;
+  }, [criteriaItems]);
 
   useEffect(() => {
     /* Reinitialize form state every time the dialog switches task or create/edit mode. */
@@ -98,14 +117,69 @@ export const KanbanTaskEditorModal = (props: Props) => {
       return;
     }
 
-    setCriteriaItems((current) => [...current, normalized]);
+    setCriteriaItems((current) => [
+      ...current,
+      {
+        id: createLocalCriterionId(),
+        text: normalized,
+        status: "pending"
+      }
+    ]);
     setCriterionDraft(DEFAULT_CRITERION_DRAFT);
   }, [criterionDraft]);
 
-  const handleRemoveCriterion = useCallback((indexToRemove: number) => {
-    /* Removal is index-based because persisted criteria are plain ordered strings without ids. */
-    setCriteriaItems((current) => current.filter((_, index) => index !== indexToRemove));
+  const handleRemoveCriterion = useCallback((criterionId: string) => {
+    /* Removal is id-based so persisted criterion statuses survive reordering and future automation sessions. */
+    setCriteriaItems((current) => current.filter((criterion) => criterion.id !== criterionId));
   }, []);
+
+  const handleToggleDoneCriterion = useCallback(
+    (criterionId: string) => {
+      /* Blocked criteria must be unblocked first so the task cannot jump straight from blocked to done. */
+      const next = criteriaItemsRef.current.map((criterion) => {
+          if (criterion.id !== criterionId) {
+            return criterion;
+          }
+
+          if (criterion.status === "blocked") {
+            return { ...criterion, status: "pending" };
+          }
+
+          return {
+            ...criterion,
+            status: criterion.status === "done" ? "pending" : "done"
+          };
+        });
+
+      criteriaItemsRef.current = next;
+      setCriteriaItems(next);
+    },
+    []
+  );
+
+  const handleToggleBlockedCriterion = useCallback(
+    (criterionId: string) => {
+      /* Criterion blockers should force task blocking, while clearing the last blocker reopens normal status editing. */
+      const next = criteriaItemsRef.current.map((criterion) =>
+        criterion.id === criterionId
+          ? {
+              ...criterion,
+              status: criterion.status === "blocked" ? "pending" : "blocked"
+            }
+          : criterion
+      );
+
+      criteriaItemsRef.current = next;
+      setCriteriaItems(next);
+      setStatus((currentStatus) => {
+        if (hasBlockedCriteria(next)) {
+          return "blocked";
+        }
+        return currentStatus === "blocked" ? "backlog" : currentStatus;
+      });
+    },
+    []
+  );
 
   const showProjectSelector = props.scope === "global";
   const submitLabel = props.mode === "create" ? "Create task" : "Save task";
@@ -178,6 +252,8 @@ export const KanbanTaskEditorModal = (props: Props) => {
             onDraftChange={setCriterionDraft}
             onAddCriterion={handleAddCriterion}
             onRemoveCriterion={handleRemoveCriterion}
+            onToggleDoneCriterion={handleToggleDoneCriterion}
+            onToggleBlockedCriterion={handleToggleBlockedCriterion}
           />
 
           {status === "done" ? (
@@ -214,15 +290,16 @@ export const KanbanTaskEditorModal = (props: Props) => {
             className="btn primary"
             disabled={!title.trim() || !projectSlug.trim() || props.isSaving}
             onClick={() => {
+              const finalStatus = hasBlockedCriteria(criteriaItems) ? "blocked" : status;
               props.onSubmit({
                 projectSlug: projectSlug.trim(),
                 title: title.trim(),
                 description: description.trim(),
-                status,
+                status: finalStatus,
                 priority,
                 acceptanceCriteria: criteriaItems,
-                resultSummary: status === "done" ? resultSummary.trim() || null : null,
-                blockedReason: status === "blocked" ? blockedReason.trim() || null : null
+                resultSummary: finalStatus === "done" ? resultSummary.trim() || null : null,
+                blockedReason: finalStatus === "blocked" ? blockedReason.trim() || null : null
               });
             }}
             type="button"

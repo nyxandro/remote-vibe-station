@@ -2,16 +2,23 @@
  * @fileoverview OpenCode local plugin that exposes kanban task tools backed by the backend API.
  *
  * Exports:
- * - KanbanToolsPlugin - Registers task listing, refinement, claiming, and completion tools.
+ * - KanbanToolsPlugin - Registers task listing, refinement, criterion updates, claiming, and completion tools.
  */
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
 
 const STATUS_OPTIONS = ["backlog", "queued", "in_progress", "blocked", "done"] as const;
 const PRIORITY_OPTIONS = ["low", "medium", "high"] as const;
+const CRITERION_STATUS_OPTIONS = ["pending", "done", "blocked"] as const;
 const DEFAULT_AGENT_ID = "opencode-agent";
 const DEFAULT_LIMIT = 20;
 const DEFAULT_LEASE_MS = 2 * 60 * 60 * 1000;
+
+type KanbanCriterion = {
+  id: string;
+  text: string;
+  status: (typeof CRITERION_STATUS_OPTIONS)[number];
+};
 
 type KanbanTask = {
   id: string;
@@ -21,7 +28,7 @@ type KanbanTask = {
   description: string;
   status: (typeof STATUS_OPTIONS)[number];
   priority: (typeof PRIORITY_OPTIONS)[number];
-  acceptanceCriteria: string[];
+  acceptanceCriteria: KanbanCriterion[];
   resultSummary: string | null;
   blockedReason: string | null;
   updatedAt: string;
@@ -41,6 +48,27 @@ const requireRuntimeConfig = () => {
   return { baseUrl, token };
 };
 
+const extractErrorMessage = (text: string): string => {
+  /* Prefer backend validation text so agent-facing tool failures stay actionable instead of raw JSON blobs. */
+  if (text.trim().length === 0) {
+    return "Request failed with an empty backend error response.";
+  }
+
+  try {
+    const payload = JSON.parse(text) as { message?: string | string[] };
+    if (Array.isArray(payload.message) && payload.message.length > 0) {
+      return payload.message.join("; ");
+    }
+    if (typeof payload.message === "string" && payload.message.trim().length > 0) {
+      return payload.message;
+    }
+  } catch {
+    /* Non-JSON backend responses still fall back to their raw text so operators can inspect proxy or runtime failures. */
+  }
+
+  return text;
+};
+
 const postJson = async <T>(path: string, body: unknown): Promise<T | null> => {
   /* Every tool call goes through the same authenticated backend helper for consistency. */
   const { baseUrl, token } = requireRuntimeConfig();
@@ -54,7 +82,8 @@ const postJson = async <T>(path: string, body: unknown): Promise<T | null> => {
   });
 
   if (!response.ok) {
-    throw new Error(`Kanban backend request failed: ${response.status} ${await response.text()}`);
+    const message = extractErrorMessage(await response.text());
+    throw new Error(`Kanban backend request failed with status ${response.status}: ${message}`);
   }
 
   const text = await response.text();
@@ -89,6 +118,28 @@ const humanizePriority = (priority: KanbanTask["priority"]): string => {
   }
 };
 
+const humanizeCriterionStatus = (status: KanbanCriterion["status"]): string => {
+  /* Criterion states stay binary enough for automation, but still need readable labels in tool output. */
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "done":
+      return "Done";
+    case "blocked":
+      return "Blocked";
+  }
+};
+
+const countDoneCriteria = (task: KanbanTask): number => {
+  /* Shared count keeps list output aligned with detailed task views. */
+  return task.acceptanceCriteria.filter((criterion) => criterion.status === "done").length;
+};
+
+const formatCriterionLine = (criterion: KanbanCriterion): string => {
+  /* Stable criterion ids are required because the runner resumes tasks in fresh sessions. */
+  return `  - ${criterion.id} | ${humanizeCriterionStatus(criterion.status)} | ${criterion.text}`;
+};
+
 const formatTaskLine = (task: KanbanTask): string => {
   /* Surface the stable task id explicitly so later refine/complete calls can reuse the exact same identifier. */
   const lines = [
@@ -97,6 +148,9 @@ const formatTaskLine = (task: KanbanTask): string => {
     `  Status: ${humanizeStatus(task.status)} | Priority: ${humanizePriority(task.priority)} | Project: ${task.projectName}`
   ];
 
+  if (task.acceptanceCriteria.length > 0) {
+    lines.push(`  Criteria: ${countDoneCriteria(task)}/${task.acceptanceCriteria.length} done`);
+  }
   if (task.description) {
     lines.push(`  Description: ${task.description}`);
   }
@@ -122,7 +176,8 @@ const formatTaskDetails = (task: KanbanTask | null): string => {
     lines.push(`description: ${task.description}`);
   }
   if (task.acceptanceCriteria.length > 0) {
-    lines.push(`acceptance: ${task.acceptanceCriteria.join(" | ")}`);
+    lines.push("acceptance criteria:");
+    lines.push(...task.acceptanceCriteria.map(formatCriterionLine));
   }
   if (task.claimedBy) {
     lines.push(`claimedBy: ${task.claimedBy}`);
@@ -150,7 +205,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
   return {
     tool: {
       kanban_list_tasks: tool({
-        description: "List kanban tasks for the current project or all projects.",
+        description: "List kanban tasks and their criterion states for the current project or all projects.",
         args: {
           projectSlug: tool.schema.string().optional(),
           status: tool.schema.enum(STATUS_OPTIONS).optional(),
@@ -168,7 +223,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
       }),
 
       kanban_create_task: tool({
-        description: "Create a new kanban task in backlog or queue.",
+        description: "Create a new kanban task with explicit acceptance criteria; new criteria start as pending.",
         args: {
           projectSlug: tool.schema.string().optional(),
           title: tool.schema.string(),
@@ -195,7 +250,8 @@ export const KanbanToolsPlugin: Plugin = async () => {
       }),
 
       kanban_refine_task: tool({
-        description: "Refine an existing backlog task and optionally move it to queue.",
+        description:
+          "Refine an existing task: tighten scope, update text, and keep acceptance criteria accurate before or during execution.",
         args: {
           taskId: tool.schema.string(),
           title: tool.schema.string().optional(),
@@ -215,8 +271,33 @@ export const KanbanToolsPlugin: Plugin = async () => {
         }
       }),
 
+      kanban_update_criterion: tool({
+        description:
+          "Update one acceptance criterion while working. Mark done only after verification; mark blocked only when external help is required.",
+        args: {
+          taskId: tool.schema.string(),
+          criterionId: tool.schema.string(),
+          status: tool.schema.enum(CRITERION_STATUS_OPTIONS),
+          blockedReason: tool.schema.string().optional()
+        },
+        async execute(args) {
+          const task = await postJson<KanbanTask>(
+            `/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/criteria/${encodeURIComponent(args.criterionId)}/update`,
+            {
+              status: args.status,
+              blockedReason: args.blockedReason ?? null
+            }
+          );
+          if (!task) {
+            throw new Error("Kanban backend returned an empty response for criterion update");
+          }
+          return `Updated criterion.\n${formatTaskDetails(task)}`;
+        }
+      }),
+
       kanban_claim_next: tool({
-        description: "Claim the next queued task for the current project.",
+        description:
+          "Claim the next queued task for the current project. Use this only when you do not already have an active task in that project.",
         args: {
           projectSlug: tool.schema.string().optional(),
           agentId: tool.schema.string().optional(),
@@ -237,7 +318,8 @@ export const KanbanToolsPlugin: Plugin = async () => {
       }),
 
       kanban_complete_task: tool({
-        description: "Mark a claimed task as done with a short result summary.",
+        description:
+          "Mark a task done only after every acceptance criterion is done. Include a short result summary for the next human reviewer.",
         args: {
           taskId: tool.schema.string(),
           resultSummary: tool.schema.string().optional()
@@ -254,7 +336,8 @@ export const KanbanToolsPlugin: Plugin = async () => {
       }),
 
       kanban_block_task: tool({
-        description: "Mark a task as blocked with the reason the agent cannot continue.",
+        description:
+          "Mark a task blocked when you cannot continue. Blocking ends the current automation loop for that task until humans intervene.",
         args: {
           taskId: tool.schema.string(),
           reason: tool.schema.string().optional()

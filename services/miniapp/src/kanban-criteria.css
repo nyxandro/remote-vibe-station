@@ -53,6 +53,25 @@
   gap: 8px;
 }
 
+.kanban-criteria-item-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kanban-criteria-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.kanban-criteria-checkbox {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
 .kanban-criteria-item-bullet {
   color: var(--kanban-note);
   font-size: 12px;
@@ -66,6 +85,42 @@
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.kanban-criteria-status {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.kanban-criteria-status-pending {
+  background: rgba(214, 158, 46, 0.12);
+  color: #8a6116;
+}
+
+.kanban-criteria-status-done {
+  background: rgba(34, 139, 34, 0.12);
+  color: #176a2a;
+}
+
+.kanban-criteria-status-blocked {
+  background: rgba(178, 34, 34, 0.12);
+  color: #8f1f1f;
+}
+
+.kanban-criteria-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kanban-criteria-status-button {
+  min-height: 40px;
+  white-space: nowrap;
 }
 
 .kanban-criteria-remove-button {
@@ -90,6 +145,15 @@
 @media (max-width: 640px) {
   .kanban-criteria-input-row {
     grid-template-columns: 1fr;
+  }
+
+  .kanban-criteria-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .kanban-criteria-item-actions {
+    justify-content: space-between;
   }
 
   .kanban-criteria-add-button {

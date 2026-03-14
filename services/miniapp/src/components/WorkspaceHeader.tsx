@@ -73,7 +73,6 @@ export const WorkspaceHeader = (props: Props) => {
             tab.key !== "projects" &&
             tab.key !== "providers" &&
             tab.key !== "settings" &&
-            tab.key !== "tasks" &&
             !props.canUseProjectTabs;
 
           return (
@@ -112,7 +111,7 @@ export const WorkspaceHeader = (props: Props) => {
         </section>
       ) : (
         <section className="active-project-card active-project-card-empty">
-          <span className="active-project-hint">Select a project to unlock Files/GitHub/Terminal/Containers.</span>
+          <span className="active-project-hint">Select a project to unlock Files/GitHub/Tasks/Terminal/Containers.</span>
         </section>
       )}
     </header>

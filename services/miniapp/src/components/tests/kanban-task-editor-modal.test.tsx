@@ -13,6 +13,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { KanbanTaskEditorModal } from "../KanbanTaskEditorModal";
 import { KanbanTask, ProjectRecord } from "../../types";
 
+const buildCriterion = (overrides?: Partial<KanbanTask["acceptanceCriteria"][number]>) => ({
+  id: "criterion-1",
+  text: "Criterion",
+  status: "pending" as const,
+  ...overrides
+});
+
 const buildProject = (overrides?: Partial<ProjectRecord>): ProjectRecord => ({
   id: "alpha",
   slug: "alpha",
@@ -33,7 +40,10 @@ const buildTask = (overrides?: Partial<KanbanTask>): KanbanTask => ({
   description: "Finalize the project before shipping.",
   status: "backlog",
   priority: "medium",
-  acceptanceCriteria: ["Docs updated", "Smoke test passes"],
+  acceptanceCriteria: [
+    buildCriterion({ id: "criterion-docs", text: "Docs updated", status: "done" }),
+    buildCriterion({ id: "criterion-smoke", text: "Smoke test passes", status: "pending" })
+  ],
   resultSummary: null,
   blockedReason: null,
   createdAt: "2026-03-10T09:00:00.000Z",
@@ -79,6 +89,8 @@ describe("KanbanTaskEditorModal", () => {
       code: "Enter"
     });
 
+    fireEvent.click(screen.getByRole("checkbox", { name: "Mark criterion Docs updated as done" }));
+
     expect(screen.getByText("Docs updated")).toBeTruthy();
     expect(screen.getByText("Smoke test passes")).toBeTruthy();
 
@@ -90,13 +102,16 @@ describe("KanbanTaskEditorModal", () => {
       description: "",
       status: "backlog",
       priority: "medium",
-      acceptanceCriteria: ["Docs updated", "Smoke test passes"],
+      acceptanceCriteria: [
+        { id: expect.any(String), text: "Docs updated", status: "done" },
+        { id: expect.any(String), text: "Smoke test passes", status: "pending" }
+      ],
       resultSummary: null,
       blockedReason: null
     });
   });
 
-  it("renders existing criteria as separate items and allows removing one", () => {
+  it("renders existing criteria as separate items, preserves status controls, and allows removing one", () => {
     /* Edit flow should expose persisted criteria as individual checklist rows instead of textarea lines. */
     const onSubmit = vi.fn();
 
@@ -115,6 +130,8 @@ describe("KanbanTaskEditorModal", () => {
 
     expect(screen.getByText("Docs updated")).toBeTruthy();
     expect(screen.getByText("Smoke test passes")).toBeTruthy();
+    expect((screen.getByRole("checkbox", { name: "Mark criterion Docs updated as done" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Mark criterion Smoke test passes as blocked" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Remove criterion Docs updated" }));
     fireEvent.click(screen.getByRole("button", { name: "Save task" }));
@@ -123,9 +140,9 @@ describe("KanbanTaskEditorModal", () => {
       projectSlug: "alpha",
       title: "Prepare release",
       description: "Finalize the project before shipping.",
-      status: "backlog",
+      status: "blocked",
       priority: "medium",
-      acceptanceCriteria: ["Smoke test passes"],
+      acceptanceCriteria: [{ id: "criterion-smoke", text: "Smoke test passes", status: "blocked" }],
       resultSummary: null,
       blockedReason: null
     });
