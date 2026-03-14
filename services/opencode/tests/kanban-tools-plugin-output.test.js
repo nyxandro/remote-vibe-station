@@ -41,3 +41,14 @@ test("kanban plugin source prefers backend message text for failed tool calls", 
   assert.match(pluginSource, /payload\.message/);
   assert.match(pluginSource, /Kanban backend request failed with status \$\{response\.status\}: \$\{message\}/);
 });
+
+test("kanban plugin source forwards OpenCode sessionID on execution mutations", () => {
+  /* Backend ownership checks depend on the real OpenCode session id for every task mutation. */
+  assert.match(pluginSource, /sessionId: context\.sessionID/);
+});
+
+test("kanban plugin source soft-handles execution ownership conflicts", () => {
+  /* When another session already owns a task, the current session should stop cleanly instead of crashing red. */
+  assert.match(pluginSource, /KANBAN_EXECUTION_OWNERSHIP_CONFLICT/);
+  assert.match(pluginSource, /Task execution already belongs to another OpenCode session/);
+});

@@ -141,15 +141,17 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       return;
     }
 
-    if (event.type === "kanban.runner.started") {
-      /* Runner wake-ups should be visible in Telegram so humans know automation resumed a task on its own. */
+    if (event.type === "kanban.runner.finished") {
+      /* Telegram should announce only completed runner steps, never speculative starts that may fail immediately after. */
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
       const taskTitle = String((event.data as any)?.taskTitle ?? "").trim();
+      const action = String((event.data as any)?.action ?? "continued").trim();
       if (!projectSlug || !taskTitle) {
         return;
       }
 
-      this.enqueueForBoundAdmins(`🤖 Kanban runner продолжил задачу "${taskTitle}" в проекте ${projectSlug}.`);
+      const verb = action === "started" ? "взял в работу" : "продолжил";
+      this.enqueueForBoundAdmins(`🤖 Kanban runner ${verb} задачу "${taskTitle}" в проекте ${projectSlug}.`);
       return;
     }
 

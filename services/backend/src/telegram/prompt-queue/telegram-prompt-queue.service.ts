@@ -9,6 +9,7 @@
 import { Injectable, OnModuleInit } from "@nestjs/common";
 
 import { OpenCodePromptInputPart } from "../../open-code/opencode.types";
+import { normalizeOpenCodeTransportErrorMessage } from "../../open-code/opencode-transport-errors";
 import { PromptService } from "../../prompt/prompt.service";
 import { ProjectsService } from "../../projects/projects.service";
 import { TelegramOutboxService } from "../outbox/telegram-outbox.service";
@@ -187,7 +188,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
           });
           this.store.markCompleted(item.id, new Date().toISOString());
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = normalizeOpenCodeTransportErrorMessage(error);
           this.store.markFailed(item.id, new Date().toISOString(), message);
           this.outbox.enqueueAdminNotification({
             adminId: item.adminId,

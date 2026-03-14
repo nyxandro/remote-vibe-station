@@ -13,6 +13,7 @@ import { OpenCodeCommand, OpenCodeExecutionModel, OpenCodePromptInputPart } from
 import { OpenCodeClient, SessionResolution } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
 import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
+import { isOpenCodeFetchTransportFailure } from "../open-code/opencode-transport-errors";
 import { summarizeOpenCodeParts } from "../open-code/opencode-telemetry";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { ProjectsService } from "../projects/projects.service";
@@ -59,12 +60,6 @@ const ACTIVE_PROJECT_REQUIRED_MESSAGE =
   "Проект не выбран. Выберите его командой /project <slug> (например: /project my-project) или в Mini App.";
 const REPAIR_BUSY_TIMEOUT_MS = 45_000;
 const RUNTIME_SETTLE_AFTER_FETCH_FAILURE_MS = 30_000;
-
-const isFetchTransportFailure = (error: unknown): boolean => {
-  /* Low-level fetch crashes can still leave the OpenCode session running and streaming over SSE. */
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("fetch failed");
-};
 
 @Injectable()
 export class PromptService {
@@ -158,7 +153,7 @@ export class PromptService {
       });
     } catch (error) {
       /* Telegram queue prompts may still succeed over SSE after the synchronous HTTP call drops late. */
-      if (input.allowEmptyResponse && resolvedSessionID && isFetchTransportFailure(error)) {
+      if (input.allowEmptyResponse && resolvedSessionID && isOpenCodeFetchTransportFailure(error)) {
         const settled = await this.opencode.waitForSessionToSettle({
           directory: input.directory,
           sessionID: resolvedSessionID,

@@ -5,11 +5,12 @@
  * - KanbanAgentController - Agent-friendly task listing, refinement, claiming, and completion routes.
  */
 
-import { BadRequestException, Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, Param, Post, UseGuards } from "@nestjs/common";
 
 import { EventsService } from "../events/events.service";
 import { KanbanAgentGuard } from "../security/kanban-agent.guard";
-import { KanbanValidationError } from "./kanban.errors";
+import { KanbanExecutionConflictError, KanbanValidationError } from "./kanban.errors";
+import { KanbanExecutionActor } from "./kanban-execution-ownership";
 import { KanbanService } from "./kanban.service";
 import { publishKanbanTaskUpdated } from "./kanban-task-events";
 import {
@@ -105,6 +106,7 @@ export class KanbanAgentController {
     @Body()
     body: {
       agentId?: string;
+      sessionId?: string;
       title?: string;
       description?: string;
       status?: KanbanStatus;
@@ -128,7 +130,7 @@ export class KanbanAgentController {
   public async updateCriterion(
     @Param("taskId") taskId: string,
     @Param("criterionId") criterionId: string,
-    @Body() body: { status: KanbanCriterionStatus; blockedReason?: string | null }
+    @Body() body: { agentId?: string; sessionId?: string; status: KanbanCriterionStatus; blockedReason?: string | null }
   ) {
     /* Agents update checklist truth directly so the external runner can decide whether to resume or stop. */
     if (!body?.status) {
@@ -136,11 +138,12 @@ export class KanbanAgentController {
     }
 
     try {
-      const task = await this.kanban.updateCriterion({
+      const task = await this.kanban.updateCriterionFromExecution({
         taskId,
         criterionId,
         status: this.parseCriterionStatus(body.status),
-        blockedReason: body?.blockedReason
+        blockedReason: body?.blockedReason,
+        actor: this.resolveExecutionActor(body)
       });
       publishKanbanTaskUpdated(this.events, { task, source: "agent" });
       return task;
@@ -152,11 +155,12 @@ export class KanbanAgentController {
   @Post("claim-next")
   public async claimNext(
     @Body()
-    body: {
-      agentId?: string;
-      projectSlug?: string | null;
-      currentDirectory?: string | null;
-      leaseMs?: number;
+      body: {
+        agentId?: string;
+        sessionId?: string;
+        projectSlug?: string | null;
+        currentDirectory?: string | null;
+        leaseMs?: number;
     }
   ) {
     /* Claim next keeps agent workflow explicit and backend-arbitrated to avoid duplicate execution. */
@@ -169,6 +173,7 @@ export class KanbanAgentController {
         agentId: body.agentId,
         projectSlug: body?.projectSlug ?? null,
         currentDirectory: body?.currentDirectory ?? null,
+        executionSessionId: body?.sessionId ?? null,
         leaseMs: typeof body?.leaseMs === "number" ? body.leaseMs : undefined
       });
       if (task) {
@@ -185,11 +190,15 @@ export class KanbanAgentController {
   @Post("tasks/:id/complete")
   public async completeTask(
     @Param("id") id: string,
-    @Body() body: { resultSummary?: string | null }
+    @Body() body: { agentId?: string; sessionId?: string; resultSummary?: string | null }
   ) {
     /* Agent completion writes back a short outcome summary for humans reviewing the board. */
     try {
-      const task = await this.kanban.completeTask({ taskId: id, resultSummary: body?.resultSummary });
+      const task = await this.kanban.completeTaskFromExecution({
+        taskId: id,
+        resultSummary: body?.resultSummary,
+        actor: this.resolveExecutionActor(body)
+      });
       publishKanbanTaskUpdated(this.events, { task, source: "agent" });
       return task;
     } catch (error) {
@@ -198,10 +207,14 @@ export class KanbanAgentController {
   }
 
   @Post("tasks/:id/block")
-  public async blockTask(@Param("id") id: string, @Body() body: { reason?: string | null }) {
+  public async blockTask(@Param("id") id: string, @Body() body: { agentId?: string; sessionId?: string; reason?: string | null }) {
     /* Blocking preserves the exact dependency or ambiguity the agent could not resolve alone. */
     try {
-      const task = await this.kanban.blockTask({ taskId: id, reason: body?.reason });
+      const task = await this.kanban.blockTaskFromExecution({
+        taskId: id,
+        reason: body?.reason,
+        actor: this.resolveExecutionActor(body)
+      });
       publishKanbanTaskUpdated(this.events, { task, source: "agent" });
       return task;
     } catch (error) {
@@ -238,14 +251,18 @@ export class KanbanAgentController {
     if (error instanceof KanbanValidationError) {
       throw new BadRequestException(error.message);
     }
+    if (error instanceof KanbanExecutionConflictError) {
+      throw new ConflictException(error.message);
+    }
     throw error;
   }
 
   private async updateTaskForAgent(
     taskId: string,
-    body: {
-      agentId?: string;
-      title?: string;
+      body: {
+        agentId?: string;
+        sessionId?: string;
+        title?: string;
       description?: string;
       status?: KanbanStatus;
       priority?: KanbanPriority;
@@ -260,7 +277,8 @@ export class KanbanAgentController {
       const started = await this.kanban.startTaskExecution({
         taskId,
         agentId: typeof body?.agentId === "string" && body.agentId.trim().length > 0 ? body.agentId : DEFAULT_SESSION_AGENT_ID,
-        executionSource: "session"
+        executionSource: "session",
+        executionSessionId: body?.sessionId ?? null
       });
       const patch = {
         ...(typeof body?.title === "string" ? { title: body.title } : {}),
@@ -270,17 +288,36 @@ export class KanbanAgentController {
         ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
         ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
       };
-      return Object.keys(patch).length > 0 ? this.kanban.updateTask(started.id, patch) : started;
+      return Object.keys(patch).length > 0
+        ? this.kanban.updateTaskFromExecution({
+            taskId: started.id,
+            patch,
+            actor: this.resolveExecutionActor(body)
+          })
+        : started;
     }
 
-    return this.kanban.updateTask(taskId, {
-      ...(typeof body?.title === "string" ? { title: body.title } : {}),
-      ...(typeof body?.description === "string" ? { description: body.description } : {}),
-      ...(nextStatus ? { status: nextStatus } : {}),
-      ...(body?.priority ? { priority: this.parsePriority(body.priority) } : {}),
-      ...(Array.isArray(body?.acceptanceCriteria) ? { acceptanceCriteria: body.acceptanceCriteria } : {}),
-      ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
-      ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
+    return this.kanban.updateTaskFromExecution({
+      taskId,
+      actor: this.resolveExecutionActor(body),
+      patch: {
+        ...(typeof body?.title === "string" ? { title: body.title } : {}),
+        ...(typeof body?.description === "string" ? { description: body.description } : {}),
+        ...(nextStatus ? { status: nextStatus } : {}),
+        ...(body?.priority ? { priority: this.parsePriority(body.priority) } : {}),
+        ...(Array.isArray(body?.acceptanceCriteria) ? { acceptanceCriteria: body.acceptanceCriteria } : {}),
+        ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
+        ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
+      }
     });
+  }
+
+  private resolveExecutionActor(body: { agentId?: string; sessionId?: string } | null | undefined): KanbanExecutionActor {
+    /* Agent mutations must carry their OpenCode session id so backend can reject cross-session execution writes. */
+    return {
+      agentId: typeof body?.agentId === "string" && body.agentId.trim().length > 0 ? body.agentId : DEFAULT_SESSION_AGENT_ID,
+      sessionId: typeof body?.sessionId === "string" && body.sessionId.trim().length > 0 ? body.sessionId : null,
+      source: "session"
+    };
   }
 }

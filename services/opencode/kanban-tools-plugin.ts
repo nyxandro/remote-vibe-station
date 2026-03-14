@@ -37,6 +37,8 @@ type KanbanTask = {
   executionSessionId?: string | null;
 };
 
+const EXECUTION_CONFLICT_CODE = "KANBAN_EXECUTION_OWNERSHIP_CONFLICT";
+
 const requireRuntimeConfig = () => {
   /* Fail fast when the plugin is mounted without the internal backend connectivity env vars. */
   const baseUrl = process.env.BACKEND_URL?.trim();
@@ -90,6 +92,22 @@ const postJson = async <T>(path: string, body: unknown): Promise<T | null> => {
 
   const text = await response.text();
   return text.trim().length > 0 ? (JSON.parse(text) as T) : null;
+};
+
+const isExecutionOwnershipConflict = (error: unknown): boolean => {
+  /* Ownership conflicts are expected control-flow once another session already owns the task. */
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(EXECUTION_CONFLICT_CODE);
+};
+
+const formatExecutionOwnershipConflict = (error: unknown): string => {
+  /* Return a normal tool result so the agent can stop working on a stolen task without red-stack noise. */
+  const message = error instanceof Error ? error.message : String(error);
+  return [
+    "Task execution already belongs to another OpenCode session.",
+    "Stop working on this task in the current session and refresh the kanban state.",
+    message
+  ].join("\n");
 };
 
 const humanizeStatus = (status: KanbanTask["status"]): string => {
@@ -265,11 +283,20 @@ export const KanbanToolsPlugin: Plugin = async () => {
           resultSummary: tool.schema.string().optional(),
           blockedReason: tool.schema.string().optional()
         },
-        async execute(args) {
-          const task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/refine`, {
-            ...args,
-            agentId: args.agentId ?? DEFAULT_AGENT_ID
-          });
+        async execute(args, context) {
+          let task: KanbanTask | null;
+          try {
+            task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/refine`, {
+              ...args,
+              agentId: args.agentId ?? DEFAULT_AGENT_ID,
+              sessionId: context.sessionID
+            });
+          } catch (error) {
+            if (isExecutionOwnershipConflict(error)) {
+              return formatExecutionOwnershipConflict(error);
+            }
+            throw error;
+          }
           if (!task) {
             throw new Error("Kanban backend returned an empty response for task refinement");
           }
@@ -286,14 +313,24 @@ export const KanbanToolsPlugin: Plugin = async () => {
           status: tool.schema.enum(CRITERION_STATUS_OPTIONS),
           blockedReason: tool.schema.string().optional()
         },
-        async execute(args) {
-          const task = await postJson<KanbanTask>(
-            `/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/criteria/${encodeURIComponent(args.criterionId)}/update`,
-            {
-              status: args.status,
-              blockedReason: args.blockedReason ?? null
+        async execute(args, context) {
+          let task: KanbanTask | null;
+          try {
+            task = await postJson<KanbanTask>(
+              `/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/criteria/${encodeURIComponent(args.criterionId)}/update`,
+              {
+                agentId: DEFAULT_AGENT_ID,
+                sessionId: context.sessionID,
+                status: args.status,
+                blockedReason: args.blockedReason ?? null
+              }
+            );
+          } catch (error) {
+            if (isExecutionOwnershipConflict(error)) {
+              return formatExecutionOwnershipConflict(error);
             }
-          );
+            throw error;
+          }
           if (!task) {
             throw new Error("Kanban backend returned an empty response for criterion update");
           }
@@ -314,6 +351,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
             projectSlug: args.projectSlug,
             currentDirectory: context.directory,
             agentId: args.agentId ?? DEFAULT_AGENT_ID,
+            sessionId: context.sessionID,
             leaseMs: args.leaseMs ?? DEFAULT_LEASE_MS
           });
           if (!response?.task) {
@@ -330,10 +368,20 @@ export const KanbanToolsPlugin: Plugin = async () => {
           taskId: tool.schema.string(),
           resultSummary: tool.schema.string().optional()
         },
-        async execute(args) {
-          const task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/complete`, {
-            resultSummary: args.resultSummary ?? null
-          });
+        async execute(args, context) {
+          let task: KanbanTask | null;
+          try {
+            task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/complete`, {
+              agentId: DEFAULT_AGENT_ID,
+              sessionId: context.sessionID,
+              resultSummary: args.resultSummary ?? null
+            });
+          } catch (error) {
+            if (isExecutionOwnershipConflict(error)) {
+              return formatExecutionOwnershipConflict(error);
+            }
+            throw error;
+          }
           if (!task) {
             throw new Error("Kanban backend returned an empty response for task completion");
           }
@@ -348,10 +396,20 @@ export const KanbanToolsPlugin: Plugin = async () => {
           taskId: tool.schema.string(),
           reason: tool.schema.string().optional()
         },
-        async execute(args) {
-          const task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/block`, {
-            reason: args.reason ?? null
-          });
+        async execute(args, context) {
+          let task: KanbanTask | null;
+          try {
+            task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/block`, {
+              agentId: DEFAULT_AGENT_ID,
+              sessionId: context.sessionID,
+              reason: args.reason ?? null
+            });
+          } catch (error) {
+            if (isExecutionOwnershipConflict(error)) {
+              return formatExecutionOwnershipConflict(error);
+            }
+            throw error;
+          }
           if (!task) {
             throw new Error("Kanban backend returned an empty response for task blocking");
           }

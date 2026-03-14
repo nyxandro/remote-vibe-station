@@ -14,16 +14,21 @@ import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
 import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
+import { isOpenCodeFetchTransportFailure, normalizeOpenCodeTransportErrorMessage } from "../open-code/opencode-transport-errors";
+import { OpenCodePart } from "../open-code/opencode.types";
 import { ProjectsService } from "../projects/projects.service";
 import { buildKanbanRunnerPrompt } from "./kanban-runner-prompt";
 import { KanbanRunnerSessionService } from "./kanban-runner-session.service";
+import { KanbanExecutionConflictError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
 import { KanbanTaskView } from "./kanban.types";
 
 const MIN_RUNNER_CLAIM_LEASE_MS = 30 * 60 * 1000;
 const RUNNER_EVENT_CONNECT_TIMEOUT_MS = 60_000;
+const RUNNER_FETCH_SETTLE_TIMEOUT_MS = 30_000;
 
 type KanbanRunnerReason = "startup" | "task-event" | "runner-finished";
+type KanbanRunnerAction = "started" | "continued";
 
 export const KANBAN_RUNNER_AGENT_ID = "kanban-runner";
 
@@ -94,24 +99,47 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     let task: KanbanTaskView | null = null;
 
     try {
-      task = await this.resolveTaskForRun(input.projectSlug);
-      if (!task) {
+      const selection = await this.resolveTaskForRun(input.projectSlug);
+      if (!selection) {
         return;
       }
+      task = selection.task;
 
       const directory = this.projects.getProjectRootPath(input.projectSlug);
       this.opencodeEvents.ensureDirectory(directory);
       await this.waitForEventBridge(directory);
 
-      /* Keep the same session for the same task; only rotate when a different queued task gets claimed. */
+      /* Keep the same session for the same task; queued work is claimed only after its dedicated session exists. */
       const taskId = task.id;
-      const sessionId = await this.ensureTaskSession({ taskId: task.id, directory });
+      const sessionId = await this.ensureTaskSession({
+        taskId: task.id,
+        directory,
+        preferredSessionId: task.executionSessionId ?? null
+      });
+      if (selection.action === "started") {
+        try {
+          task = await this.kanban.startTaskExecution({
+            taskId,
+            agentId: KANBAN_RUNNER_AGENT_ID,
+            executionSource: "runner",
+            executionSessionId: sessionId,
+            leaseMs: MIN_RUNNER_CLAIM_LEASE_MS
+          });
+        } catch (error) {
+          /* A human/session may legitimately win the race to start queued work; that is not a runner failure. */
+          if (error instanceof KanbanExecutionConflictError) {
+            return;
+          }
+          throw error;
+        }
+      }
       const prompt = buildKanbanRunnerPrompt(task);
 
       this.events.publish({
         type: "kanban.runner.started",
         ts: new Date().toISOString(),
         data: {
+          action: selection.action,
           reason: input.reason,
           projectSlug: input.projectSlug,
           taskId,
@@ -120,16 +148,14 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
-      const promptResult = await this.opencode.sendPromptToSession(prompt, {
-        directory,
-        sessionID: sessionId
-      });
+      const promptResult = await this.sendPromptWithSettle({ directory, sessionId, prompt });
       const refreshedTask = await this.loadTask(taskId, input.projectSlug);
 
       this.events.publish({
         type: "kanban.runner.finished",
         ts: new Date().toISOString(),
         data: {
+          action: selection.action,
           reason: input.reason,
           projectSlug: input.projectSlug,
           taskId,
@@ -163,7 +189,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           projectSlug: input.projectSlug,
           taskId: task?.id ?? null,
           taskTitle: task?.title ?? null,
-          message: error instanceof Error ? error.message : "Kanban runner failed"
+          message: normalizeOpenCodeTransportErrorMessage(error)
         }
       });
     } finally {
@@ -176,7 +202,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async resolveTaskForRun(projectSlug: string): Promise<KanbanTaskView | null> {
+  private async resolveTaskForRun(projectSlug: string): Promise<{ task: KanbanTaskView; action: KanbanRunnerAction } | null> {
     /* Resume unfinished runner-owned work first, otherwise claim the next queued task for automation. */
     const tasks = await this.kanban.listTasks({ projectSlug });
     const activeTask = tasks.find(
@@ -186,19 +212,15 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         task.executionSource === "runner"
     );
     if (activeTask) {
-      return activeTask;
+      return { task: activeTask, action: "continued" };
     }
 
-    const hasQueued = tasks.some((task) => task.status === "queued" && task.executionSource !== "session");
-    if (!hasQueued) {
+    const queuedTask = tasks.find((task) => task.status === "queued" && task.executionSource !== "session") ?? null;
+    if (!queuedTask) {
       return null;
     }
 
-    return this.kanban.claimNextTask({
-      projectSlug,
-      agentId: KANBAN_RUNNER_AGENT_ID,
-      leaseMs: MIN_RUNNER_CLAIM_LEASE_MS
-    });
+    return { task: queuedTask, action: "started" };
   }
 
   private onEvent(event: EventEnvelope): void {
@@ -212,14 +234,23 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       const status = String((event.data as any)?.status ?? "").trim();
       const claimedBy = String((event.data as any)?.claimedBy ?? "").trim();
       const executionSource = String((event.data as any)?.executionSource ?? "").trim();
+      const source = String((event.data as any)?.source ?? "").trim();
       if (!projectSlug) {
         return;
       }
 
       const isCandidate =
-        (status === "queued" && executionSource !== "session") ||
+        (status === "queued" && executionSource !== "session" && source !== "agent") ||
         (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner");
       if (isCandidate) {
+        this.scheduleProjectRun(projectSlug, "task-event");
+      }
+      return;
+    }
+
+    if (event.type === "opencode.message") {
+      const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
+      if (projectSlug) {
         this.scheduleProjectRun(projectSlug, "task-event");
       }
       return;
@@ -253,8 +284,13 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     void this.runProject({ projectSlug, reason });
   }
 
-  private async ensureTaskSession(input: { taskId: string; directory: string }): Promise<string> {
+  private async ensureTaskSession(input: { taskId: string; directory: string; preferredSessionId?: string | null }): Promise<string> {
     /* Reuse stored task sessions whenever possible so unfinished work keeps its accumulated context. */
+    const preferredSessionId = input.preferredSessionId?.trim();
+    if (preferredSessionId) {
+      return preferredSessionId;
+    }
+
     const existingSessionId = await this.runnerSessions.getTaskSessionId(input.taskId);
     if (existingSessionId) {
       return existingSessionId;
@@ -263,6 +299,44 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     const created = await this.opencode.createDetachedSession({ directory: input.directory });
     await this.runnerSessions.setTaskSessionId(input.taskId, created.id);
     return created.id;
+  }
+
+  private async sendPromptWithSettle(input: {
+    directory: string;
+    sessionId: string;
+    prompt: string;
+  }): Promise<{ sessionId: string; responseText: string; parts: OpenCodePart[] }> {
+    /* Detached runner turns may finish successfully even if the synchronous HTTP request drops after handing work to OpenCode. */
+    try {
+      const result = await this.opencode.sendPromptToSession(input.prompt, {
+        directory: input.directory,
+        sessionID: input.sessionId
+      });
+      return {
+        sessionId: result.sessionId,
+        responseText: result.responseText,
+        parts: (result.parts ?? []) as OpenCodePart[]
+      };
+    } catch (error) {
+      if (!isOpenCodeFetchTransportFailure(error)) {
+        throw error;
+      }
+
+      const settled = await this.opencode.waitForSessionToSettle({
+        directory: input.directory,
+        sessionID: input.sessionId,
+        timeoutMs: RUNNER_FETCH_SETTLE_TIMEOUT_MS
+      });
+      if (!settled) {
+        throw error;
+      }
+
+      return {
+        sessionId: input.sessionId,
+        responseText: "",
+        parts: []
+      };
+    }
   }
 
   private async loadTask(taskId: string, projectSlug: string): Promise<KanbanTaskView | null> {

@@ -73,7 +73,7 @@ describe("KanbanRunnerService", () => {
       listTasks: jest.fn(async ({ projectSlug }: { projectSlug?: string | null } = {}) =>
         projectSlug === "alpha" ? [buildTask()] : [buildTask()]
       ),
-      claimNextTask: jest.fn()
+      startTaskExecution: jest.fn()
     };
     const runnerSessions = {
       getTaskSessionId: jest.fn(async () => "session-existing"),
@@ -127,7 +127,7 @@ describe("KanbanRunnerService", () => {
 
     await runner.runOnce("startup");
 
-    expect(kanban.claimNextTask).not.toHaveBeenCalled();
+    expect(kanban.startTaskExecution).not.toHaveBeenCalled();
     expect(opencode.createDetachedSession).not.toHaveBeenCalled();
     expect(opencode.sendPromptToSession).toHaveBeenCalledWith(
       expect.stringContaining("Continue kanban task task-1"),
@@ -137,14 +137,21 @@ describe("KanbanRunnerService", () => {
 
   test("runOnce claims the next queued task for automation when no active runner task exists", async () => {
     /* Idle projects with queued work should start automatically without waiting for a manual wake-up. */
-    const claimedTask = buildTask({ id: "task-queued", status: "in_progress", claimedBy: KANBAN_RUNNER_AGENT_ID });
+    const queuedTask = buildTask({ id: "task-queued", status: "queued", claimedBy: null, executionSource: null, executionSessionId: null });
+    const claimedTask = buildTask({
+      id: "task-queued",
+      status: "in_progress",
+      claimedBy: KANBAN_RUNNER_AGENT_ID,
+      executionSource: "runner",
+      executionSessionId: "session-2"
+    });
     const kanban = {
-      listTasks: jest.fn(async ({ projectSlug }: { projectSlug?: string | null } = {}) =>
-        projectSlug === "alpha"
-          ? [buildTask({ id: "task-human", claimedBy: "manual-agent" }), buildTask({ id: "task-queued", status: "queued", claimedBy: null })]
-          : [buildTask({ id: "task-queued", status: "queued", claimedBy: null })]
-      ),
-      claimNextTask: jest.fn(async () => claimedTask)
+      listTasks: jest
+        .fn()
+        .mockResolvedValueOnce([queuedTask])
+        .mockResolvedValueOnce([buildTask({ id: "task-human", claimedBy: "manual-agent", executionSource: "session" }), queuedTask])
+        .mockResolvedValueOnce([claimedTask]),
+      startTaskExecution: jest.fn(async () => claimedTask)
     };
     const runnerSessions = {
       getTaskSessionId: jest.fn(async () => null),
@@ -198,9 +205,11 @@ describe("KanbanRunnerService", () => {
 
     await runner.runOnce("startup");
 
-    expect(kanban.claimNextTask).toHaveBeenCalledWith({
-      projectSlug: "alpha",
+    expect(kanban.startTaskExecution).toHaveBeenCalledWith({
+      taskId: "task-queued",
       agentId: KANBAN_RUNNER_AGENT_ID,
+      executionSource: "runner",
+      executionSessionId: "session-2",
       leaseMs: 1_800_000
     });
     expect(opencode.createDetachedSession).toHaveBeenCalledWith({ directory: "/srv/projects/alpha" });
@@ -213,12 +222,21 @@ describe("KanbanRunnerService", () => {
 
   test("runOnce reuses an existing session for a queued task that was already in progress before", async () => {
     /* Re-claimed work should keep its prior session instead of starting from scratch after a pause. */
-    const claimedTask = buildTask({ id: "task-returned", status: "in_progress", claimedBy: KANBAN_RUNNER_AGENT_ID });
+    const queuedTask = buildTask({ id: "task-returned", status: "queued", claimedBy: null, executionSource: null, executionSessionId: null });
+    const claimedTask = buildTask({
+      id: "task-returned",
+      status: "in_progress",
+      claimedBy: KANBAN_RUNNER_AGENT_ID,
+      executionSource: "runner",
+      executionSessionId: "session-returned"
+    });
     const kanban = {
-      listTasks: jest.fn(async ({ projectSlug }: { projectSlug?: string | null } = {}) =>
-        projectSlug === "alpha" ? [buildTask({ id: "task-returned", status: "queued", claimedBy: null })] : [buildTask({ id: "task-returned", status: "queued", claimedBy: null })]
-      ),
-      claimNextTask: jest.fn(async () => claimedTask)
+      listTasks: jest
+        .fn()
+        .mockResolvedValueOnce([queuedTask])
+        .mockResolvedValueOnce([queuedTask])
+        .mockResolvedValueOnce([claimedTask]),
+      startTaskExecution: jest.fn(async () => claimedTask)
     };
     const runnerSessions = {
       getTaskSessionId: jest.fn(async () => "session-returned"),
@@ -273,6 +291,13 @@ describe("KanbanRunnerService", () => {
     await runner.runOnce("startup");
 
     expect(opencode.createDetachedSession).not.toHaveBeenCalled();
+    expect(kanban.startTaskExecution).toHaveBeenCalledWith({
+      taskId: "task-returned",
+      agentId: KANBAN_RUNNER_AGENT_ID,
+      executionSource: "runner",
+      executionSessionId: "session-returned",
+      leaseMs: 1_800_000
+    });
     expect(opencode.sendPromptToSession).toHaveBeenCalledWith(
       expect.stringContaining("Continue kanban task task-returned"),
       expect.objectContaining({ directory: "/srv/projects/alpha", sessionID: "session-returned" })
@@ -291,7 +316,7 @@ describe("KanbanRunnerService", () => {
         .mockResolvedValueOnce([taskInProgress])
         .mockResolvedValueOnce([taskInProgress])
         .mockResolvedValueOnce([taskDone]),
-      claimNextTask: jest.fn()
+      startTaskExecution: jest.fn()
     };
     const runnerSessions = {
       getTaskSessionId: jest.fn(async () => "session-existing"),
@@ -365,8 +390,13 @@ describe("KanbanRunnerService", () => {
 
   test("runner starts queued work when kanban task updates announce a new automation candidate", async () => {
     /* Fresh queued tasks must wake the runner immediately instead of waiting for a removed scheduler tick. */
-    const queuedTask = buildTask({ status: "queued", claimedBy: null, leaseUntil: null });
-    const claimedTask = buildTask({ status: "in_progress", claimedBy: KANBAN_RUNNER_AGENT_ID });
+    const queuedTask = buildTask({ status: "queued", claimedBy: null, leaseUntil: null, executionSource: null, executionSessionId: null });
+    const claimedTask = buildTask({
+      status: "in_progress",
+      claimedBy: KANBAN_RUNNER_AGENT_ID,
+      executionSource: "runner",
+      executionSessionId: "session-created"
+    });
     const doneTask = buildTask({ status: "done", claimedBy: null, leaseUntil: null });
     const kanban = {
       listTasks: jest
@@ -374,7 +404,7 @@ describe("KanbanRunnerService", () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([queuedTask])
         .mockResolvedValueOnce([doneTask]),
-      claimNextTask: jest.fn(async () => claimedTask)
+      startTaskExecution: jest.fn(async () => claimedTask)
     };
     const runnerSessions = {
       getTaskSessionId: jest.fn(async () => null),
@@ -423,7 +453,8 @@ describe("KanbanRunnerService", () => {
         taskTitle: "Implement runner",
         projectSlug: "alpha",
         status: "queued",
-        claimedBy: null
+        claimedBy: null,
+        executionSource: null
       }
     });
 
@@ -431,9 +462,11 @@ describe("KanbanRunnerService", () => {
       expect(opencode.sendPromptToSession).toHaveBeenCalledTimes(1);
     });
 
-    expect(kanban.claimNextTask).toHaveBeenCalledWith({
-      projectSlug: "alpha",
+    expect(kanban.startTaskExecution).toHaveBeenCalledWith({
+      taskId: "task-1",
       agentId: KANBAN_RUNNER_AGENT_ID,
+      executionSource: "runner",
+      executionSessionId: "session-created",
       leaseMs: 1_800_000
     });
   });
@@ -444,11 +477,11 @@ describe("KanbanRunnerService", () => {
       id: "task-session-owned",
       claimedBy: "opencode-agent",
       executionSource: "session",
-      executionSessionId: null
+      executionSessionId: "session-human"
     });
     const kanban = {
       listTasks: jest.fn(async () => [sessionTask]),
-      claimNextTask: jest.fn()
+      startTaskExecution: jest.fn()
     };
     const runnerSessions = {
       getTaskSessionId: jest.fn(async () => null),
@@ -479,7 +512,7 @@ describe("KanbanRunnerService", () => {
 
     await runner.runOnce("startup");
 
-    expect(kanban.claimNextTask).not.toHaveBeenCalled();
+    expect(kanban.startTaskExecution).not.toHaveBeenCalled();
     expect(opencode.sendPromptToSession).not.toHaveBeenCalled();
   });
 });

@@ -467,14 +467,14 @@ describe("KanbanService", () => {
       taskId: "task-session-start",
       agentId: "opencode-agent",
       executionSource: "session",
-      executionSessionId: null,
+      executionSessionId: "session-alpha",
       nowMs: Date.parse("2026-03-10T10:00:00.000Z")
     });
 
     expect(started.status).toBe("in_progress");
     expect(started.claimedBy).toBe("opencode-agent");
     expect(started.executionSource).toBe("session");
-    expect(started.executionSessionId).toBeNull();
+    expect(started.executionSessionId).toBe("session-alpha");
     expect(started.leaseUntil).toBeTruthy();
   });
 
@@ -526,9 +526,121 @@ describe("KanbanService", () => {
         taskId: "task-runner-owned",
         agentId: "opencode-agent",
         executionSource: "session",
-        executionSessionId: null,
+        executionSessionId: "session-alpha",
         nowMs: Date.parse("2026-03-10T10:00:00.000Z")
       })
-    ).rejects.toThrow('Cannot start task "task-runner-owned" because it is already owned by execution source "runner".');
+    ).rejects.toThrow("KANBAN_EXECUTION_OWNERSHIP_CONFLICT");
+  });
+
+  test("updateCriterionFromExecution rejects stale session mutations when another session owns the task", async () => {
+    /* Once a task is owned by one OpenCode session, a second session must not keep editing its checklist. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "task-owned",
+          status: "in_progress",
+          claimedBy: "opencode-agent",
+          acceptanceCriteria: [createCriterion({ id: "criterion-a" })],
+          executionSource: "session",
+          executionSessionId: "session-owner"
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    await expect(
+      service.updateCriterionFromExecution({
+        taskId: "task-owned",
+        criterionId: "criterion-a",
+        status: "done",
+        actor: {
+          agentId: "opencode-agent",
+          sessionId: "session-other",
+          source: "session"
+        }
+      })
+    ).rejects.toThrow("KANBAN_EXECUTION_OWNERSHIP_CONFLICT");
+  });
+
+  test("updateCriterion re-queues a task after the last blocked criterion is unblocked", async () => {
+    /* Unblocking the checklist should not leave the card stuck forever in blocked when no owner remains. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "task-blocked",
+          status: "blocked",
+          blockedReason: "Need review",
+          claimedBy: null,
+          leaseUntil: null,
+          executionSource: null,
+          executionSessionId: null,
+          acceptanceCriteria: [createCriterion({ id: "criterion-blocked", status: "blocked", blockedReason: "Need review" })]
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    const updated = await service.updateCriterion({
+      taskId: "task-blocked",
+      criterionId: "criterion-blocked",
+      status: "done"
+    });
+
+    expect(updated.status).toBe("queued");
+    expect(updated.blockedReason).toBeNull();
   });
 });

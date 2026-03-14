@@ -26,8 +26,8 @@ const readOutboxItems = (): any[] => {
 };
 
 describe("Telegram kanban runner notifications", () => {
-  test("routes kanban.runner.started to all configured admins with chat bindings", () => {
-    /* Runner wake-ups should be visible in Telegram even without an explicit adminId in the event payload. */
+  test("routes kanban.runner.finished with started action to all configured admins with chat bindings", () => {
+    /* Telegram should announce only successful runner steps, with a distinct verb for first claim vs continuation. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-kanban-runner-started-"));
     const prev = process.cwd();
     process.chdir(tmp);
@@ -54,9 +54,10 @@ describe("Telegram kanban runner notifications", () => {
       bridge.onModuleInit();
 
       events.publish({
-        type: "kanban.runner.started",
+        type: "kanban.runner.finished",
         ts: new Date().toISOString(),
         data: {
+          action: "started",
           projectSlug: "auto-v-arendu",
           taskId: "task-123",
           taskTitle: "Diagnose and fix smoke E2E failure"
@@ -65,8 +66,8 @@ describe("Telegram kanban runner notifications", () => {
 
       const items = readOutboxItems();
       expect(items).toHaveLength(2);
-      expect(items[0].text).toBe("🤖 Kanban runner продолжил задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
-      expect(items[1].text).toBe("🤖 Kanban runner продолжил задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
+      expect(items[0].text).toBe("🤖 Kanban runner взял в работу задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
+      expect(items[1].text).toBe("🤖 Kanban runner взял в работу задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });

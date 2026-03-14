@@ -6,15 +6,25 @@
  */
 
 import * as crypto from "node:crypto";
-import * as path from "node:path";
 
 import { Inject, Injectable } from "@nestjs/common";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import {
+  decorateKanbanTasks,
+  resolveOptionalKanbanProjectSlug,
+  resolveRequiredKanbanProjectSlug
+} from "./kanban-project-utils";
 import { createWebToken } from "../security/web-token";
 import { ProjectsService } from "../projects/projects.service";
 import { normalizeCriterionInputs } from "./kanban-criteria";
 import { KanbanValidationError } from "./kanban.errors";
+import {
+  assertKanbanExecutionOwner,
+  assertKanbanTaskCanStartExecution,
+  KanbanExecutionActor
+} from "./kanban-execution-ownership";
+import { applyKanbanCriterionPatch, applyKanbanTaskPatch } from "./kanban-task-mutations";
 import { KanbanStore } from "./kanban.store";
 import {
   compareKanbanTasks,
@@ -37,8 +47,6 @@ import {
   normalizeOptionalKanbanLimit,
   normalizeOptionalKanbanStatus,
   requireKanbanAgentId,
-  requireKanbanCriterionId,
-  requireKanbanCriterionStatus,
   requireKanbanPriority,
   requireKanbanProjectSlug,
   requireKanbanStatus,
@@ -66,7 +74,7 @@ export class KanbanService {
     /* Every read pass also normalizes expired leases so dead agents release work automatically. */
     const nowMs = input?.nowMs ?? Date.now();
     const projects = await this.projects.list();
-    const resolvedProjectSlug = await this.resolveOptionalProjectSlug({
+    const resolvedProjectSlug = resolveOptionalKanbanProjectSlug({
       projectSlug: input?.projectSlug,
       currentDirectory: input?.currentDirectory,
       projects
@@ -83,7 +91,7 @@ export class KanbanService {
         .sort(compareKanbanTasks);
 
       const sliced = typeof limit === "number" ? filtered.slice(0, limit) : filtered;
-      return this.decorateTasks(sliced, projects);
+      return decorateKanbanTasks(sliced, projects);
     });
   }
 
@@ -95,14 +103,14 @@ export class KanbanService {
     /* External callers reuse the same directory->project resolution logic as queue claiming. */
     const projects = await this.projects.list();
     if (input.required) {
-      return this.resolveRequiredProjectSlug({
+      return resolveRequiredKanbanProjectSlug({
         projectSlug: input.projectSlug,
         currentDirectory: input.currentDirectory,
         projects
       });
     }
 
-    return this.resolveOptionalProjectSlug({
+    return resolveOptionalKanbanProjectSlug({
       projectSlug: input.projectSlug,
       currentDirectory: input.currentDirectory,
       projects
@@ -156,52 +164,7 @@ export class KanbanService {
     /* Backlog refinement and manual edits both flow through the same explicit patch surface. */
     const updated = await this.store.transact((draft) => {
       const task = this.findTaskOrThrow(draft.tasks, taskId);
-      const nextCriteria = Array.isArray(patch.acceptanceCriteria)
-        ? normalizeCriterionInputs(patch.acceptanceCriteria, {
-            existingCriteria: task.acceptanceCriteria,
-            createId: () => crypto.randomUUID()
-          })
-        : task.acceptanceCriteria;
-      const nextStatus = resolveKanbanTaskStatus({
-        requestedStatus: patch.status ? requireKanbanStatus(patch.status) : task.status,
-        acceptanceCriteria: nextCriteria
-      });
-
-      if (typeof patch.title === "string") {
-        task.title = requireKanbanTitle(patch.title);
-      }
-      if (typeof patch.description === "string") {
-        task.description = normalizeKanbanText(patch.description);
-      }
-      if (typeof patch.priority === "string") {
-        task.priority = requireKanbanPriority(patch.priority);
-      }
-
-      task.acceptanceCriteria = nextCriteria;
-      task.status = nextStatus;
-
-      /* Clear agent lease whenever humans move a card out of active execution. */
-      if (nextStatus !== "in_progress") {
-        task.claimedBy = null;
-        task.leaseUntil = null;
-        task.executionSource = null;
-        task.executionSessionId = null;
-      }
-
-      /* Keep status-specific notes explicit so stale blocker/result text does not leak into other phases. */
-      task.resultSummary =
-        nextStatus === "done"
-          ? patch.resultSummary !== undefined
-            ? normalizeNullableKanbanText(patch.resultSummary)
-            : task.resultSummary
-          : null;
-      task.blockedReason =
-        nextStatus === "blocked"
-          ? patch.blockedReason !== undefined
-            ? normalizeNullableKanbanText(patch.blockedReason)
-            : task.blockedReason
-          : null;
-      task.updatedAt = new Date().toISOString();
+      applyKanbanTaskPatch(task, patch);
       return task;
     });
 
@@ -217,33 +180,45 @@ export class KanbanService {
     /* Criterion updates drive resumable automation, so they are first-class mutations instead of free-form notes. */
     const updated = await this.store.transact((draft) => {
       const task = this.findTaskOrThrow(draft.tasks, input.taskId);
-      const criterion = task.acceptanceCriteria.find((item) => item.id === requireKanbanCriterionId(input.criterionId));
-      if (!criterion) {
-        throw new KanbanValidationError(`Kanban criterion not found: ${input.criterionId}`);
-      }
-
-      const nextStatus = requireKanbanCriterionStatus(input.status);
-      if (task.status === "done" && nextStatus !== "done") {
-        throw new KanbanValidationError("Done tasks must be reopened before changing criterion status");
-      }
-
-      criterion.status = nextStatus;
-      criterion.blockedReason = nextStatus === "blocked" ? normalizeNullableKanbanText(input.blockedReason) : null;
-
-      if (nextStatus === "blocked") {
-        task.status = "blocked";
-        task.blockedReason = normalizeNullableKanbanText(input.blockedReason) ?? task.blockedReason;
-        task.claimedBy = null;
-        task.leaseUntil = null;
-        task.executionSource = null;
-        task.executionSessionId = null;
-      }
-
-      task.updatedAt = new Date().toISOString();
+      applyKanbanCriterionPatch(task, input);
       return task;
     });
 
     return this.decorateTask(updated);
+  }
+
+  public async updateTaskFromExecution(input: {
+    taskId: string;
+    actor: KanbanExecutionActor;
+    patch: UpdateKanbanTaskInput;
+  }): Promise<KanbanTaskView> {
+    /* Execution-bound task edits must come only from the owning OpenCode session. */
+    const task = await this.store.transact((draft) => {
+      const existing = this.findTaskOrThrow(draft.tasks, input.taskId);
+      assertKanbanExecutionOwner({ task: existing, actor: input.actor });
+      applyKanbanTaskPatch(existing, input.patch);
+      return existing;
+    });
+
+    return this.decorateTask(task);
+  }
+
+  public async updateCriterionFromExecution(input: {
+    taskId: string;
+    criterionId: string;
+    status: KanbanCriterionStatus;
+    blockedReason?: string | null;
+    actor: KanbanExecutionActor;
+  }): Promise<KanbanTaskView> {
+    /* Checklist progress must stay owned by the same OpenCode session that executes the task. */
+    const task = await this.store.transact((draft) => {
+      const task = this.findTaskOrThrow(draft.tasks, input.taskId);
+      assertKanbanExecutionOwner({ task, actor: input.actor });
+      applyKanbanCriterionPatch(task, input);
+      return task;
+    });
+
+    return this.decorateTask(task);
   }
 
   public async moveTask(taskId: string, status: KanbanStatus): Promise<KanbanTaskView> {
@@ -262,6 +237,25 @@ export class KanbanService {
     });
   }
 
+  public async completeTaskFromExecution(input: {
+    taskId: string;
+    resultSummary?: string | null;
+    actor: KanbanExecutionActor;
+  }): Promise<KanbanTaskView> {
+    /* Only the owning session may declare execution complete. */
+    const task = await this.store.transact((draft) => {
+      const task = this.findTaskOrThrow(draft.tasks, input.taskId);
+      assertKanbanExecutionOwner({ task, actor: input.actor });
+      applyKanbanTaskPatch(task, {
+        status: "done",
+        resultSummary: normalizeNullableKanbanText(input.resultSummary)
+      });
+      return task;
+    });
+
+    return this.decorateTask(task);
+  }
+
   public async blockTask(input: {
     taskId: string;
     reason?: string | null;
@@ -271,6 +265,25 @@ export class KanbanService {
       status: "blocked",
       blockedReason: normalizeNullableKanbanText(input.reason)
     });
+  }
+
+  public async blockTaskFromExecution(input: {
+    taskId: string;
+    reason?: string | null;
+    actor: KanbanExecutionActor;
+  }): Promise<KanbanTaskView> {
+    /* Only the owning session may stop execution with a blocker reason. */
+    const task = await this.store.transact((draft) => {
+      const task = this.findTaskOrThrow(draft.tasks, input.taskId);
+      assertKanbanExecutionOwner({ task, actor: input.actor });
+      applyKanbanTaskPatch(task, {
+        status: "blocked",
+        blockedReason: normalizeNullableKanbanText(input.reason)
+      });
+      return task;
+    });
+
+    return this.decorateTask(task);
   }
 
   public async startTaskExecution(input: {
@@ -292,16 +305,18 @@ export class KanbanService {
     const started = await this.store.transact((draft) => {
       releaseExpiredKanbanLeases(draft.tasks, nowMs);
       const task = this.findTaskOrThrow(draft.tasks, taskId);
+      const actor: KanbanExecutionActor = {
+        agentId,
+        sessionId: input.executionSessionId ?? null,
+        source: input.executionSource
+      };
 
       /* A running owner keeps exclusive execution rights until the task finishes, blocks, or expires. */
-      if (task.status === "in_progress" && task.executionSource && task.executionSource !== input.executionSource) {
-        throw new KanbanValidationError(
-          `Cannot start task "${task.id}" because it is already owned by execution source "${task.executionSource}".`
-        );
-      }
       if (task.status === "done" || task.status === "blocked") {
         throw new KanbanValidationError(`Cannot start task "${task.id}" from status "${task.status}".`);
       }
+
+      assertKanbanTaskCanStartExecution({ task, actor });
 
       task.status = "in_progress";
       task.claimedBy = agentId;
@@ -325,7 +340,7 @@ export class KanbanService {
   }): Promise<KanbanTaskView | null> {
     /* Agent claiming is project-scoped so one worker does not silently jump into another repo. */
     const projects = await this.projects.list();
-    const projectSlug = await this.resolveRequiredProjectSlug({
+    const projectSlug = resolveRequiredKanbanProjectSlug({
       projectSlug: input.projectSlug,
       currentDirectory: input.currentDirectory,
       projects
@@ -360,7 +375,7 @@ export class KanbanService {
       next.claimedBy = agentId;
       next.leaseUntil = leaseUntil;
       next.executionSource = agentId === RUNNER_AGENT_ID ? "runner" : "session";
-      next.executionSessionId = next.executionSource === "session" ? normalizeNullableKanbanText(input.executionSessionId) : null;
+      next.executionSessionId = normalizeNullableKanbanText(input.executionSessionId);
       next.updatedAt = nowIso;
       return next;
     });
@@ -392,57 +407,7 @@ export class KanbanService {
   private async decorateTask(task: KanbanTaskRecord): Promise<KanbanTaskView> {
     /* Single-task responses still resolve the current human-friendly project name for UI consistency. */
     const projects = await this.projects.list();
-    return this.decorateTasks([task], projects)[0] as KanbanTaskView;
-  }
-
-  private decorateTasks(
-    tasks: KanbanTaskRecord[],
-    projects: Array<{ slug: string; name: string }>
-  ): KanbanTaskView[] {
-    /* Resolve display names without making task persistence depend on project rename history. */
-    const projectNames = new Map(projects.map((project) => [project.slug, project.name]));
-    return tasks.map((task) => ({
-      ...task,
-      projectName: projectNames.get(task.projectSlug) ?? task.projectSlug
-    }));
-  }
-
-  private async resolveOptionalProjectSlug(input: {
-    projectSlug?: string | null;
-    currentDirectory?: string | null;
-    projects?: Array<{ slug: string; rootPath: string }>;
-  }): Promise<string | null> {
-    /* Agent tools may omit project slug when OpenCode already knows the current working directory. */
-    if (input.projectSlug && input.projectSlug.trim().length > 0) {
-      return requireKanbanProjectSlug(input.projectSlug);
-    }
-
-    const currentDirectory = input.currentDirectory?.trim();
-    if (!currentDirectory) {
-      return null;
-    }
-
-    const projects = input.projects ?? (await this.projects.list());
-    const resolvedDirectory = path.resolve(currentDirectory);
-    const matching = projects
-      .map((project) => ({ project, rootPath: path.resolve(project.rootPath) }))
-      .filter(({ rootPath }) => resolvedDirectory === rootPath || resolvedDirectory.startsWith(`${rootPath}${path.sep}`))
-      .sort((left, right) => right.rootPath.length - left.rootPath.length)[0];
-
-    return matching?.project.slug ?? null;
-  }
-
-  private async resolveRequiredProjectSlug(input: {
-    projectSlug?: string | null;
-    currentDirectory?: string | null;
-    projects?: Array<{ slug: string; rootPath: string }>;
-  }): Promise<string> {
-    /* Claiming/creation must fail fast when project scope cannot be inferred safely. */
-    const resolved = await this.resolveOptionalProjectSlug(input);
-    if (!resolved) {
-      throw new KanbanValidationError("Project slug is required for this operation");
-    }
-    return resolved;
+    return decorateKanbanTasks([task], projects)[0] as KanbanTaskView;
   }
 
   private requireExistingProject(projectSlug: string): void {
