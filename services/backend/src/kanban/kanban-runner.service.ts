@@ -126,6 +126,18 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       this.opencodeEvents.ensureDirectory(directory);
       await this.waitForEventBridge(directory);
 
+      /* Deployment restarts should not inject a duplicate continuation into a session that is still actively running. */
+      if (input.reason === "startup" && selection.action === "continued" && task.executionSessionId) {
+        const busy = await this.opencode.isSessionBusy({
+          directory,
+          sessionID: task.executionSessionId
+        });
+        if (busy) {
+          this.scheduleDelayedProjectRun(input.projectSlug, "startup");
+          return;
+        }
+      }
+
       /* Keep the same session for the same task; queued work is claimed only after its dedicated session exists. */
       const taskId = task.id;
       const taskSession = await this.ensureTaskSession({

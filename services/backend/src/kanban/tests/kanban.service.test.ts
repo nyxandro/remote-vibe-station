@@ -30,6 +30,7 @@ type MutableTask = {
   leaseUntil: string | null;
   executionSource: "session" | "runner" | null;
   executionSessionId: string | null;
+  blockedResumeStatus?: "backlog" | "refinement" | "ready" | "queued" | "in_progress" | "done" | null;
 };
 
 const createCriterion = (overrides?: Partial<MutableCriterion>): MutableCriterion => ({
@@ -696,5 +697,134 @@ describe("KanbanService", () => {
 
     expect(updated.status).toBe("queued");
     expect(updated.blockedReason).toBeNull();
+  });
+
+  test("updateCriterion resumes in-progress execution after unblocking the active runner-owned task", async () => {
+    /* Removing the only blocker from the current runner task should keep the same task in progress instead of sending it back to queue. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "task-runner-blocked",
+          status: "blocked",
+          blockedReason: "Need schema clarification",
+          blockedResumeStatus: "in_progress",
+          claimedBy: "kanban-runner",
+          leaseUntil: "2099-03-10T12:00:00.000Z",
+          executionSource: "runner",
+          executionSessionId: "session-runner-1",
+          acceptanceCriteria: [
+            createCriterion({ id: "criterion-blocked", status: "blocked", blockedReason: "Need schema clarification" })
+          ]
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    const updated = await service.updateCriterion({
+      taskId: "task-runner-blocked",
+      criterionId: "criterion-blocked",
+      status: "done"
+    });
+
+    expect(updated.status).toBe("in_progress");
+    expect(updated.claimedBy).toBe("kanban-runner");
+    expect(updated.executionSource).toBe("runner");
+    expect(updated.executionSessionId).toBe("session-runner-1");
+    expect(updated.blockedReason).toBeNull();
+  });
+
+  test("updateCriterion keeps an unblocked former runner task queued when another task is already active", async () => {
+    /* Unblocking old work must not create a second in-progress task when the runner already moved on. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "task-runner-blocked",
+          status: "blocked",
+          blockedReason: "Need schema clarification",
+          blockedResumeStatus: "in_progress",
+          claimedBy: "kanban-runner",
+          leaseUntil: "2099-03-10T12:00:00.000Z",
+          executionSource: "runner",
+          executionSessionId: "session-runner-1",
+          acceptanceCriteria: [
+            createCriterion({ id: "criterion-blocked", status: "blocked", blockedReason: "Need schema clarification" })
+          ]
+        }),
+        createTask({
+          id: "task-active",
+          status: "in_progress",
+          claimedBy: "kanban-runner",
+          leaseUntil: "2099-03-10T12:05:00.000Z",
+          executionSource: "runner",
+          executionSessionId: "session-runner-2"
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    const updated = await service.updateCriterion({
+      taskId: "task-runner-blocked",
+      criterionId: "criterion-blocked",
+      status: "done"
+    });
+
+    expect(updated.status).toBe("queued");
+    expect(updated.claimedBy).toBeNull();
+    expect(updated.executionSource).toBeNull();
+    expect(updated.executionSessionId).toBeNull();
   });
 });

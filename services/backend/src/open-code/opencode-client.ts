@@ -18,6 +18,7 @@ import {
   waitForSessionToSettleViaApi
 } from "./opencode-session-state";
 import { formatOpenCodeHttpError } from "./opencode-http-error";
+import { buildOpenCodeLongRunningRequestInit } from "./opencode-http-dispatcher";
 import {
   OpenCodeAgent,
   OpenCodeAssistantTokens,
@@ -149,7 +150,7 @@ export class OpenCodeClient {
 
     const response = await this.request<OpenCodeMessageResponse>(
       `/session/${sessionID}/message?directory=${encodeURIComponent(input.directory)}`,
-      {
+      buildOpenCodeLongRunningRequestInit({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -157,7 +158,7 @@ export class OpenCodeClient {
           model,
           agent
         })
-      }
+      })
     );
 
     /* Some multipart prompt flows return 204/empty body while the real answer arrives via runtime events. */
@@ -238,14 +239,14 @@ export class OpenCodeClient {
     context.onSessionResolved?.(session.sessionID, session);
     const response = await this.request<OpenCodeMessageResponse>(
       `/session/${session.sessionID}/command?directory=${encodeURIComponent(context.directory)}`,
-      {
+      buildOpenCodeLongRunningRequestInit({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           command: input.command,
           arguments: input.arguments
         })
-      }
+      })
     );
 
     const responseText = this.extractText(response);
@@ -487,6 +488,11 @@ export class OpenCodeClient {
     });
   }
 
+  public async isSessionBusy(input: { directory: string; sessionID: string }): Promise<boolean> {
+    /* Runner startup needs one explicit busy-state check so deploy restarts do not duplicate an already-running turn. */
+    return this.checkSessionBusy(input.sessionID, input.directory);
+  }
+
   public async listSessions(input: { directory: string; limit: number }): Promise<OpenCodeSessionSummary[]> {
     /* Delegate normalization logic to dedicated session-state helper module. */
     return listSessionsViaApi({
@@ -575,7 +581,7 @@ export class OpenCodeClient {
     const existing = this.sessionIdsByDirectory.get(directory);
     if (existing) {
       /* Rotate away from stuck busy session to avoid blocking all future prompts. */
-      const busy = await this.isSessionBusy(existing, directory);
+      const busy = await this.checkSessionBusy(existing, directory);
       if (!busy) {
         return {
           sessionID: existing,
@@ -608,7 +614,7 @@ export class OpenCodeClient {
     };
   }
 
-  private async isSessionBusy(sessionID: string, directory: string): Promise<boolean> {
+  private async checkSessionBusy(sessionID: string, directory: string): Promise<boolean> {
     /* Delegate busy-state lookup to session helper to keep client lean. */
     return isSessionBusyViaApi({
       request: (path, init) => this.request(path, init),

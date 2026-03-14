@@ -115,6 +115,7 @@ describe("OpenCodeClient command APIs", () => {
     const body = JSON.parse(String(requestInit.body));
     expect(body.model).toEqual({ providerID: "opencode", modelID: "big-pickle", variant: "high" });
     expect(body.agent).toBe("plan");
+    expect(requestInit).toEqual(expect.objectContaining({ dispatcher: expect.anything() }));
   });
 
   it("sends multipart prompt with local image attachment", async () => {

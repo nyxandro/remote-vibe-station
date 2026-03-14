@@ -67,6 +67,10 @@ const waitFor = async (assertion: () => void | Promise<void>): Promise<void> => 
 };
 
 describe("KanbanRunnerService", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test("runOnce resumes the runner-owned in-progress task in the same stored session before claiming a new one", async () => {
     /* Unfinished automation work must keep the same OpenCode session so task context survives runner wake-ups. */
     const kanban = {
@@ -95,6 +99,7 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
+      isSessionBusy: jest.fn(async () => false),
       createDetachedSession: jest.fn(async () => ({ id: "session-1" })),
       rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
@@ -136,6 +141,66 @@ describe("KanbanRunnerService", () => {
     );
   });
 
+  test("runOnce skips startup continuation while the same runner session is still busy", async () => {
+    /* Deploy restarts must not inject a duplicate continuation into a turn that OpenCode is already executing. */
+    jest.useFakeTimers();
+
+    const kanban = {
+      listTasks: jest.fn(async ({ projectSlug }: { projectSlug?: string | null } = {}) =>
+        projectSlug === "alpha" ? [buildTask({ executionSessionId: "session-busy" })] : [buildTask({ executionSessionId: "session-busy" })]
+      ),
+      startTaskExecution: jest.fn()
+    };
+    const runnerSessions = {
+      getTaskSessionId: jest.fn(async () => "session-busy"),
+      setTaskSessionId: jest.fn(async () => undefined)
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "Alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+    const opencode = {
+      isSessionBusy: jest.fn(async () => true),
+      createDetachedSession: jest.fn(async () => ({ id: "session-1" })),
+      rememberSelectedSession: jest.fn(),
+      sendPromptToSession: jest.fn()
+    };
+    const opencodeEvents = {
+      ensureDirectory: jest.fn(),
+      waitUntilConnected: jest.fn(async () => undefined)
+    };
+    const events = createEventsServiceMock();
+
+    const runner = new KanbanRunnerService(
+      { kanbanRunnerEnabled: true } as never,
+      kanban as never,
+      runnerSessions as never,
+      projects as never,
+      opencode as never,
+      opencodeEvents as never,
+      events as never
+    );
+
+    await runner.runOnce("startup");
+
+    expect(opencode.isSessionBusy).toHaveBeenCalledWith({
+      directory: "/srv/projects/alpha",
+      sessionID: "session-busy"
+    });
+    expect(opencode.sendPromptToSession).not.toHaveBeenCalled();
+  });
+
   test("runOnce claims the next queued task for automation when no active runner task exists", async () => {
     /* Idle projects with queued work should start automatically without waiting for a manual wake-up. */
     const queuedTask = buildTask({ id: "task-queued", status: "queued", claimedBy: null, executionSource: null, executionSessionId: null });
@@ -174,6 +239,7 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
+      isSessionBusy: jest.fn(async () => false),
       createDetachedSession: jest.fn(async () => ({ id: "session-2" })),
       rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
@@ -260,6 +326,7 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
+      isSessionBusy: jest.fn(async () => false),
       createDetachedSession: jest.fn(async () => ({ id: "session-3" })),
       rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
@@ -329,6 +396,7 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
+      isSessionBusy: jest.fn(async () => false),
       createDetachedSession: jest.fn(async () => ({ id: "session-1" })),
       rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest
@@ -418,6 +486,7 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
+      isSessionBusy: jest.fn(async () => false),
       createDetachedSession: jest.fn(async () => ({ id: "session-created" })),
       rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn(async () => ({
@@ -496,6 +565,7 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
+      isSessionBusy: jest.fn(async () => false),
       createDetachedSession: jest.fn(),
       rememberSelectedSession: jest.fn(),
       sendPromptToSession: jest.fn()

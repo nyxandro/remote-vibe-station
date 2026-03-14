@@ -10,6 +10,7 @@
  * - KanbanCriterionStatus - Union of criterion state values.
  * - KANBAN_EXECUTION_SOURCES - Supported task execution owners.
  * - KanbanExecutionSource - Union of execution owner values.
+ * - KanbanBlockedResumeStatus - Workflow state restored when a blocked task is unblocked again.
  * - KanbanCriterionRecord - Persisted checklist item for acceptance tracking.
  * - KanbanCriterionInput - Create/update input accepted from UI and agent tools.
  * - KanbanTaskRecord - Persisted task shape stored in JSON.
@@ -30,6 +31,8 @@ export type KanbanCriterionStatus = (typeof KANBAN_CRITERION_STATUSES)[number];
 
 export const KANBAN_EXECUTION_SOURCES = ["session", "runner"] as const;
 export type KanbanExecutionSource = (typeof KANBAN_EXECUTION_SOURCES)[number];
+
+export type KanbanBlockedResumeStatus = Exclude<KanbanStatus, "blocked">;
 
 export type KanbanCriterionRecord = {
   id: string;
@@ -63,6 +66,7 @@ export type KanbanTaskRecord = {
   leaseUntil: string | null;
   executionSource: KanbanExecutionSource | null;
   executionSessionId: string | null;
+  blockedResumeStatus?: KanbanBlockedResumeStatus | null;
 };
 
 export type KanbanTaskView = KanbanTaskRecord & {

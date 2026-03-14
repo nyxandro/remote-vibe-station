@@ -36,11 +36,13 @@ const taskSchema = z.object({
   leaseUntil: z.string().nullable(),
   executionSource: z.enum(["session", "runner"]).nullable().optional(),
   executionSessionId: z.string().nullable().optional(),
+  blockedResumeStatus: z.enum(["backlog", "refinement", "ready", "queued", "in_progress", "done"]).nullable().optional(),
   runnerSessionId: z.string().nullable().optional()
 }).transform((value) => ({
   ...value,
   executionSource: value.executionSource ?? (value.runnerSessionId ? "runner" : null),
-  executionSessionId: value.executionSessionId ?? value.runnerSessionId ?? null
+  executionSessionId: value.executionSessionId ?? value.runnerSessionId ?? null,
+  blockedResumeStatus: value.blockedResumeStatus ?? null
 }));
 
 const storeSchema = z.object({

@@ -151,7 +151,8 @@ export class KanbanService {
         claimedBy: null,
         leaseUntil: null,
         executionSource: null,
-        executionSessionId: null
+        executionSessionId: null,
+        blockedResumeStatus: null
       };
 
       draft.tasks.push(task);
@@ -181,7 +182,7 @@ export class KanbanService {
     /* Criterion updates drive resumable automation, so they are first-class mutations instead of free-form notes. */
     const updated = await this.store.transact((draft) => {
       const task = this.findTaskOrThrow(draft.tasks, input.taskId);
-      applyKanbanCriterionPatch(task, input);
+      applyKanbanCriterionPatch(task, draft.tasks, input);
       return task;
     });
 
@@ -215,7 +216,7 @@ export class KanbanService {
     const task = await this.store.transact((draft) => {
       const task = this.findTaskOrThrow(draft.tasks, input.taskId);
       assertKanbanExecutionOwner({ task, actor: input.actor });
-      applyKanbanCriterionPatch(task, input);
+      applyKanbanCriterionPatch(task, draft.tasks, input);
       return task;
     });
 
