@@ -8,9 +8,11 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
+import { EventsService } from "../events/events.service";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { KanbanValidationError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
+import { publishKanbanTaskUpdated } from "./kanban-task-events";
 import {
   KANBAN_CRITERION_STATUSES,
   KANBAN_PRIORITIES,
@@ -24,7 +26,10 @@ import {
 @Controller("api/kanban")
 @UseGuards(AppAuthGuard)
 export class KanbanController {
-  public constructor(private readonly kanban: KanbanService) {}
+  public constructor(
+    private readonly kanban: KanbanService,
+    private readonly events: EventsService
+  ) {}
 
   private typeAuthRequest(request: Request): Request & { authAdminId?: number } {
     /* Keep controller code typed without sprinkling raw any-casts through auth-aware handlers. */
@@ -68,7 +73,7 @@ export class KanbanController {
     }
 
     try {
-      return await this.kanban.createTask({
+      const task = await this.kanban.createTask({
         projectSlug: body.projectSlug,
         title: body.title,
         description: body?.description ?? "",
@@ -76,6 +81,8 @@ export class KanbanController {
         priority: this.parseRequiredPriority(body?.priority),
         acceptanceCriteria: Array.isArray(body?.acceptanceCriteria) ? body.acceptanceCriteria : []
       });
+      publishKanbanTaskUpdated(this.events, { task, source: "app" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -97,7 +104,7 @@ export class KanbanController {
   ) {
     /* Card editing reuses one patch route instead of many narrow field-specific endpoints. */
     try {
-      return await this.kanban.updateTask(id, {
+      const task = await this.kanban.updateTask(id, {
         ...(typeof body?.title === "string" ? { title: body.title } : {}),
         ...(typeof body?.description === "string" ? { description: body.description } : {}),
         ...(body?.status ? { status: this.parseRequiredStatus(body.status) } : {}),
@@ -108,6 +115,8 @@ export class KanbanController {
         ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
         ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
       });
+      publishKanbanTaskUpdated(this.events, { task, source: "app" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -121,12 +130,14 @@ export class KanbanController {
   ) {
     /* Criterion-level progress updates let humans and automation share the same completion checklist. */
     try {
-      return await this.kanban.updateCriterion({
+      const task = await this.kanban.updateCriterion({
         taskId,
         criterionId,
         status: this.parseRequiredCriterionStatus(body?.status),
         blockedReason: body?.blockedReason
       });
+      publishKanbanTaskUpdated(this.events, { task, source: "app" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -136,7 +147,9 @@ export class KanbanController {
   public async moveTask(@Param("id") id: string, @Body() body: { status?: KanbanStatus }) {
     /* Drag-and-drop uses a small dedicated route to keep status changes obvious in network traces. */
     try {
-      return await this.kanban.moveTask(id, this.parseRequiredStatus(body?.status));
+      const task = await this.kanban.moveTask(id, this.parseRequiredStatus(body?.status));
+      publishKanbanTaskUpdated(this.events, { task, source: "app" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -149,7 +162,9 @@ export class KanbanController {
   ) {
     /* Done transition stores the final implementation summary shown on the card. */
     try {
-      return await this.kanban.completeTask({ taskId: id, resultSummary: body?.resultSummary });
+      const task = await this.kanban.completeTask({ taskId: id, resultSummary: body?.resultSummary });
+      publishKanbanTaskUpdated(this.events, { task, source: "app" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -159,7 +174,9 @@ export class KanbanController {
   public async blockTask(@Param("id") id: string, @Body() body: { reason?: string | null }) {
     /* Blocked transition requires explicit context so humans know what to fix next. */
     try {
-      return await this.kanban.blockTask({ taskId: id, reason: body?.reason });
+      const task = await this.kanban.blockTask({ taskId: id, reason: body?.reason });
+      publishKanbanTaskUpdated(this.events, { task, source: "app" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }

@@ -7,9 +7,11 @@
 
 import { BadRequestException, Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
 
+import { EventsService } from "../events/events.service";
 import { KanbanAgentGuard } from "../security/kanban-agent.guard";
 import { KanbanValidationError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
+import { publishKanbanTaskUpdated } from "./kanban-task-events";
 import {
   KANBAN_CRITERION_STATUSES,
   KANBAN_PRIORITIES,
@@ -23,7 +25,10 @@ import {
 @Controller("api/kanban/agent")
 @UseGuards(KanbanAgentGuard)
 export class KanbanAgentController {
-  public constructor(private readonly kanban: KanbanService) {}
+  public constructor(
+    private readonly kanban: KanbanService,
+    private readonly events: EventsService
+  ) {}
 
   @Post("list")
   public async listTasks(
@@ -77,7 +82,7 @@ export class KanbanAgentController {
         throw new BadRequestException("projectSlug is required");
       }
 
-      return await this.kanban.createTask({
+      const task = await this.kanban.createTask({
         projectSlug,
         title: body.title,
         description: body?.description ?? "",
@@ -85,6 +90,8 @@ export class KanbanAgentController {
         priority: body?.priority ? this.parsePriority(body.priority) : "medium",
         acceptanceCriteria: Array.isArray(body?.acceptanceCriteria) ? body.acceptanceCriteria : []
       });
+      publishKanbanTaskUpdated(this.events, { task, source: "agent" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -106,7 +113,7 @@ export class KanbanAgentController {
   ) {
     /* One refine endpoint covers backlog discussion, scope updates, and queue transitions. */
     try {
-      return await this.kanban.updateTask(id, {
+      const task = await this.kanban.updateTask(id, {
         ...(typeof body?.title === "string" ? { title: body.title } : {}),
         ...(typeof body?.description === "string" ? { description: body.description } : {}),
         ...(body?.status ? { status: this.parseStatus(body.status) } : {}),
@@ -117,6 +124,8 @@ export class KanbanAgentController {
         ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
         ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
       });
+      publishKanbanTaskUpdated(this.events, { task, source: "agent" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -134,12 +143,14 @@ export class KanbanAgentController {
     }
 
     try {
-      return await this.kanban.updateCriterion({
+      const task = await this.kanban.updateCriterion({
         taskId,
         criterionId,
         status: this.parseCriterionStatus(body.status),
         blockedReason: body?.blockedReason
       });
+      publishKanbanTaskUpdated(this.events, { task, source: "agent" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -161,13 +172,17 @@ export class KanbanAgentController {
     }
 
     try {
+      const task = await this.kanban.claimNextTask({
+        agentId: body.agentId,
+        projectSlug: body?.projectSlug ?? null,
+        currentDirectory: body?.currentDirectory ?? null,
+        leaseMs: typeof body?.leaseMs === "number" ? body.leaseMs : undefined
+      });
+      if (task) {
+        publishKanbanTaskUpdated(this.events, { task, source: "agent" });
+      }
       return {
-        task: await this.kanban.claimNextTask({
-          agentId: body.agentId,
-          projectSlug: body?.projectSlug ?? null,
-          currentDirectory: body?.currentDirectory ?? null,
-          leaseMs: typeof body?.leaseMs === "number" ? body.leaseMs : undefined
-        })
+        task
       };
     } catch (error) {
       this.rethrowAsHttp(error);
@@ -181,7 +196,9 @@ export class KanbanAgentController {
   ) {
     /* Agent completion writes back a short outcome summary for humans reviewing the board. */
     try {
-      return await this.kanban.completeTask({ taskId: id, resultSummary: body?.resultSummary });
+      const task = await this.kanban.completeTask({ taskId: id, resultSummary: body?.resultSummary });
+      publishKanbanTaskUpdated(this.events, { task, source: "agent" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }
@@ -191,7 +208,9 @@ export class KanbanAgentController {
   public async blockTask(@Param("id") id: string, @Body() body: { reason?: string | null }) {
     /* Blocking preserves the exact dependency or ambiguity the agent could not resolve alone. */
     try {
-      return await this.kanban.blockTask({ taskId: id, reason: body?.reason });
+      const task = await this.kanban.blockTask({ taskId: id, reason: body?.reason });
+      publishKanbanTaskUpdated(this.events, { task, source: "agent" });
+      return task;
     } catch (error) {
       this.rethrowAsHttp(error);
     }

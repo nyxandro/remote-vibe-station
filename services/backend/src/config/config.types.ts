@@ -34,8 +34,6 @@ export type AppConfig = {
   opencodeServerUsername?: string;
   /** Enables background kanban automation runner. */
   kanbanRunnerEnabled: boolean;
-  /** Poll interval for unfinished kanban automation work. */
-  kanbanRunnerIntervalMs: number;
   /** Optional CLIProxy management base URL for account onboarding APIs. */
   cliproxyManagementUrl?: string;
   /** Shared secret for CLIProxy management API header authentication. */

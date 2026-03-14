@@ -5,6 +5,7 @@
  * - none (Jest suite).
  */
 
+import { EventEnvelope } from "../../events/events.types";
 import { KanbanRunnerService, KANBAN_RUNNER_AGENT_ID } from "../kanban-runner.service";
 
 const buildTask = (overrides?: Record<string, unknown>) => ({
@@ -27,6 +28,41 @@ const buildTask = (overrides?: Record<string, unknown>) => ({
   leaseUntil: "2026-03-10T12:00:00.000Z",
   ...overrides
 });
+
+const createEventsServiceMock = () => {
+  /* Keep publish synchronous like the real in-memory bus so re-entrant runner scheduling stays testable. */
+  const listeners = new Set<(event: EventEnvelope) => void>();
+
+  return {
+    publish: jest.fn((event: EventEnvelope) => {
+      for (const listener of listeners) {
+        listener(event);
+      }
+    }),
+    subscribe: jest.fn((listener: (event: EventEnvelope) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    })
+  };
+};
+
+const waitFor = async (assertion: () => void | Promise<void>): Promise<void> => {
+  /* Background runner work is kicked off without awaiting onModuleInit, so tests poll briefly for completion. */
+  const timeoutAt = Date.now() + 1_000;
+  let lastError: unknown;
+
+  while (Date.now() < timeoutAt) {
+    try {
+      await assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Timed out waiting for runner assertion");
+};
 
 describe("KanbanRunnerService", () => {
   test("runOnce resumes the runner-owned in-progress task in the same stored session before claiming a new one", async () => {
@@ -75,10 +111,10 @@ describe("KanbanRunnerService", () => {
       ensureDirectory: jest.fn(),
       waitUntilConnected: jest.fn(async () => undefined)
     };
-    const events = { publish: jest.fn() };
+    const events = createEventsServiceMock();
 
     const runner = new KanbanRunnerService(
-      { kanbanRunnerEnabled: true, kanbanRunnerIntervalMs: 60_000 } as never,
+      { kanbanRunnerEnabled: true } as never,
       kanban as never,
       runnerSessions as never,
       projects as never,
@@ -87,7 +123,7 @@ describe("KanbanRunnerService", () => {
       events as never
     );
 
-    await runner.runOnce("interval");
+    await runner.runOnce("startup");
 
     expect(kanban.claimNextTask).not.toHaveBeenCalled();
     expect(opencode.createDetachedSession).not.toHaveBeenCalled();
@@ -146,10 +182,10 @@ describe("KanbanRunnerService", () => {
       ensureDirectory: jest.fn(),
       waitUntilConnected: jest.fn(async () => undefined)
     };
-    const events = { publish: jest.fn() };
+    const events = createEventsServiceMock();
 
     const runner = new KanbanRunnerService(
-      { kanbanRunnerEnabled: true, kanbanRunnerIntervalMs: 60_000 } as never,
+      { kanbanRunnerEnabled: true } as never,
       kanban as never,
       runnerSessions as never,
       projects as never,
@@ -158,7 +194,7 @@ describe("KanbanRunnerService", () => {
       events as never
     );
 
-    await runner.runOnce("interval");
+    await runner.runOnce("startup");
 
     expect(kanban.claimNextTask).toHaveBeenCalledWith({
       projectSlug: "alpha",
@@ -220,10 +256,10 @@ describe("KanbanRunnerService", () => {
       ensureDirectory: jest.fn(),
       waitUntilConnected: jest.fn(async () => undefined)
     };
-    const events = { publish: jest.fn() };
+    const events = createEventsServiceMock();
 
     const runner = new KanbanRunnerService(
-      { kanbanRunnerEnabled: true, kanbanRunnerIntervalMs: 60_000 } as never,
+      { kanbanRunnerEnabled: true } as never,
       kanban as never,
       runnerSessions as never,
       projects as never,
@@ -232,12 +268,171 @@ describe("KanbanRunnerService", () => {
       events as never
     );
 
-    await runner.runOnce("interval");
+    await runner.runOnce("startup");
 
     expect(opencode.createDetachedSession).not.toHaveBeenCalled();
     expect(opencode.sendPromptToSession).toHaveBeenCalledWith(
       expect.stringContaining("Continue kanban task task-returned"),
       expect.objectContaining({ directory: "/srv/projects/alpha", sessionID: "session-returned" })
     );
+  });
+
+  test("runner continues the same task immediately after its final OpenCode answer arrives", async () => {
+    /* Final runner completion event should queue the next step without any interval polling delay. */
+    const taskInProgress = buildTask();
+    const taskDone = buildTask({ status: "done", claimedBy: null, leaseUntil: null });
+    const kanban = {
+      listTasks: jest
+        .fn()
+        .mockResolvedValueOnce([taskInProgress])
+        .mockResolvedValueOnce([taskInProgress])
+        .mockResolvedValueOnce([taskInProgress])
+        .mockResolvedValueOnce([taskInProgress])
+        .mockResolvedValueOnce([taskDone]),
+      claimNextTask: jest.fn()
+    };
+    const runnerSessions = {
+      getTaskSessionId: jest.fn(async () => "session-existing"),
+      setTaskSessionId: jest.fn(async () => undefined)
+    };
+    const projects = {
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+    const opencode = {
+      createDetachedSession: jest.fn(async () => ({ id: "session-1" })),
+      sendPromptToSession: jest
+        .fn()
+        .mockResolvedValueOnce({
+          sessionId: "session-existing",
+          responseText: "Первый финальный ответ",
+          info: {
+            providerID: "provider",
+            modelID: "model",
+            mode: "primary",
+            agent: "build",
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+          },
+          parts: [{ type: "text", text: "Первый финальный ответ" }]
+        })
+        .mockResolvedValueOnce({
+          sessionId: "session-existing",
+          responseText: "Второй финальный ответ",
+          info: {
+            providerID: "provider",
+            modelID: "model",
+            mode: "primary",
+            agent: "build",
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+          },
+          parts: [{ type: "text", text: "Второй финальный ответ" }]
+        })
+    };
+    const opencodeEvents = {
+      ensureDirectory: jest.fn(),
+      waitUntilConnected: jest.fn(async () => undefined)
+    };
+    const events = createEventsServiceMock();
+
+    const runner = new KanbanRunnerService(
+      { kanbanRunnerEnabled: true } as never,
+      kanban as never,
+      runnerSessions as never,
+      projects as never,
+      opencode as never,
+      opencodeEvents as never,
+      events as never
+    );
+
+    runner.onModuleInit();
+
+    await waitFor(() => {
+      expect(opencode.sendPromptToSession).toHaveBeenCalledTimes(2);
+    });
+
+    expect(events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "kanban.runner.finished",
+        data: expect.objectContaining({
+          taskId: "task-1",
+          sessionId: "session-existing",
+          finalText: expect.any(String)
+        })
+      })
+    );
+  });
+
+  test("runner starts queued work when kanban task updates announce a new automation candidate", async () => {
+    /* Fresh queued tasks must wake the runner immediately instead of waiting for a removed scheduler tick. */
+    const queuedTask = buildTask({ status: "queued", claimedBy: null, leaseUntil: null });
+    const claimedTask = buildTask({ status: "in_progress", claimedBy: KANBAN_RUNNER_AGENT_ID });
+    const doneTask = buildTask({ status: "done", claimedBy: null, leaseUntil: null });
+    const kanban = {
+      listTasks: jest
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([queuedTask])
+        .mockResolvedValueOnce([doneTask]),
+      claimNextTask: jest.fn(async () => claimedTask)
+    };
+    const runnerSessions = {
+      getTaskSessionId: jest.fn(async () => null),
+      setTaskSessionId: jest.fn(async () => undefined)
+    };
+    const projects = {
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+    const opencode = {
+      createDetachedSession: jest.fn(async () => ({ id: "session-created" })),
+      sendPromptToSession: jest.fn(async () => ({
+        sessionId: "session-created",
+        responseText: "Стартую задачу",
+        info: {
+          providerID: "provider",
+          modelID: "model",
+          mode: "primary",
+          agent: "build",
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        },
+        parts: [{ type: "text", text: "Стартую задачу" }]
+      }))
+    };
+    const opencodeEvents = {
+      ensureDirectory: jest.fn(),
+      waitUntilConnected: jest.fn(async () => undefined)
+    };
+    const events = createEventsServiceMock();
+
+    const runner = new KanbanRunnerService(
+      { kanbanRunnerEnabled: true } as never,
+      kanban as never,
+      runnerSessions as never,
+      projects as never,
+      opencode as never,
+      opencodeEvents as never,
+      events as never
+    );
+
+    runner.onModuleInit();
+    events.publish({
+      type: "kanban.task.updated",
+      ts: new Date().toISOString(),
+      data: {
+        taskId: "task-1",
+        taskTitle: "Implement runner",
+        projectSlug: "alpha",
+        status: "queued",
+        claimedBy: null
+      }
+    });
+
+    await waitFor(() => {
+      expect(opencode.sendPromptToSession).toHaveBeenCalledTimes(1);
+    });
+
+    expect(kanban.claimNextTask).toHaveBeenCalledWith({
+      projectSlug: "alpha",
+      agentId: KANBAN_RUNNER_AGENT_ID,
+      leaseMs: 1_800_000
+    });
   });
 });

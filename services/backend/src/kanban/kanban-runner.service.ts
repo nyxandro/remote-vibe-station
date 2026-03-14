@@ -1,17 +1,19 @@
 /**
- * @fileoverview Background automation loop for kanban tasks claimed by the external runner.
+ * @fileoverview Event-driven automation loop for kanban tasks claimed by the external runner.
  *
  * Exports:
  * - KANBAN_RUNNER_AGENT_ID - Stable agent identity used for automatic task claiming.
- * - KanbanRunnerService - Polls unfinished work, starts fresh OpenCode sessions, and resumes tasks.
+ * - KanbanRunnerService - Reacts to kanban/session events, starts OpenCode sessions, and resumes tasks.
  */
 
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import { EventEnvelope } from "../events/events.types";
 import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
+import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
 import { ProjectsService } from "../projects/projects.service";
 import { buildKanbanRunnerPrompt } from "./kanban-runner-prompt";
 import { KanbanRunnerSessionService } from "./kanban-runner-session.service";
@@ -21,12 +23,15 @@ import { KanbanTaskView } from "./kanban.types";
 const MIN_RUNNER_CLAIM_LEASE_MS = 30 * 60 * 1000;
 const RUNNER_EVENT_CONNECT_TIMEOUT_MS = 60_000;
 
+type KanbanRunnerReason = "startup" | "task-event" | "runner-finished";
+
 export const KANBAN_RUNNER_AGENT_ID = "kanban-runner";
 
 @Injectable()
 export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
-  private timer: NodeJS.Timeout | null = null;
   private readonly runningProjects = new Set<string>();
+  private readonly pendingProjects = new Set<string>();
+  private unsubscribe?: () => void;
 
   public constructor(
     @Inject(ConfigToken) private readonly config: AppConfig,
@@ -39,29 +44,23 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   public onModuleInit(): void {
-    /* Keep the automation loop fully opt-in so environments without approval can stay passive. */
+    /* Keep automation fully opt-in and wire one event subscription for the process lifetime. */
     if (!this.config.kanbanRunnerEnabled) {
       return;
     }
 
+    this.unsubscribe = this.events.subscribe((event) => this.onEvent(event));
     void this.runOnce("startup");
-    this.timer = setInterval(() => {
-      void this.runOnce("interval");
-    }, this.config.kanbanRunnerIntervalMs);
-    this.timer.unref?.();
   }
 
   public onModuleDestroy(): void {
-    /* Stop periodic wake-ups cleanly during shutdown and tests. */
-    if (!this.timer) {
-      return;
-    }
-    clearInterval(this.timer);
-    this.timer = null;
+    /* Remove event subscription cleanly during shutdown and tests. */
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
   }
 
-  public async runOnce(reason: "startup" | "interval"): Promise<void> {
-    /* One scheduler pass may resume multiple projects, but never overlaps the same project twice. */
+  public async runOnce(reason: KanbanRunnerReason): Promise<void> {
+    /* One event-driven pass may resume multiple projects, but never overlaps the same project twice. */
     if (!this.config.kanbanRunnerEnabled) {
       return;
     }
@@ -84,9 +83,9 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
 
   private async runProject(input: {
     projectSlug: string;
-    reason: "startup" | "interval";
+    reason: KanbanRunnerReason;
   }): Promise<void> {
-    /* Each project keeps its own serialized loop so fresh-session automation remains deterministic. */
+    /* Each project keeps its own serialized loop so event bursts cannot start duplicate OpenCode turns. */
     this.runningProjects.add(input.projectSlug);
     let task: KanbanTaskView | null = null;
 
@@ -132,7 +131,9 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           taskId,
           taskTitle: refreshedTask?.title ?? task.title,
           sessionId: promptResult.sessionId,
-          status: refreshedTask?.status ?? null
+          status: refreshedTask?.status ?? null,
+          claimedBy: refreshedTask?.claimedBy ?? null,
+          finalText: extractFinalOpenCodeText(promptResult.parts) || promptResult.responseText
         }
       });
 
@@ -162,6 +163,11 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       });
     } finally {
       this.runningProjects.delete(input.projectSlug);
+
+      /* Re-run once after the current turn ends when a completion/task event arrived mid-flight. */
+      if (this.pendingProjects.delete(input.projectSlug)) {
+        void this.runProject({ projectSlug: input.projectSlug, reason: "runner-finished" });
+      }
     }
   }
 
@@ -183,8 +189,56 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     return this.kanban.claimNextTask({
       projectSlug,
       agentId: KANBAN_RUNNER_AGENT_ID,
-      leaseMs: Math.max(this.config.kanbanRunnerIntervalMs, MIN_RUNNER_CLAIM_LEASE_MS)
+      leaseMs: MIN_RUNNER_CLAIM_LEASE_MS
     });
+  }
+
+  private onEvent(event: EventEnvelope): void {
+    /* Runner reacts only to events that can create or advance automation work. */
+    if (!this.config.kanbanRunnerEnabled) {
+      return;
+    }
+
+    if (event.type === "kanban.task.updated") {
+      const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
+      const status = String((event.data as any)?.status ?? "").trim();
+      const claimedBy = String((event.data as any)?.claimedBy ?? "").trim();
+      if (!projectSlug) {
+        return;
+      }
+
+      const isCandidate = status === "queued" || (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID);
+      if (isCandidate) {
+        this.scheduleProjectRun(projectSlug, "task-event");
+      }
+      return;
+    }
+
+    if (event.type !== "kanban.runner.finished") {
+      return;
+    }
+
+    const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
+    const status = String((event.data as any)?.status ?? "").trim();
+    const claimedBy = String((event.data as any)?.claimedBy ?? "").trim();
+    if (!projectSlug) {
+      return;
+    }
+
+    /* Continue only unfinished runner-owned work; done/blocked turns stop naturally. */
+    if (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID) {
+      this.scheduleProjectRun(projectSlug, "runner-finished");
+    }
+  }
+
+  private scheduleProjectRun(projectSlug: string, reason: KanbanRunnerReason): void {
+    /* Collapse bursts of task/runtime events into one serialized follow-up run per project. */
+    if (this.runningProjects.has(projectSlug)) {
+      this.pendingProjects.add(projectSlug);
+      return;
+    }
+
+    void this.runProject({ projectSlug, reason });
   }
 
   private async ensureTaskSession(input: { taskId: string; directory: string }): Promise<string> {

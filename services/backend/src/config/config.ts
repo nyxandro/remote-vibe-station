@@ -15,7 +15,6 @@ import { AppConfig } from "./config.types";
 
 const DEFAULT_EVENT_BUFFER_SIZE = 200;
 const DEFAULT_WARM_RECENTS_LIMIT = 50;
-const DEFAULT_KANBAN_RUNNER_INTERVAL_MS = 60_000;
 const CSV_SEPARATOR = ",";
 const HTTPS_PREFIX = "https://";
 const LOCAL_HTTP_PREFIXES = ["http://localhost", "http://127.0.0.1"];
@@ -39,7 +38,6 @@ const envSchema = z.object({
   OPENCODE_SERVER_PASSWORD: z.string().optional(),
   OPENCODE_SERVER_USERNAME: z.string().optional(),
   KANBAN_RUNNER_ENABLED: z.string().optional(),
-  KANBAN_RUNNER_INTERVAL_MS: z.string().optional(),
   CLIPROXY_MANAGEMENT_URL: z.string().optional(),
   CLIPROXY_MANAGEMENT_PASSWORD: z.string().optional(),
   GITHUB_APP_ID: z.string().optional(),
@@ -134,11 +132,6 @@ export const loadConfig = (): AppConfig => {
     parseOptionalNumber(env.OPENCODE_WARM_RECENTS_LIMIT, "OPENCODE_WARM_RECENTS_LIMIT") ?? DEFAULT_WARM_RECENTS_LIMIT;
 
   const kanbanRunnerEnabled = parseOptionalBoolean(env.KANBAN_RUNNER_ENABLED) ?? false;
-  const kanbanRunnerIntervalMs =
-    parseOptionalNumber(env.KANBAN_RUNNER_INTERVAL_MS, "KANBAN_RUNNER_INTERVAL_MS") ?? DEFAULT_KANBAN_RUNNER_INTERVAL_MS;
-  if (kanbanRunnerIntervalMs < 60_000) {
-    throw new Error("KANBAN_RUNNER_INTERVAL_MS must be at least 60000");
-  }
 
   /* Optional explicit model override. */
   const opencodeDefaultProviderId = env.OPENCODE_DEFAULT_PROVIDER_ID;
@@ -187,7 +180,6 @@ export const loadConfig = (): AppConfig => {
     opencodeServerPassword: env.OPENCODE_SERVER_PASSWORD,
     opencodeServerUsername: env.OPENCODE_SERVER_USERNAME,
     kanbanRunnerEnabled,
-    kanbanRunnerIntervalMs,
     cliproxyManagementUrl: env.CLIPROXY_MANAGEMENT_URL,
     cliproxyManagementPassword: env.CLIPROXY_MANAGEMENT_PASSWORD,
     githubAppId,
