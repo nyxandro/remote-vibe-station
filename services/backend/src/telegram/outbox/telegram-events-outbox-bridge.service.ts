@@ -144,38 +144,38 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
     if (event.type === "kanban.runner.started") {
       /* Runner wake-ups should be visible in Telegram so humans know automation resumed a task on its own. */
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
-      const taskId = String((event.data as any)?.taskId ?? "").trim();
-      if (!projectSlug || !taskId) {
+      const taskTitle = String((event.data as any)?.taskTitle ?? "").trim();
+      if (!projectSlug || !taskTitle) {
         return;
       }
 
-      this.enqueueForBoundAdmins(`🤖 Kanban runner продолжил задачу ${taskId} в проекте ${projectSlug}.`);
+      this.enqueueForBoundAdmins(`🤖 Kanban runner продолжил задачу "${taskTitle}" в проекте ${projectSlug}.`);
       return;
     }
 
     if (event.type === "kanban.runner.blocked") {
       /* Blocked automation must tell operators exactly why the loop stopped and what task needs attention. */
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
-      const taskId = String((event.data as any)?.taskId ?? "").trim();
+      const taskTitle = String((event.data as any)?.taskTitle ?? "").trim();
       const blockedReason = String((event.data as any)?.blockedReason ?? "").trim();
-      if (!projectSlug || !taskId || !blockedReason) {
+      if (!projectSlug || !taskTitle || !blockedReason) {
         return;
       }
 
-      this.enqueueForBoundAdmins(`⛔ Kanban runner заблокировал задачу ${taskId} в проекте ${projectSlug}. Причина: ${blockedReason}`);
+      this.enqueueForBoundAdmins(`⛔ Kanban runner заблокировал задачу "${taskTitle}" в проекте ${projectSlug}. Причина: ${blockedReason}`);
       return;
     }
 
     if (event.type === "kanban.runner.error") {
       /* Runner failures must be visible immediately so humans know why auto-continuation stopped. */
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
-      const taskId = String((event.data as any)?.taskId ?? "").trim();
+      const taskTitle = String((event.data as any)?.taskTitle ?? "").trim();
       const message = String((event.data as any)?.message ?? "").trim();
-      if (!projectSlug || !taskId || !message) {
+      if (!projectSlug || !taskTitle || !message) {
         return;
       }
 
-      this.enqueueForBoundAdmins(`⚠️ Kanban runner не смог продолжить задачу ${taskId} в проекте ${projectSlug}. Ошибка: ${message}`);
+      this.enqueueForBoundAdmins(`⚠️ Kanban runner не смог продолжить задачу "${taskTitle}" в проекте ${projectSlug}. Ошибка: ${message}`);
     }
   }
 

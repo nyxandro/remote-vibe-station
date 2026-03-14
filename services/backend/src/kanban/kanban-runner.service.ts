@@ -112,6 +112,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           reason: input.reason,
           projectSlug: input.projectSlug,
           taskId,
+          taskTitle: task.title,
           sessionId
         }
       });
@@ -129,6 +130,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           reason: input.reason,
           projectSlug: input.projectSlug,
           taskId,
+          taskTitle: refreshedTask?.title ?? task.title,
           sessionId: promptResult.sessionId,
           status: refreshedTask?.status ?? null
         }
@@ -141,6 +143,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           data: {
             projectSlug: input.projectSlug,
             taskId,
+            taskTitle: refreshedTask.title,
             blockedReason: refreshedTask.blockedReason
           }
         });
@@ -153,6 +156,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           reason: input.reason,
           projectSlug: input.projectSlug,
           taskId: task?.id ?? null,
+          taskTitle: task?.title ?? null,
           message: error instanceof Error ? error.message : "Kanban runner failed"
         }
       });

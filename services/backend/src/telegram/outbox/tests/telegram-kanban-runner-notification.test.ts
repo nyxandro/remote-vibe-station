@@ -58,14 +58,15 @@ describe("Telegram kanban runner notifications", () => {
         ts: new Date().toISOString(),
         data: {
           projectSlug: "auto-v-arendu",
-          taskId: "task-123"
+          taskId: "task-123",
+          taskTitle: "Diagnose and fix smoke E2E failure"
         }
       });
 
       const items = readOutboxItems();
       expect(items).toHaveLength(2);
-      expect(items[0].text).toBe("🤖 Kanban runner продолжил задачу task-123 в проекте auto-v-arendu.");
-      expect(items[1].text).toBe("🤖 Kanban runner продолжил задачу task-123 в проекте auto-v-arendu.");
+      expect(items[0].text).toBe("🤖 Kanban runner продолжил задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
+      expect(items[1].text).toBe("🤖 Kanban runner продолжил задачу \"Diagnose and fix smoke E2E failure\" в проекте auto-v-arendu.");
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -104,13 +105,14 @@ describe("Telegram kanban runner notifications", () => {
         data: {
           projectSlug: "sparkas",
           taskId: "task-7",
+          taskTitle: "Restore production health checks",
           blockedReason: "Нужен production API token"
         }
       });
 
       const items = readOutboxItems();
       expect(items).toHaveLength(1);
-      expect(items[0].text).toBe("⛔ Kanban runner заблокировал задачу task-7 в проекте sparkas. Причина: Нужен production API token");
+      expect(items[0].text).toBe("⛔ Kanban runner заблокировал задачу \"Restore production health checks\" в проекте sparkas. Причина: Нужен production API token");
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -149,13 +151,14 @@ describe("Telegram kanban runner notifications", () => {
         data: {
           projectSlug: "auto-v-arendu",
           taskId: "task-err",
+          taskTitle: "Repair deployment smoke test",
           message: "Timed out waiting for OpenCode events"
         }
       });
 
       const items = readOutboxItems();
       expect(items).toHaveLength(1);
-      expect(items[0].text).toBe("⚠️ Kanban runner не смог продолжить задачу task-err в проекте auto-v-arendu. Ошибка: Timed out waiting for OpenCode events");
+      expect(items[0].text).toBe("⚠️ Kanban runner не смог продолжить задачу \"Repair deployment smoke test\" в проекте auto-v-arendu. Ошибка: Timed out waiting for OpenCode events");
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });
