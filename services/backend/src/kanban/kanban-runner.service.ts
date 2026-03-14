@@ -76,9 +76,13 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
   private isAutomationCandidate(task: KanbanTaskView): boolean {
     /* The runner cares only about queued work and its own unfinished active task. */
     if (task.status === "queued") {
-      return true;
+      return task.executionSource !== "session";
     }
-    return task.status === "in_progress" && task.claimedBy === KANBAN_RUNNER_AGENT_ID;
+    return (
+      task.status === "in_progress" &&
+      task.claimedBy === KANBAN_RUNNER_AGENT_ID &&
+      task.executionSource === "runner"
+    );
   }
 
   private async runProject(input: {
@@ -133,6 +137,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           sessionId: promptResult.sessionId,
           status: refreshedTask?.status ?? null,
           claimedBy: refreshedTask?.claimedBy ?? null,
+          executionSource: refreshedTask?.executionSource ?? null,
           finalText: extractFinalOpenCodeText(promptResult.parts) || promptResult.responseText
         }
       });
@@ -175,13 +180,16 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     /* Resume unfinished runner-owned work first, otherwise claim the next queued task for automation. */
     const tasks = await this.kanban.listTasks({ projectSlug });
     const activeTask = tasks.find(
-      (task) => task.status === "in_progress" && task.claimedBy === KANBAN_RUNNER_AGENT_ID
+      (task) =>
+        task.status === "in_progress" &&
+        task.claimedBy === KANBAN_RUNNER_AGENT_ID &&
+        task.executionSource === "runner"
     );
     if (activeTask) {
       return activeTask;
     }
 
-    const hasQueued = tasks.some((task) => task.status === "queued");
+    const hasQueued = tasks.some((task) => task.status === "queued" && task.executionSource !== "session");
     if (!hasQueued) {
       return null;
     }
@@ -203,11 +211,14 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
       const status = String((event.data as any)?.status ?? "").trim();
       const claimedBy = String((event.data as any)?.claimedBy ?? "").trim();
+      const executionSource = String((event.data as any)?.executionSource ?? "").trim();
       if (!projectSlug) {
         return;
       }
 
-      const isCandidate = status === "queued" || (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID);
+      const isCandidate =
+        (status === "queued" && executionSource !== "session") ||
+        (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner");
       if (isCandidate) {
         this.scheduleProjectRun(projectSlug, "task-event");
       }
@@ -221,12 +232,13 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
     const status = String((event.data as any)?.status ?? "").trim();
     const claimedBy = String((event.data as any)?.claimedBy ?? "").trim();
+    const executionSource = String((event.data as any)?.executionSource ?? "").trim();
     if (!projectSlug) {
       return;
     }
 
     /* Continue only unfinished runner-owned work; done/blocked turns stop naturally. */
-    if (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID) {
+    if (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner") {
       this.scheduleProjectRun(projectSlug, "runner-finished");
     }
   }

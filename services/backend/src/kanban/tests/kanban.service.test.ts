@@ -28,6 +28,8 @@ type MutableTask = {
   updatedAt: string;
   claimedBy: string | null;
   leaseUntil: string | null;
+  executionSource: "session" | "runner" | null;
+  executionSessionId: string | null;
 };
 
 const createCriterion = (overrides?: Partial<MutableCriterion>): MutableCriterion => ({
@@ -52,6 +54,8 @@ const createTask = (overrides?: Partial<MutableTask>): MutableTask => ({
   updatedAt: "2026-03-10T09:00:00.000Z",
   claimedBy: null,
   leaseUntil: null,
+  executionSource: null,
+  executionSessionId: null,
   ...overrides
 });
 
@@ -423,5 +427,108 @@ describe("KanbanService", () => {
     expect(completed.id).toBe(created.id);
     expect(listed[0]?.id).toBe(created.id);
     expect(completed.status).toBe("done");
+  });
+
+  test("startTaskExecution atomically marks a queued task as session-owned in progress", async () => {
+    /* Session-started work needs an explicit owner so runner automation does not launch a duplicate session. */
+    const file = {
+      tasks: [createTask({ id: "task-session-start", status: "queued" })]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    const started = await service.startTaskExecution({
+      taskId: "task-session-start",
+      agentId: "opencode-agent",
+      executionSource: "session",
+      executionSessionId: null,
+      nowMs: Date.parse("2026-03-10T10:00:00.000Z")
+    });
+
+    expect(started.status).toBe("in_progress");
+    expect(started.claimedBy).toBe("opencode-agent");
+    expect(started.executionSource).toBe("session");
+    expect(started.executionSessionId).toBeNull();
+    expect(started.leaseUntil).toBeTruthy();
+  });
+
+  test("startTaskExecution rejects duplicate session start when runner already owns the task", async () => {
+    /* Ownership must stay exclusive so session-start and runner-start cannot race into duplicate execution. */
+    const file = {
+      tasks: [
+        createTask({
+          id: "task-runner-owned",
+          status: "in_progress",
+          claimedBy: "kanban-runner",
+          leaseUntil: "2026-03-10T12:00:00.000Z",
+          executionSource: "runner",
+          executionSessionId: "runner-session-1"
+        })
+      ]
+    };
+
+    const store = {
+      transact: jest.fn(async (operation: (draft: typeof file) => unknown) => operation(file))
+    };
+    const projects = {
+      list: jest.fn(async () => [
+        {
+          id: "alpha",
+          slug: "alpha",
+          name: "alpha",
+          rootPath: "/srv/projects/alpha",
+          hasCompose: true,
+          configured: true,
+          runnable: true,
+          status: "running"
+        }
+      ]),
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+
+    const service = new KanbanService(
+      {
+        publicBaseUrl: "https://example.test",
+        telegramBotToken: "bot-token"
+      } as never,
+      projects as never,
+      store as never
+    );
+
+    await expect(
+      service.startTaskExecution({
+        taskId: "task-runner-owned",
+        agentId: "opencode-agent",
+        executionSource: "session",
+        executionSessionId: null,
+        nowMs: Date.parse("2026-03-10T10:00:00.000Z")
+      })
+    ).rejects.toThrow('Cannot start task "task-runner-owned" because it is already owned by execution source "runner".');
   });
 });

@@ -8,6 +8,8 @@
  * - KanbanPriority - Union of priority values.
  * - KANBAN_CRITERION_STATUSES - Supported acceptance-criterion states.
  * - KanbanCriterionStatus - Union of criterion state values.
+ * - KANBAN_EXECUTION_SOURCES - Supported task execution owners.
+ * - KanbanExecutionSource - Union of execution owner values.
  * - KanbanCriterionRecord - Persisted checklist item for acceptance tracking.
  * - KanbanCriterionInput - Create/update input accepted from UI and agent tools.
  * - KanbanTaskRecord - Persisted task shape stored in JSON.
@@ -25,6 +27,9 @@ export type KanbanPriority = (typeof KANBAN_PRIORITIES)[number];
 
 export const KANBAN_CRITERION_STATUSES = ["pending", "done", "blocked"] as const;
 export type KanbanCriterionStatus = (typeof KANBAN_CRITERION_STATUSES)[number];
+
+export const KANBAN_EXECUTION_SOURCES = ["session", "runner"] as const;
+export type KanbanExecutionSource = (typeof KANBAN_EXECUTION_SOURCES)[number];
 
 export type KanbanCriterionRecord = {
   id: string;
@@ -56,7 +61,8 @@ export type KanbanTaskRecord = {
   updatedAt: string;
   claimedBy: string | null;
   leaseUntil: string | null;
-  runnerSessionId?: string | null;
+  executionSource: KanbanExecutionSource | null;
+  executionSessionId: string | null;
 };
 
 export type KanbanTaskView = KanbanTaskRecord & {

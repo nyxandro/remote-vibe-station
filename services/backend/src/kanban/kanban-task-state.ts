@@ -58,6 +58,8 @@ export const releaseExpiredKanbanLeases = (tasks: KanbanTaskRecord[], nowMs: num
     task.status = "queued";
     task.claimedBy = null;
     task.leaseUntil = null;
+    task.executionSource = null;
+    task.executionSessionId = null;
     task.updatedAt = new Date(nowMs).toISOString();
   }
 };

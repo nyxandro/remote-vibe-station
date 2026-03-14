@@ -15,6 +15,7 @@ export type KanbanTaskUpdatedEventData = {
   projectSlug: string;
   status: string;
   claimedBy: string | null;
+  executionSource: "session" | "runner" | null;
   source: "app" | "agent";
 };
 
@@ -35,6 +36,7 @@ export const publishKanbanTaskUpdated = (
       projectSlug: input.task.projectSlug,
       status: input.task.status,
       claimedBy: input.task.claimedBy ?? null,
+      executionSource: input.task.executionSource ?? null,
       source: input.source
     } satisfies KanbanTaskUpdatedEventData
   });

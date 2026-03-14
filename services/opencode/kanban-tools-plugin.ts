@@ -33,6 +33,8 @@ type KanbanTask = {
   blockedReason: string | null;
   updatedAt: string;
   claimedBy: string | null;
+  executionSource?: "session" | "runner" | null;
+  executionSessionId?: string | null;
 };
 
 const requireRuntimeConfig = () => {
@@ -253,6 +255,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
         description:
           "Refine an existing task: tighten scope, update text, and keep acceptance criteria accurate before or during execution.",
         args: {
+          agentId: tool.schema.string().optional(),
           taskId: tool.schema.string(),
           title: tool.schema.string().optional(),
           description: tool.schema.string().optional(),
@@ -263,7 +266,10 @@ export const KanbanToolsPlugin: Plugin = async () => {
           blockedReason: tool.schema.string().optional()
         },
         async execute(args) {
-          const task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/refine`, args);
+          const task = await postJson<KanbanTask>(`/api/kanban/agent/tasks/${encodeURIComponent(args.taskId)}/refine`, {
+            ...args,
+            agentId: args.agentId ?? DEFAULT_AGENT_ID
+          });
           if (!task) {
             throw new Error("Kanban backend returned an empty response for task refinement");
           }

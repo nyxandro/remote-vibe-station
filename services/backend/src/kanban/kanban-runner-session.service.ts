@@ -18,7 +18,7 @@ export class KanbanRunnerSessionService {
     /* Task-owned session ids let the runner resume the same conversation after timer wake-ups or restarts. */
     const file = await this.store.read();
     const task = file.tasks.find((item) => item.id === taskId);
-    return task?.runnerSessionId ?? null;
+    return task?.executionSessionId ?? null;
   }
 
   public async setTaskSessionId(taskId: string, sessionId: string): Promise<void> {
@@ -29,7 +29,7 @@ export class KanbanRunnerSessionService {
         throw new KanbanValidationError(`Kanban task not found: ${taskId}`);
       }
 
-      task.runnerSessionId = sessionId;
+      task.executionSessionId = sessionId;
     });
   }
 }

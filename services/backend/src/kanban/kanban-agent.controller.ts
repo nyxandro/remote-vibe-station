@@ -22,6 +22,8 @@ import {
   KanbanStatus
 } from "./kanban.types";
 
+const DEFAULT_SESSION_AGENT_ID = "opencode-agent";
+
 @Controller("api/kanban/agent")
 @UseGuards(KanbanAgentGuard)
 export class KanbanAgentController {
@@ -102,6 +104,7 @@ export class KanbanAgentController {
     @Param("id") id: string,
     @Body()
     body: {
+      agentId?: string;
       title?: string;
       description?: string;
       status?: KanbanStatus;
@@ -111,19 +114,9 @@ export class KanbanAgentController {
       blockedReason?: string | null;
     }
   ) {
-    /* One refine endpoint covers backlog discussion, scope updates, and queue transitions. */
+    /* Starting a task through the agent endpoint must claim session ownership atomically before extra edits apply. */
     try {
-      const task = await this.kanban.updateTask(id, {
-        ...(typeof body?.title === "string" ? { title: body.title } : {}),
-        ...(typeof body?.description === "string" ? { description: body.description } : {}),
-        ...(body?.status ? { status: this.parseStatus(body.status) } : {}),
-        ...(body?.priority ? { priority: this.parsePriority(body.priority) } : {}),
-        ...(Array.isArray(body?.acceptanceCriteria)
-          ? { acceptanceCriteria: body.acceptanceCriteria }
-          : {}),
-        ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
-        ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
-      });
+      const task = await this.updateTaskForAgent(id, body);
       publishKanbanTaskUpdated(this.events, { task, source: "agent" });
       return task;
     } catch (error) {
@@ -246,5 +239,48 @@ export class KanbanAgentController {
       throw new BadRequestException(error.message);
     }
     throw error;
+  }
+
+  private async updateTaskForAgent(
+    taskId: string,
+    body: {
+      agentId?: string;
+      title?: string;
+      description?: string;
+      status?: KanbanStatus;
+      priority?: KanbanPriority;
+      acceptanceCriteria?: KanbanCriterionInput[];
+      resultSummary?: string | null;
+      blockedReason?: string | null;
+    }
+  ) {
+    /* Session starts become an atomic claim before any non-status metadata edits are applied. */
+    const nextStatus = body?.status ? this.parseStatus(body.status) : null;
+    if (nextStatus === "in_progress") {
+      const started = await this.kanban.startTaskExecution({
+        taskId,
+        agentId: typeof body?.agentId === "string" && body.agentId.trim().length > 0 ? body.agentId : DEFAULT_SESSION_AGENT_ID,
+        executionSource: "session"
+      });
+      const patch = {
+        ...(typeof body?.title === "string" ? { title: body.title } : {}),
+        ...(typeof body?.description === "string" ? { description: body.description } : {}),
+        ...(body?.priority ? { priority: this.parsePriority(body.priority) } : {}),
+        ...(Array.isArray(body?.acceptanceCriteria) ? { acceptanceCriteria: body.acceptanceCriteria } : {}),
+        ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
+        ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
+      };
+      return Object.keys(patch).length > 0 ? this.kanban.updateTask(started.id, patch) : started;
+    }
+
+    return this.kanban.updateTask(taskId, {
+      ...(typeof body?.title === "string" ? { title: body.title } : {}),
+      ...(typeof body?.description === "string" ? { description: body.description } : {}),
+      ...(nextStatus ? { status: nextStatus } : {}),
+      ...(body?.priority ? { priority: this.parsePriority(body.priority) } : {}),
+      ...(Array.isArray(body?.acceptanceCriteria) ? { acceptanceCriteria: body.acceptanceCriteria } : {}),
+      ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
+      ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
+    });
   }
 }

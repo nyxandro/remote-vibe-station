@@ -34,8 +34,14 @@ const taskSchema = z.object({
   updatedAt: z.string().min(1),
   claimedBy: z.string().nullable(),
   leaseUntil: z.string().nullable(),
+  executionSource: z.enum(["session", "runner"]).nullable().optional(),
+  executionSessionId: z.string().nullable().optional(),
   runnerSessionId: z.string().nullable().optional()
-});
+}).transform((value) => ({
+  ...value,
+  executionSource: value.executionSource ?? (value.runnerSessionId ? "runner" : null),
+  executionSessionId: value.executionSessionId ?? value.runnerSessionId ?? null
+}));
 
 const storeSchema = z.object({
   tasks: z.array(taskSchema)

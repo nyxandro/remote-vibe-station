@@ -26,6 +26,8 @@ const buildTask = (overrides?: Record<string, unknown>) => ({
   updatedAt: "2026-03-10T09:00:00.000Z",
   claimedBy: KANBAN_RUNNER_AGENT_ID,
   leaseUntil: "2026-03-10T12:00:00.000Z",
+  executionSource: "runner",
+  executionSessionId: "session-existing",
   ...overrides
 });
 
@@ -434,5 +436,50 @@ describe("KanbanRunnerService", () => {
       agentId: KANBAN_RUNNER_AGENT_ID,
       leaseMs: 1_800_000
     });
+  });
+
+  test("runOnce does not continue a task that is already owned by a live session", async () => {
+    /* Session-owned in-progress work must not be resumed by the external runner. */
+    const sessionTask = buildTask({
+      id: "task-session-owned",
+      claimedBy: "opencode-agent",
+      executionSource: "session",
+      executionSessionId: null
+    });
+    const kanban = {
+      listTasks: jest.fn(async () => [sessionTask]),
+      claimNextTask: jest.fn()
+    };
+    const runnerSessions = {
+      getTaskSessionId: jest.fn(async () => null),
+      setTaskSessionId: jest.fn(async () => undefined)
+    };
+    const projects = {
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+    };
+    const opencode = {
+      createDetachedSession: jest.fn(),
+      sendPromptToSession: jest.fn()
+    };
+    const opencodeEvents = {
+      ensureDirectory: jest.fn(),
+      waitUntilConnected: jest.fn(async () => undefined)
+    };
+    const events = createEventsServiceMock();
+
+    const runner = new KanbanRunnerService(
+      { kanbanRunnerEnabled: true } as never,
+      kanban as never,
+      runnerSessions as never,
+      projects as never,
+      opencode as never,
+      opencodeEvents as never,
+      events as never
+    );
+
+    await runner.runOnce("startup");
+
+    expect(kanban.claimNextTask).not.toHaveBeenCalled();
+    expect(opencode.sendPromptToSession).not.toHaveBeenCalled();
   });
 });
