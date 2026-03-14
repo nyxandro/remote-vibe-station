@@ -120,6 +120,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         directory,
         sessionID: sessionId
       });
+      const refreshedTask = await this.loadTask(taskId, input.projectSlug);
 
       this.events.publish({
         type: "kanban.runner.finished",
@@ -128,9 +129,22 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           reason: input.reason,
           projectSlug: input.projectSlug,
           taskId,
-          sessionId: promptResult.sessionId
+          sessionId: promptResult.sessionId,
+          status: refreshedTask?.status ?? null
         }
       });
+
+      if (refreshedTask?.status === "blocked" && refreshedTask.blockedReason) {
+        this.events.publish({
+          type: "kanban.runner.blocked",
+          ts: new Date().toISOString(),
+          data: {
+            projectSlug: input.projectSlug,
+            taskId,
+            blockedReason: refreshedTask.blockedReason
+          }
+        });
+      }
     } catch (error) {
       this.events.publish({
         type: "kanban.runner.error",
@@ -179,6 +193,12 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     const created = await this.opencode.createDetachedSession({ directory: input.directory });
     await this.runnerSessions.setTaskSessionId(input.taskId, created.id);
     return created.id;
+  }
+
+  private async loadTask(taskId: string, projectSlug: string): Promise<KanbanTaskView | null> {
+    /* Refresh persisted task state after each run so notifications reflect the actual terminal status. */
+    const tasks = await this.kanban.listTasks({ projectSlug });
+    return tasks.find((task) => task.id === taskId) ?? null;
   }
 
   private async waitForEventBridge(directory: string): Promise<void> {

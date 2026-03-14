@@ -10,8 +10,9 @@
  * - TelegramEventsOutboxBridge (L23) - Subscribes to EventsService on startup.
  */
 
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
 
+import { AppConfig, ConfigToken } from "../../config/config.types";
 import { EventsService } from "../../events/events.service";
 import { EventEnvelope } from "../../events/events.types";
 import { TelegramOpenCodeRuntimeBridge } from "./telegram-opencode-runtime-bridge.service";
@@ -22,7 +23,8 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
   public constructor(
     private readonly events: EventsService,
     private readonly outbox: TelegramOutboxService,
-    private readonly runtimeBridge: TelegramOpenCodeRuntimeBridge
+    private readonly runtimeBridge: TelegramOpenCodeRuntimeBridge,
+    @Inject(ConfigToken) private readonly config: AppConfig
   ) {}
 
   public onModuleInit(): void {
@@ -136,6 +138,51 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
         adminId,
         text: `🆕 Начата новая сессия (проект: ${projectSlug}).`
       });
+      return;
+    }
+
+    if (event.type === "kanban.runner.started") {
+      /* Runner wake-ups should be visible in Telegram so humans know automation resumed a task on its own. */
+      const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
+      const taskId = String((event.data as any)?.taskId ?? "").trim();
+      if (!projectSlug || !taskId) {
+        return;
+      }
+
+      this.enqueueForBoundAdmins(`🤖 Kanban runner продолжил задачу ${taskId} в проекте ${projectSlug}.`);
+      return;
+    }
+
+    if (event.type === "kanban.runner.blocked") {
+      /* Blocked automation must tell operators exactly why the loop stopped and what task needs attention. */
+      const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
+      const taskId = String((event.data as any)?.taskId ?? "").trim();
+      const blockedReason = String((event.data as any)?.blockedReason ?? "").trim();
+      if (!projectSlug || !taskId || !blockedReason) {
+        return;
+      }
+
+      this.enqueueForBoundAdmins(`⛔ Kanban runner заблокировал задачу ${taskId} в проекте ${projectSlug}. Причина: ${blockedReason}`);
+      return;
+    }
+
+    if (event.type === "kanban.runner.error") {
+      /* Runner failures must be visible immediately so humans know why auto-continuation stopped. */
+      const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
+      const taskId = String((event.data as any)?.taskId ?? "").trim();
+      const message = String((event.data as any)?.message ?? "").trim();
+      if (!projectSlug || !taskId || !message) {
+        return;
+      }
+
+      this.enqueueForBoundAdmins(`⚠️ Kanban runner не смог продолжить задачу ${taskId} в проекте ${projectSlug}. Ошибка: ${message}`);
+    }
+  }
+
+  private enqueueForBoundAdmins(text: string): void {
+    /* Runner events are system-level, so they fan out to all configured admins with active chat bindings. */
+    for (const adminId of this.config.adminIds) {
+      this.outbox.enqueueAdminNotification({ adminId, text });
     }
   }
 

@@ -50,7 +50,7 @@ describe("TelegramEventsOutboxBridge", () => {
       const events = new EventsService(config as any);
       const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
         finalizeAssistantReply: jest.fn()
-      } as any);
+      } as any, config as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -109,7 +109,7 @@ describe("TelegramEventsOutboxBridge", () => {
       const events = new EventsService(config as any);
       const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
         finalizeAssistantReply: jest.fn()
-      } as any);
+      } as any, config as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -171,7 +171,7 @@ describe("TelegramEventsOutboxBridge", () => {
       const events = new EventsService(config as any);
       const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
         finalizeAssistantReply: jest.fn()
-      } as any);
+      } as any, config as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -244,7 +244,7 @@ describe("TelegramEventsOutboxBridge", () => {
       const events = new EventsService(config as any);
       const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
         finalizeAssistantReply: jest.fn()
-      } as any);
+      } as any, config as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -304,7 +304,7 @@ describe("TelegramEventsOutboxBridge", () => {
       const events = new EventsService(config as any);
       const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
         finalizeAssistantReply: jest.fn()
-      } as any);
+      } as any, config as any);
       bridge.onModuleInit();
 
       events.publish({
@@ -374,7 +374,7 @@ describe("TelegramEventsOutboxBridge", () => {
       );
       runtimeBridge.onModuleInit();
 
-      const bridge = new TelegramEventsOutboxBridge(events, outboxService, runtimeBridge);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, runtimeBridge, config as any);
       bridge.onModuleInit();
 
       /* Simulate the final assistant text that was already buffered from the runtime stream. */

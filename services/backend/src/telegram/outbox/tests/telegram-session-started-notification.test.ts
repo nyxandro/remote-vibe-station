@@ -52,7 +52,7 @@ describe("Telegram session started notification", () => {
       const events = new EventsService(config as any);
       const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
         finalizeAssistantReply: jest.fn()
-      } as any);
+      } as any, config as any);
       bridge.onModuleInit();
 
       events.publish({
