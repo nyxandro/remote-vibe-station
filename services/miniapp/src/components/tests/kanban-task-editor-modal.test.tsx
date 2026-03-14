@@ -89,7 +89,7 @@ describe("KanbanTaskEditorModal", () => {
       code: "Enter"
     });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Mark criterion Docs updated as done" }));
+    fireEvent.click(screen.getByText("Docs updated"));
 
     expect(screen.getByText("Docs updated")).toBeTruthy();
     expect(screen.getByText("Smoke test passes")).toBeTruthy();
@@ -130,10 +130,9 @@ describe("KanbanTaskEditorModal", () => {
 
     expect(screen.getByText("Docs updated")).toBeTruthy();
     expect(screen.getByText("Smoke test passes")).toBeTruthy();
-    expect((screen.getByRole("checkbox", { name: "Mark criterion Docs updated as done" }) as HTMLInputElement).checked).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Mark criterion Smoke test passes as blocked" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Block criterion" })[1] as HTMLElement);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove criterion Docs updated" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove criterion" })[0] as HTMLElement);
     fireEvent.click(screen.getByRole("button", { name: "Save task" }));
 
     expect(onSubmit).toHaveBeenCalledWith({

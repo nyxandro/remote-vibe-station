@@ -7,7 +7,7 @@
 
 import { type Plugin, tool } from "@opencode-ai/plugin";
 
-const STATUS_OPTIONS = ["backlog", "queued", "in_progress", "blocked", "done"] as const;
+const STATUS_OPTIONS = ["backlog", "refinement", "ready", "queued", "in_progress", "blocked", "done"] as const;
 const PRIORITY_OPTIONS = ["low", "medium", "high"] as const;
 const CRITERION_STATUS_OPTIONS = ["pending", "done", "blocked"] as const;
 const DEFAULT_AGENT_ID = "opencode-agent";
@@ -115,6 +115,10 @@ const humanizeStatus = (status: KanbanTask["status"]): string => {
   switch (status) {
     case "backlog":
       return "Backlog";
+    case "refinement":
+      return "Refinement";
+    case "ready":
+      return "Ready";
     case "queued":
       return "Queued";
     case "in_progress":
@@ -271,7 +275,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
 
       kanban_refine_task: tool({
         description:
-          "Refine an existing task: tighten scope, update text, and keep acceptance criteria accurate before or during execution.",
+          "Refine an existing task: tighten scope, move backlog cards through refinement/ready/queue stages, and keep acceptance criteria accurate before or during execution.",
         args: {
           agentId: tool.schema.string().optional(),
           taskId: tool.schema.string(),

@@ -10,6 +10,7 @@ import * as crypto from "node:crypto";
 
 import { normalizeCriterionInputs } from "./kanban-criteria";
 import { KanbanValidationError } from "./kanban.errors";
+import { assertKanbanStatusTransition } from "./kanban-status-transitions";
 import { resolveKanbanTaskStatus } from "./kanban-task-state";
 import { KanbanCriterionStatus, KanbanTaskRecord, UpdateKanbanTaskInput } from "./kanban.types";
 import {
@@ -24,6 +25,9 @@ import {
 
 export const applyKanbanTaskPatch = (task: KanbanTaskRecord, patch: UpdateKanbanTaskInput): void => {
   /* One shared patch path keeps status, criteria, and ownership cleanup consistent across all callers. */
+  const requestedStatus = patch.status ? requireKanbanStatus(patch.status) : task.status;
+  assertKanbanStatusTransition({ from: task.status, to: requestedStatus, taskId: task.id });
+
   const nextCriteria = Array.isArray(patch.acceptanceCriteria)
     ? normalizeCriterionInputs(patch.acceptanceCriteria, {
         existingCriteria: task.acceptanceCriteria,
@@ -31,7 +35,7 @@ export const applyKanbanTaskPatch = (task: KanbanTaskRecord, patch: UpdateKanban
       })
     : task.acceptanceCriteria;
   const nextStatus = resolveKanbanTaskStatus({
-    requestedStatus: patch.status ? requireKanbanStatus(patch.status) : task.status,
+    requestedStatus,
     acceptanceCriteria: nextCriteria
   });
 

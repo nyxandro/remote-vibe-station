@@ -11,10 +11,13 @@ import { ExternalLink, Plus, RefreshCw, Search, X } from "lucide-react";
 import { CreateKanbanTaskPayload, UpdateKanbanTaskPayload } from "../hooks/use-kanban";
 import { KanbanTaskEditorModal, KanbanTaskEditorSubmit } from "./KanbanTaskEditorModal";
 import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
+import { ThemeMode } from "../utils/theme";
 
 const COLUMNS: Array<{ status: KanbanStatus; label: string; emptyText: string }> = [
-  { status: "backlog", label: "Backlog", emptyText: "Discuss and refine ideas here." },
-  { status: "queued", label: "Queue", emptyText: "Tasks ready for implementation." },
+  { status: "backlog", label: "Backlog", emptyText: "Store raw ideas here before grooming starts." },
+  { status: "refinement", label: "Refinement", emptyText: "Clarify missing scope, inputs, and acceptance criteria here." },
+  { status: "ready", label: "Ready", emptyText: "Prepared tasks wait here until you intentionally queue them." },
+  { status: "queued", label: "Queue", emptyText: "Approved tasks wait here for execution pickup." },
   { status: "in_progress", label: "In progress", emptyText: "Agent-claimed work appears here." },
   { status: "blocked", label: "Blocked", emptyText: "Waiting for clarification or dependency." },
   { status: "done", label: "Done", emptyText: "Completed tasks stay here for review." }
@@ -28,6 +31,8 @@ const PRIORITY_LABELS: Record<KanbanPriority, string> = {
 
 const COLUMN_STYLE_CLASS: Record<KanbanStatus, string> = {
   backlog: "kanban-column-backlog",
+  refinement: "kanban-column-refinement",
+  ready: "kanban-column-ready",
   queued: "kanban-column-queued",
   in_progress: "kanban-column-in-progress",
   blocked: "kanban-column-blocked",
@@ -42,6 +47,7 @@ type Props = {
   initialProjectFilter?: string | null;
   isLoading: boolean;
   isSaving: boolean;
+  themeMode?: ThemeMode;
   onRefresh: () => void;
   onCreateTask: (payload: CreateKanbanTaskPayload) => Promise<void> | void;
   onUpdateTask: (taskId: string, patch: UpdateKanbanTaskPayload) => Promise<void> | void;
@@ -121,6 +127,8 @@ export const KanbanBoard = (props: Props) => {
     /* Pre-group cards per column so render logic stays predictable and lightweight. */
     const buckets: Record<KanbanStatus, KanbanTask[]> = {
       backlog: [],
+      refinement: [],
+      ready: [],
       queued: [],
       in_progress: [],
       blocked: [],
@@ -370,6 +378,7 @@ export const KanbanBoard = (props: Props) => {
           activeProjectSlug={props.activeProjectSlug}
           projects={props.projects}
           isSaving={props.isSaving}
+          themeMode={props.themeMode}
           onClose={() => setIsCreateOpen(false)}
           onSubmit={handleEditorSubmit}
         />
@@ -383,6 +392,7 @@ export const KanbanBoard = (props: Props) => {
           projects={props.projects}
           task={editingTask}
           isSaving={props.isSaving}
+          themeMode={props.themeMode}
           onClose={() => setEditingTask(null)}
           onSubmit={handleEditorSubmit}
         />

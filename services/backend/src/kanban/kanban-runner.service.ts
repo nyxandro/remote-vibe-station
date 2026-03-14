@@ -203,7 +203,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async resolveTaskForRun(projectSlug: string): Promise<{ task: KanbanTaskView; action: KanbanRunnerAction } | null> {
-    /* Resume unfinished runner-owned work first, otherwise claim the next queued task for automation. */
+    /* Resume unfinished runner-owned work first and never start another queued task while any project task is already active. */
     const tasks = await this.kanban.listTasks({ projectSlug });
     const activeTask = tasks.find(
       (task) =>
@@ -213,6 +213,11 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     );
     if (activeTask) {
       return { task: activeTask, action: "continued" };
+    }
+
+    const hasAnyActiveTask = tasks.some((task) => task.status === "in_progress");
+    if (hasAnyActiveTask) {
+      return null;
     }
 
     const queuedTask = tasks.find((task) => task.status === "queued" && task.executionSource !== "session") ?? null;
@@ -241,7 +246,9 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
 
       const isCandidate =
         (status === "queued" && executionSource !== "session" && source !== "agent") ||
-        (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner");
+        (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner") ||
+        status === "blocked" ||
+        status === "done";
       if (isCandidate) {
         this.scheduleProjectRun(projectSlug, "task-event");
       }

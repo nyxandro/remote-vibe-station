@@ -9,6 +9,7 @@
  */
 
 import { KanbanExecutionConflictError } from "./kanban.errors";
+import { assertKanbanTaskCanEnterExecutionQueue } from "./kanban-status-transitions";
 import { KanbanExecutionSource, KanbanTaskRecord } from "./kanban.types";
 
 export type KanbanExecutionActor = {
@@ -67,6 +68,8 @@ export const assertKanbanTaskCanStartExecution = (input: {
   actor: KanbanExecutionActor;
 }): void => {
   /* Starting work is allowed only when the task is idle or already owned by the same OpenCode session. */
+  assertKanbanTaskCanEnterExecutionQueue(input.task);
+
   if (input.task.status !== "in_progress") {
     return;
   }

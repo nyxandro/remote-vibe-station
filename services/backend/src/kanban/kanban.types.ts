@@ -19,7 +19,7 @@
  * - UpdateKanbanCriterionInput - Editable criterion state payload.
  */
 
-export const KANBAN_STATUSES = ["backlog", "queued", "in_progress", "blocked", "done"] as const;
+export const KANBAN_STATUSES = ["backlog", "refinement", "ready", "queued", "in_progress", "blocked", "done"] as const;
 export type KanbanStatus = (typeof KANBAN_STATUSES)[number];
 
 export const KANBAN_PRIORITIES = ["low", "medium", "high"] as const;

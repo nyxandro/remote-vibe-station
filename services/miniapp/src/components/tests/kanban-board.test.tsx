@@ -75,15 +75,12 @@ describe("KanbanBoard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create new task" }));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Prepare queue" } });
-    fireEvent.change(screen.getByLabelText("Description"), {
-      target: { value: "Move reviewed backlog item to queue" }
-    });
     fireEvent.click(screen.getByRole("button", { name: "Create task" }));
 
     expect(onCreateTask).toHaveBeenCalledWith({
       projectSlug: "alpha",
       title: "Prepare queue",
-      description: "Move reviewed backlog item to queue",
+      description: "",
       status: "backlog",
       priority: "medium",
       acceptanceCriteria: []
@@ -91,7 +88,7 @@ describe("KanbanBoard", () => {
   });
 
   it("renders all workflow columns including agent execution states", () => {
-    /* Human and agent users need one board that exposes backlog, queue, work, blockers, and completion. */
+    /* Human and agent users need one board that separates raw ideas, refinement, readiness, queueing, and execution. */
     render(
       <KanbanBoard
         scope="project"
@@ -108,6 +105,8 @@ describe("KanbanBoard", () => {
     );
 
     expect(screen.getByText("Backlog")).toBeTruthy();
+    expect(screen.getByText("Refinement")).toBeTruthy();
+    expect(screen.getByText("Ready")).toBeTruthy();
     expect(screen.getByText("Queue")).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
     expect(screen.getByText("Blocked")).toBeTruthy();

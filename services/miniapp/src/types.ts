@@ -46,7 +46,7 @@ export type ProjectRecord = {
   };
 };
 
-export type KanbanStatus = "backlog" | "queued" | "in_progress" | "blocked" | "done";
+export type KanbanStatus = "backlog" | "refinement" | "ready" | "queued" | "in_progress" | "blocked" | "done";
 
 export type KanbanPriority = "low" | "medium" | "high";
 
@@ -73,6 +73,8 @@ export type KanbanTask = {
   updatedAt: string;
   claimedBy: string | null;
   leaseUntil: string | null;
+  executionSource?: "session" | "runner" | null;
+  executionSessionId?: string | null;
 };
 
 export type ProjectStatus = {

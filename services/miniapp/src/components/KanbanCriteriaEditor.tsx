@@ -1,29 +1,10 @@
-/**
- * @fileoverview Checklist-style acceptance criteria editor for kanban tasks.
- *
- * Exports:
- * - KanbanCriteriaEditorProps - Public prop contract for checklist criteria editing.
- * - KanbanCriteriaEditor - Renders criterion draft input, status controls, and removable checklist items.
- */
-
 import { KeyboardEvent } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Check, EyeOff, Trash2, Ban } from "lucide-react";
 
 import { KanbanCriterion } from "../types";
 
 const ENTER_KEY = "Enter";
-
-const humanizeCriterionStatus = (status: KanbanCriterion["status"]): string => {
-  /* Compact labels help the editor surface blocked criteria without adding extra prose around each row. */
-  switch (status) {
-    case "pending":
-      return "Pending";
-    case "done":
-      return "Done";
-    case "blocked":
-      return "Blocked";
-  }
-};
+const SPACE_KEY = " ";
 
 export type KanbanCriteriaEditorProps = {
   criteria: KanbanCriterion[];
@@ -38,7 +19,6 @@ export type KanbanCriteriaEditorProps = {
 
 export const KanbanCriteriaEditor = (props: KanbanCriteriaEditorProps) => {
   const handleDraftKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    /* Enter should promote the current draft into a checklist item without submitting the whole task form. */
     if (event.key !== ENTER_KEY || props.draftValue.trim().length === 0) {
       return;
     }
@@ -47,101 +27,102 @@ export const KanbanCriteriaEditor = (props: KanbanCriteriaEditorProps) => {
     props.onAddCriterion();
   };
 
+  const handleToggleKeyDown = (event: KeyboardEvent<HTMLDivElement>, criterionId: string, isBlocked: boolean) => {
+    /* Keyboard access mirrors pointer toggles so checklist editing works without a mouse. */
+    if (props.isSaving || isBlocked || (event.key !== ENTER_KEY && event.key !== SPACE_KEY)) {
+      return;
+    }
+
+    event.preventDefault();
+    props.onToggleDoneCriterion(criterionId);
+  };
+
   return (
-    <div className="kanban-field kanban-field-span-2">
-      <span className="kanban-field-label">Acceptance criteria</span>
+    <div className="kanban-criteria-editor">
+      <div className="kanban-criteria-input-row">
+        <input
+          className="input kanban-criteria-input-field"
+          aria-label="Acceptance criterion"
+          placeholder="What's the definition of done for this?"
+          value={props.draftValue}
+          onChange={(event) => props.onDraftChange(event.target.value)}
+          onKeyDown={handleDraftKeyDown}
+        />
 
-      <div className="kanban-criteria-editor">
-        <div className="kanban-criteria-input-row">
-          <input
-            className="input"
-            aria-label="Acceptance criterion"
-            placeholder="Add one done criterion"
-            value={props.draftValue}
-            onChange={(event) => props.onDraftChange(event.target.value)}
-            onKeyDown={handleDraftKeyDown}
-          />
-
-          <button
-            className="btn outline kanban-criteria-add-button"
-            disabled={props.draftValue.trim().length === 0 || props.isSaving}
-            onClick={props.onAddCriterion}
-            type="button"
-          >
-            <Plus size={16} />
-            <span>Add criterion</span>
-          </button>
-        </div>
-
-        <div className="kanban-criteria-hint">
-          Add each checklist item separately so done means the same thing for humans, agents, and the automation runner.
-        </div>
-
-        {props.criteria.length > 0 ? (
-          <ul className="kanban-criteria-list" aria-label="Acceptance criteria list">
-            {props.criteria.map((criterion, index) => {
-              const isDone = criterion.status === "done";
-              const isBlocked = criterion.status === "blocked";
-              const blockLabel = isBlocked
-                ? `Return criterion ${criterion.text} to pending`
-                : `Mark criterion ${criterion.text} as blocked`;
-
-              return (
-                <li key={criterion.id} className="kanban-criteria-item">
-                  <div className="kanban-criteria-item-copy">
-                    <span className="kanban-criteria-item-bullet" aria-hidden="true">
-                      {index + 1}.
-                    </span>
-
-                    <div className="kanban-criteria-item-body">
-                      <label className="kanban-criteria-toggle-row">
-                        <input
-                          aria-label={`Mark criterion ${criterion.text} as done`}
-                          checked={isDone}
-                          className="kanban-criteria-checkbox"
-                          disabled={props.isSaving || isBlocked}
-                          onChange={() => props.onToggleDoneCriterion(criterion.id)}
-                          type="checkbox"
-                        />
-                        <span className="kanban-criteria-item-text">{criterion.text}</span>
-                      </label>
-
-                      <span className={`kanban-criteria-status kanban-criteria-status-${criterion.status}`}>
-                        {humanizeCriterionStatus(criterion.status)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="kanban-criteria-item-actions">
-                    <button
-                      className="btn ghost kanban-criteria-status-button"
-                      aria-label={blockLabel}
-                      disabled={props.isSaving}
-                      onClick={() => props.onToggleBlockedCriterion(criterion.id)}
-                      type="button"
-                    >
-                      {isBlocked ? "Unblock" : "Block"}
-                    </button>
-
-                    <button
-                      className="btn ghost kanban-criteria-remove-button"
-                      aria-label={`Remove criterion ${criterion.text}`}
-                      disabled={props.isSaving}
-                      onClick={() => props.onRemoveCriterion(criterion.id)}
-                      type="button"
-                      title="Remove criterion"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="kanban-criteria-empty">No criteria added yet.</div>
-        )}
+        <button
+          className="kanban-criteria-add-button"
+          disabled={props.draftValue.trim().length === 0 || props.isSaving}
+          onClick={props.onAddCriterion}
+          type="button"
+          aria-label="Add criterion"
+        >
+          <Plus size={18} />
+        </button>
       </div>
+
+      {props.criteria.length > 0 ? (
+        <ul className="kanban-criteria-list" aria-label="Acceptance criteria list">
+          {props.criteria.map((criterion) => {
+            const isDone = criterion.status === "done";
+            const isBlocked = criterion.status === "blocked";
+            const blockLabel = isBlocked
+              ? `Unblock criterion`
+              : `Block criterion`;
+
+            return (
+              <li 
+                key={criterion.id} 
+                className={`kanban-criteria-item ${isDone ? "is-done" : ""} ${isBlocked ? "is-blocked" : ""}`}
+              >
+                <div className="kanban-criteria-item-copy">
+                  <div 
+                    className="kanban-criteria-toggle-row"
+                    role="button"
+                    tabIndex={props.isSaving || isBlocked ? -1 : 0}
+                    aria-label={`Toggle criterion ${criterion.text} done`}
+                    onClick={() => !props.isSaving && !isBlocked && props.onToggleDoneCriterion(criterion.id)}
+                    onKeyDown={(event) => handleToggleKeyDown(event, criterion.id, isBlocked)}
+                  >
+                    <div className="kanban-criteria-checkbox-wrapper">
+                      {isDone && <Check size={14} strokeWidth={3} />}
+                      {isBlocked && <Ban size={14} strokeWidth={3} />}
+                    </div>
+                    <span className="kanban-criteria-item-text">{criterion.text}</span>
+                  </div>
+                </div>
+
+                <div className="kanban-criteria-item-actions">
+                  <button
+                    className={`kanban-criteria-action-btn ${isBlocked ? "is-active" : ""}`}
+                    aria-label={blockLabel}
+                    title={blockLabel}
+                    disabled={props.isSaving || isDone}
+                    onClick={() => props.onToggleBlockedCriterion(criterion.id)}
+                    type="button"
+                  >
+                    <Ban size={16} />
+                  </button>
+
+                  <button
+                    className="kanban-criteria-action-btn"
+                    aria-label={`Remove criterion`}
+                    title="Remove criterion"
+                    disabled={props.isSaving}
+                    onClick={() => props.onRemoveCriterion(criterion.id)}
+                    type="button"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="kanban-criteria-empty">
+          No criteria added yet. Add checklist items to define the scope of work.
+        </div>
+      )}
     </div>
   );
 };

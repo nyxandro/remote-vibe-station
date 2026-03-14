@@ -9,6 +9,7 @@ import { useEffect } from "react";
 
 import { useKanban } from "../hooks/use-kanban";
 import { useProjectCatalog } from "../hooks/use-project-catalog";
+import { readStoredThemeMode, ThemeMode } from "../utils/theme";
 import { KanbanBoard } from "./KanbanBoard";
 
 type Props = {
@@ -28,6 +29,7 @@ export const KanbanBoardScreen = (props: Props) => {
     moveTask
   } = useKanban();
   const { projects, isLoading: isProjectsLoading, error: projectError, loadProjects } = useProjectCatalog();
+  const themeMode: ThemeMode = readStoredThemeMode();
 
   useEffect(() => {
     /* Shared board needs all tasks plus the full project catalog for filter/create controls. */
@@ -42,7 +44,7 @@ export const KanbanBoardScreen = (props: Props) => {
           <div>
             <div className="panel-title">Shared Kanban</div>
             <div className="kanban-standalone-copy">
-              One secure board for backlog grooming, queue management, and agent execution across all projects.
+              One secure board for backlog storage, task refinement, execution readiness, queue management, and agent work across all projects.
             </div>
           </div>
 
@@ -68,6 +70,7 @@ export const KanbanBoardScreen = (props: Props) => {
           initialProjectFilter={props.initialProjectSlug}
           isLoading={isLoading || isProjectsLoading}
           isSaving={isSaving}
+          themeMode={themeMode}
           onRefresh={() => {
             void reloadTasks();
             void loadProjects();

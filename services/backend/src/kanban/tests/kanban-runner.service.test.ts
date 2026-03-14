@@ -149,7 +149,7 @@ describe("KanbanRunnerService", () => {
       listTasks: jest
         .fn()
         .mockResolvedValueOnce([queuedTask])
-        .mockResolvedValueOnce([buildTask({ id: "task-human", claimedBy: "manual-agent", executionSource: "session" }), queuedTask])
+        .mockResolvedValueOnce([queuedTask])
         .mockResolvedValueOnce([claimedTask]),
       startTaskExecution: jest.fn(async () => claimedTask)
     };

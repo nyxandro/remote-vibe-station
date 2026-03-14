@@ -14,6 +14,12 @@ import { useMemo } from "react";
 
 import { ThemeMode } from "../utils/theme";
 
+import { useRef, useImperativeHandle, forwardRef } from "react";
+
+export type CodeEditorRef = {
+  view: EditorView | null;
+};
+
 type Props = {
   value: string;
   language: "markdown" | "json" | "text";
@@ -25,7 +31,12 @@ type Props = {
   onChange: (value: string) => void;
 };
 
-export const CodeEditor = (props: Props) => {
+export const CodeEditor = forwardRef<CodeEditorRef, Props>((props, ref) => {
+  const editorRef = useRef<{ view?: EditorView }>(null);
+
+  useImperativeHandle(ref, () => ({
+    view: editorRef.current?.view ?? null
+  }));
   const extensions = useMemo(() => {
     /* Keep extension selection explicit to avoid incorrect parser setup. */
     const languageExt =
@@ -48,6 +59,7 @@ export const CodeEditor = (props: Props) => {
 
   return (
     <CodeMirror
+      ref={editorRef}
       value={props.value}
       height={props.height ?? "220px"}
       autoFocus={props.autoFocus}
@@ -65,4 +77,4 @@ export const CodeEditor = (props: Props) => {
       theme={props.themeMode === "light" ? "light" : "dark"}
     />
   );
-};
+});

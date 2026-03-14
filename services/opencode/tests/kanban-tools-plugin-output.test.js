@@ -52,3 +52,9 @@ test("kanban plugin source soft-handles execution ownership conflicts", () => {
   assert.match(pluginSource, /KANBAN_EXECUTION_OWNERSHIP_CONFLICT/);
   assert.match(pluginSource, /Task execution already belongs to another OpenCode session/);
 });
+
+test("kanban plugin source exposes refinement and ready workflow stages", () => {
+  /* Agents should see the new planning columns and move tasks through them before queueing execution. */
+  assert.match(pluginSource, /"refinement"/);
+  assert.match(pluginSource, /"ready"/);
+});
