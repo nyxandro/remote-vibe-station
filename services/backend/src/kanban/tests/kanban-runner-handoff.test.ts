@@ -64,6 +64,10 @@ const waitFor = async (assertion: () => void | Promise<void>): Promise<void> => 
 };
 
 describe("Kanban runner handoff", () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test("runOnce does not start queued work while another session-owned task is in progress", async () => {
     /* Project execution must stay strictly serialized, even when queued work already exists. */
     const sessionTask = buildTask({
@@ -130,8 +134,9 @@ describe("Kanban runner handoff", () => {
     expect(opencode.sendPromptToSession).not.toHaveBeenCalled();
   });
 
-  test("agent-side blocked event wakes runner to start the next queued task", async () => {
-    /* Once the current task is blocked, the project should immediately move on to the next queued task. */
+  test("agent-side blocked event wakes runner to start the next queued task after a short handoff delay", async () => {
+    /* A short delay keeps the previous final Telegram message from racing ahead of the next task-start notification. */
+    jest.useFakeTimers();
     const blockedTask = buildTask({
       id: "task-blocked",
       status: "blocked",
@@ -235,6 +240,11 @@ describe("Kanban runner handoff", () => {
         source: "agent"
       }
     });
+
+    await jest.advanceTimersByTimeAsync(9_999);
+    expect(opencode.sendPromptToSession).toHaveBeenCalledTimes(0);
+
+    await jest.advanceTimersByTimeAsync(1);
 
     await waitFor(() => {
       expect(opencode.sendPromptToSession).toHaveBeenCalledTimes(1);

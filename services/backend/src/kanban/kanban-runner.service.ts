@@ -14,7 +14,11 @@ import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
 import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
-import { isOpenCodeFetchTransportFailure, normalizeOpenCodeTransportErrorMessage } from "../open-code/opencode-transport-errors";
+import {
+  isOpenCodeFetchTransportFailure,
+  logOpenCodeTransportFailure,
+  normalizeOpenCodeTransportErrorMessage
+} from "../open-code/opencode-transport-errors";
 import { OpenCodePart } from "../open-code/opencode.types";
 import { ProjectsService } from "../projects/projects.service";
 import { buildKanbanRunnerPrompt } from "./kanban-runner-prompt";
@@ -26,6 +30,7 @@ import { KanbanTaskView } from "./kanban.types";
 const MIN_RUNNER_CLAIM_LEASE_MS = 30 * 60 * 1000;
 const RUNNER_EVENT_CONNECT_TIMEOUT_MS = 60_000;
 const RUNNER_FETCH_SETTLE_TIMEOUT_MS = 30_000;
+const RUNNER_NEXT_TASK_DELAY_MS = 10_000;
 
 type KanbanRunnerReason = "startup" | "task-event" | "runner-finished";
 type KanbanRunnerAction = "started" | "continued";
@@ -40,6 +45,7 @@ export const KANBAN_RUNNER_AGENT_ID = "kanban-runner";
 export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
   private readonly runningProjects = new Set<string>();
   private readonly pendingProjects = new Set<string>();
+  private readonly delayedProjectRuns = new Map<string, ReturnType<typeof setTimeout>>();
   private unsubscribe?: () => void;
 
   public constructor(
@@ -66,6 +72,10 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     /* Remove event subscription cleanly during shutdown and tests. */
     this.unsubscribe?.();
     this.unsubscribe = undefined;
+    for (const timeoutId of this.delayedProjectRuns.values()) {
+      clearTimeout(timeoutId);
+    }
+    this.delayedProjectRuns.clear();
   }
 
   public async runOnce(reason: KanbanRunnerReason): Promise<void> {
@@ -101,6 +111,9 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     /* Each project keeps its own serialized loop so event bursts cannot start duplicate OpenCode turns. */
     this.runningProjects.add(input.projectSlug);
     let task: KanbanTaskView | null = null;
+    let latestTaskStatus: string | null = null;
+    let latestClaimedBy: string | null = null;
+    let latestExecutionSource: string | null = null;
 
     try {
       const selection = await this.resolveTaskForRun(input.projectSlug);
@@ -162,6 +175,9 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
 
       const promptResult = await this.sendPromptWithSettle({ directory, sessionId, prompt });
       const refreshedTask = await this.loadTask(taskId, input.projectSlug);
+      latestTaskStatus = refreshedTask?.status ?? null;
+      latestClaimedBy = refreshedTask?.claimedBy ?? null;
+      latestExecutionSource = refreshedTask?.executionSource ?? null;
 
       this.events.publish({
         type: "kanban.runner.finished",
@@ -210,7 +226,17 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
 
       /* Re-run once after the current turn ends when a completion/task event arrived mid-flight. */
       if (this.pendingProjects.delete(input.projectSlug)) {
-        void this.runProject({ projectSlug: input.projectSlug, reason: "runner-finished" });
+        const shouldDelayNextTask = !(
+          latestTaskStatus === "in_progress" &&
+          latestClaimedBy === KANBAN_RUNNER_AGENT_ID &&
+          latestExecutionSource === "runner"
+        );
+
+        if (shouldDelayNextTask) {
+          this.scheduleDelayedProjectRun(input.projectSlug, "runner-finished");
+        } else {
+          void this.runProject({ projectSlug: input.projectSlug, reason: "runner-finished" });
+        }
       }
     }
   }
@@ -263,7 +289,11 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         status === "blocked" ||
         status === "done";
       if (isCandidate) {
-        this.scheduleProjectRun(projectSlug, "task-event");
+        if (status === "blocked" || status === "done") {
+          this.scheduleProjectRunAfterHandoff(projectSlug, "task-event");
+        } else {
+          this.scheduleProjectRun(projectSlug, "task-event");
+        }
       }
       return;
     }
@@ -301,7 +331,47 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    if (this.delayedProjectRuns.has(projectSlug)) {
+      this.pendingProjects.add(projectSlug);
+      return;
+    }
+
     void this.runProject({ projectSlug, reason });
+  }
+
+  private scheduleProjectRunAfterHandoff(projectSlug: string, reason: KanbanRunnerReason): void {
+    /* Finished/blocked handoffs should pause briefly so Telegram can finish the previous task narrative first. */
+    if (this.runningProjects.has(projectSlug)) {
+      this.pendingProjects.add(projectSlug);
+      return;
+    }
+
+    if (this.delayedProjectRuns.has(projectSlug)) {
+      this.pendingProjects.add(projectSlug);
+      return;
+    }
+
+    this.scheduleDelayedProjectRun(projectSlug, reason);
+  }
+
+  private scheduleDelayedProjectRun(projectSlug: string, reason: KanbanRunnerReason): void {
+    /* Give Telegram enough room to deliver the previous final answer before the next task-start notification appears. */
+    const existingTimeout = this.delayedProjectRuns.get(projectSlug);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    const timeoutId = setTimeout(() => {
+      this.delayedProjectRuns.delete(projectSlug);
+      if (this.runningProjects.has(projectSlug)) {
+        this.pendingProjects.add(projectSlug);
+        return;
+      }
+
+      void this.runProject({ projectSlug, reason });
+    }, RUNNER_NEXT_TASK_DELAY_MS);
+
+    this.delayedProjectRuns.set(projectSlug, timeoutId);
   }
 
   private async ensureTaskSession(input: {
@@ -361,6 +431,14 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         timeoutMs: RUNNER_FETCH_SETTLE_TIMEOUT_MS
       });
       if (!settled) {
+        /* Runner transport failures are otherwise hard to trace because they happen outside request/response flow. */
+        logOpenCodeTransportFailure({
+          scope: "kanban.runner.sendPromptWithSettle",
+          action: "wait_for_runtime_settle",
+          directory: input.directory,
+          sessionID: input.sessionId,
+          error
+        });
         throw error;
       }
 

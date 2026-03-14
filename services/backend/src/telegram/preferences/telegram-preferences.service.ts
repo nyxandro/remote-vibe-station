@@ -26,6 +26,7 @@ import {
 import { TelegramPreferencesStore } from "./telegram-preferences.store";
 
 const DEFAULT_TELEGRAM_AGENTS = new Set(["build", "plan"]);
+const GROQ_MODELS_URL = "https://api.groq.com/openai/v1/models";
 
 @Injectable()
 export class TelegramPreferencesService {
@@ -89,10 +90,10 @@ export class TelegramPreferencesService {
     };
   }
 
-  public updateVoiceControlSettings(
+  public async updateVoiceControlSettings(
     adminId: number,
     input: { apiKey?: string | null; model?: string | null }
-  ): VoiceControlPublicSettingsSnapshot {
+  ): Promise<VoiceControlPublicSettingsSnapshot> {
     /* Update only provided fields and keep validation strict for required inputs. */
     const prev = this.store.get(adminId);
     const prevVoice = prev.voiceControl;
@@ -106,6 +107,11 @@ export class TelegramPreferencesService {
       typeof input.model !== "undefined"
         ? this.validateGroqModel(input.model)
         : this.normalizeGroqModel(prevVoice?.model ?? null);
+
+    /* Reject broken Groq credentials at save time so voice control never keeps a silently invalid API key. */
+    if (nextApiKey) {
+      await this.validateGroqApiKey(nextApiKey);
+    }
 
     this.store.set(adminId, {
       ...prev,
@@ -121,6 +127,30 @@ export class TelegramPreferencesService {
       model: nextModel,
       supportedModels: [...GROQ_TRANSCRIPTION_MODELS]
     };
+  }
+
+  private async validateGroqApiKey(apiKey: string): Promise<void> {
+    /* Save-time validation prevents stale/forbidden keys from breaking voice flow minutes or days later. */
+    const response = await fetch(GROQ_MODELS_URL, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      }
+    });
+
+    if (response.ok) {
+      return;
+    }
+
+    /* Groq rejects invalid or unauthorized keys with auth-like statuses; keep the remediation message explicit. */
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        "APP_GROQ_API_KEY_REJECTED: Groq отклонил API key. Сохраните действительный ключ Groq в настройках голосового управления и повторите попытку."
+      );
+    }
+
+    throw new Error(
+      `APP_GROQ_VALIDATION_FAILED: Не удалось проверить Groq API key (HTTP ${response.status}). Повторите попытку позже или проверьте доступ к api.groq.com.`
+    );
   }
 
   public async listModels(providerID: string): Promise<OpenCodeProviderModel[]> {

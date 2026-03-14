@@ -8,6 +8,10 @@
 import { TelegramPreferencesService } from "../telegram-preferences.service";
 
 describe("TelegramPreferencesService voice control", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("returns disabled snapshot when key/model are not configured", () => {
     /* Empty persisted settings must keep voice control explicitly disabled. */
     const store = {
@@ -49,15 +53,17 @@ describe("TelegramPreferencesService voice control", () => {
     });
   });
 
-  it("persists trimmed api key and selected model", () => {
+  it("persists trimmed api key and selected model only after Groq accepts the key", async () => {
     /* Update should normalize data once and persist exact validated values. */
+    jest.spyOn(global, "fetch").mockResolvedValue({ ok: true, status: 200 } as Response);
+
     const store = {
       get: jest.fn().mockReturnValue({}),
       set: jest.fn()
     };
 
     const service = new TelegramPreferencesService(store as never, {} as never, {} as never);
-    const snapshot = service.updateVoiceControlSettings(42, {
+    const snapshot = await service.updateVoiceControlSettings(42, {
       apiKey: "  gsk_live_123  ",
       model: "whisper-large-v3"
     });
@@ -73,7 +79,30 @@ describe("TelegramPreferencesService voice control", () => {
     expect(snapshot.model).toBe("whisper-large-v3");
   });
 
-  it("throws for unsupported model values", () => {
+  it("rejects invalid Groq keys before persisting them", async () => {
+    /* Invalid credentials must fail fast during settings save so the bot never keeps retrying a broken key. */
+    jest.spyOn(global, "fetch").mockResolvedValue({ ok: false, status: 403 } as Response);
+
+    const store = {
+      get: jest.fn().mockReturnValue({}),
+      set: jest.fn()
+    };
+
+    const service = new TelegramPreferencesService(store as never, {} as never, {} as never);
+
+    await expect(
+      service.updateVoiceControlSettings(42, {
+        apiKey: "gsk_live_123",
+        model: "whisper-large-v3-turbo"
+      })
+    ).rejects.toThrow(
+      "APP_GROQ_API_KEY_REJECTED: Groq отклонил API key. Сохраните действительный ключ Groq в настройках голосового управления и повторите попытку."
+    );
+
+    expect(store.set).not.toHaveBeenCalled();
+  });
+
+  it("throws for unsupported model values", async () => {
     /* Fail fast on invalid model IDs so bot never calls Groq with unknown model. */
     const store = {
       get: jest.fn().mockReturnValue({}),
@@ -82,12 +111,12 @@ describe("TelegramPreferencesService voice control", () => {
 
     const service = new TelegramPreferencesService(store as never, {} as never, {} as never);
 
-    expect(() =>
+    await expect(
       service.updateVoiceControlSettings(42, {
         apiKey: "gsk_live_123",
         model: "whisper-v2"
       })
-    ).toThrow("Unsupported Groq model");
+    ).rejects.toThrow("Unsupported Groq model");
 
     expect(store.set).not.toHaveBeenCalled();
   });

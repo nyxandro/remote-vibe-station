@@ -260,6 +260,13 @@ html[data-theme="dark"] .kanban-shell {
     box-shadow 0.18s ease;
 }
 
+.kanban-card-title {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--kanban-title);
+}
+
 .kanban-card:focus,
 .kanban-card:focus-visible {
   outline: none;
@@ -305,6 +312,14 @@ html[data-theme="dark"] .kanban-card:hover {
   gap: 3px;
   margin-top: 4px;
   width: 100%;
+}
+
+.kanban-load-more-button {
+  width: 100%;
+  justify-content: center;
+  border-style: dashed;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .kanban-card-progress-segment {
@@ -456,12 +471,6 @@ html[data-theme="dark"] .kanban-priority-high {
 html[data-theme="dark"] .kanban-project-badge {
   color: #d5e2ff;
   background: rgba(88, 124, 204, 0.22);
-}
-
-.kanban-card-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--kanban-title);
 }
 
 .kanban-card-description,

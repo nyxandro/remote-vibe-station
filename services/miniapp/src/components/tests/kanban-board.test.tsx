@@ -46,7 +46,8 @@ const buildTask = (overrides?: Partial<KanbanTask>): KanbanTask => ({
   updatedAt: "2026-03-10T09:00:00.000Z",
   claimedBy: null,
   leaseUntil: null,
-  projectName: "Alpha"
+  projectName: "Alpha",
+  ...overrides
 });
 
 describe("KanbanBoard", () => {
@@ -151,6 +152,88 @@ describe("KanbanBoard", () => {
     expect(screen.getByTitle("One").className).toContain("kanban-card-progress-segment-done");
     expect(screen.getByTitle("One").className).toContain("kanban-card-progress-segment-done-backlog");
     expect(screen.getByTitle("Two").className).toBe("kanban-card-progress-segment");
+  });
+
+  it("sorts cards in each column by updatedAt descending", () => {
+    /* The freshest work should stay on top so the board reflects recent activity instead of initial creation order. */
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[
+          buildTask({ id: "task-older", title: "Older task", updatedAt: "2026-03-10T09:00:00.000Z" }),
+          buildTask({ id: "task-newer", title: "Newer task", updatedAt: "2026-03-11T09:00:00.000Z" }),
+          buildTask({ id: "task-middle", title: "Middle task", updatedAt: "2026-03-10T12:00:00.000Z" })
+        ]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText(/task$/).map((node) => node.textContent)).toEqual(["Newer task", "Middle task", "Older task"]);
+  });
+
+  it("shows only ten cards per column until the user loads more", () => {
+    /* Long columns stay scannable by default, but operators can progressively reveal more cards when needed. */
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={Array.from({ length: 12 }, (_, index) =>
+          buildTask({
+            id: `task-${index + 1}`,
+            title: `Task ${index + 1}`,
+            updatedAt: `2026-03-${String(20 - index).padStart(2, "0")}T09:00:00.000Z`
+          })
+        )}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Task 1")).toBeTruthy();
+    expect(screen.getByText("Task 10")).toBeTruthy();
+    expect(screen.queryByText("Task 11")).toBeNull();
+    expect(screen.getByRole("button", { name: "ЗАГРУЗИТЬ ЕЩЕ" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "ЗАГРУЗИТЬ ЕЩЕ" }));
+
+    expect(screen.getByText("Task 11")).toBeTruthy();
+    expect(screen.getByText("Task 12")).toBeTruthy();
+  });
+
+  it("keeps cards visually minimal without blocked or result text snippets", () => {
+    /* The compact card layout should surface only the essentials and avoid duplicating long terminal-state details. */
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[
+          buildTask({ blockedReason: "Waiting for API token", resultSummary: "Release shipped" })
+        ]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/Blocked:/)).toBeNull();
+    expect(screen.queryByText(/Result:/)).toBeNull();
+    expect(screen.queryByText(/Claimed:/)).toBeNull();
   });
 
   it("opens task editor by clicking the whole card and hides the legacy Edit button", () => {

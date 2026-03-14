@@ -199,7 +199,7 @@ export class TelegramController {
 
   @UseGuards(AppAuthGuard)
   @Post("voice-control")
-  public updateVoiceControlSettings(
+  public async updateVoiceControlSettings(
     @Body() body: { apiKey?: string | null; model?: string | null },
     @Req() req: Request
   ) {
@@ -210,7 +210,7 @@ export class TelegramController {
     }
 
     try {
-      return this.preferences.updateVoiceControlSettings(adminId, body ?? {});
+      return await this.preferences.updateVoiceControlSettings(adminId, body ?? {});
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       throw new BadRequestException(message);

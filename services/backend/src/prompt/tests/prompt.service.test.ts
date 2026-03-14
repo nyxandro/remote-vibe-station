@@ -93,6 +93,10 @@ const createDispatchHarness = () => {
 };
 
 describe("PromptService", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   test("sendPrompt returns clear guidance when project is not selected", async () => {
     /* Users must get actionable instructions, including command format and Mini App fallback. */
     const service = buildGuardOnlyService();
@@ -370,5 +374,43 @@ describe("PromptService", () => {
         data: expect.objectContaining({ sessionId: "session-runtime" })
       })
     );
+  });
+
+  test("dispatchPromptParts logs compact root cause when transport failure is not recovered", async () => {
+    /* One structured line should capture the nested transport cause without enabling noisy debug mode globally. */
+    const harness = createDispatchHarness();
+    const transportError = new Error("fetch failed", {
+      cause: Object.assign(new Error("connect ECONNRESET 172.19.0.6:4096"), { code: "ECONNRESET" })
+    });
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    harness.opencode.sendPromptParts.mockImplementation(
+      async (
+        _parts: unknown,
+        options: {
+          onSessionResolved?: (sessionID: string, resolution: { isNew: boolean; reason: string }) => void;
+        }
+      ) => {
+        options.onSessionResolved?.("session-runtime", { isNew: false, reason: "existing" });
+        throw transportError;
+      }
+    );
+    harness.opencode.waitForSessionToSettle.mockResolvedValue(false);
+
+    await expect(
+      harness.service.dispatchPromptParts({
+        adminId: 7,
+        projectSlug: "demo",
+        directory: "/tmp/demo",
+        promptTextForTelemetry: "проверь сервер",
+        parts: [{ type: "text", text: "проверь сервер" }],
+        allowEmptyResponse: true
+      })
+    ).rejects.toThrow("fetch failed");
+
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('"type":"opencode_transport_failure"'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('"scope":"prompt.dispatchPromptParts"'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('"sessionID":"session-runtime"'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('"code":"ECONNRESET"'));
   });
 });

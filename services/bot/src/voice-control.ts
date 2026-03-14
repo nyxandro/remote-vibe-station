@@ -184,6 +184,11 @@ export const buildTranscriptionFailureMessage = (error: unknown): string => {
     return VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE;
   }
 
+  /* Invalid Groq credentials need an explicit remediation hint instead of a raw auth status code. */
+  if (error instanceof Error && /Groq transcription failed: (401|403)/.test(error.message)) {
+    return "Не удалось распознать голосовое сообщение: Groq отклонил сохраненный API key. Обновите ключ в настройках голосового управления.";
+  }
+
   /* Surface actionable API/runtime details instead of misleading setup text. */
   if (error instanceof Error && error.message.trim().length > 0) {
     return `Не удалось распознать голосовое сообщение: ${error.message}`;

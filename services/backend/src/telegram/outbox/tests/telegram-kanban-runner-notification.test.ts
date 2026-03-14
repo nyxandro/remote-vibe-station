@@ -26,7 +26,7 @@ const readOutboxItems = (): any[] => {
 };
 
 describe("Telegram kanban runner notifications", () => {
-  test("routes kanban.runner.finished with started action and new-session note to all configured admins with chat bindings", () => {
+  test("routes kanban.runner.started with started action and new-session note to all configured admins with chat bindings", () => {
     /* Fresh runner-owned work should explicitly tell Telegram that the active thread changed to a new session. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-kanban-runner-started-"));
     const prev = process.cwd();
@@ -54,7 +54,7 @@ describe("Telegram kanban runner notifications", () => {
       bridge.onModuleInit();
 
       events.publish({
-        type: "kanban.runner.finished",
+        type: "kanban.runner.started",
         ts: new Date().toISOString(),
         data: {
           action: "started",
@@ -79,9 +79,56 @@ describe("Telegram kanban runner notifications", () => {
     }
   });
 
-  test("routes kanban.runner.finished without new-session note when runner reused an existing thread", () => {
+  test("routes kanban.runner.started without new-session note when runner reused an existing thread", () => {
     /* Telegram copy should stay precise and avoid claiming a new session when the runner simply resumed an existing one. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-kanban-runner-reused-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 111);
+
+      const outboxStore = new TelegramOutboxStore();
+      const outboxService = new TelegramOutboxService(streamStore, outboxStore);
+      const events = new EventsService(config as any);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, { finalizeAssistantReply: jest.fn() } as any, config as any);
+      bridge.onModuleInit();
+
+      events.publish({
+        type: "kanban.runner.started",
+        ts: new Date().toISOString(),
+        data: {
+          action: "started",
+          startedNewSession: false,
+          projectSlug: "auto-v-arendu",
+          taskId: "task-124",
+          taskTitle: "Resume existing runner context"
+        }
+      });
+
+      const items = readOutboxItems();
+      expect(items).toHaveLength(1);
+      expect(items[0].text).toBe("🤖 Kanban runner взял в работу задачу \"Resume existing runner context\" в проекте auto-v-arendu.");
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("ignores kanban.runner.finished so task pickup is not duplicated after the run completes", () => {
+    /* Telegram should get one start notification immediately, not a duplicate when the same runner turn finishes later. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-kanban-runner-finished-ignore-"));
     const prev = process.cwd();
     process.chdir(tmp);
 
@@ -110,16 +157,14 @@ describe("Telegram kanban runner notifications", () => {
         ts: new Date().toISOString(),
         data: {
           action: "started",
-          startedNewSession: false,
+          startedNewSession: true,
           projectSlug: "auto-v-arendu",
           taskId: "task-124",
           taskTitle: "Resume existing runner context"
         }
       });
 
-      const items = readOutboxItems();
-      expect(items).toHaveLength(1);
-      expect(items[0].text).toBe("🤖 Kanban runner взял в работу задачу \"Resume existing runner context\" в проекте auto-v-arendu.");
+      expect(readOutboxItems()).toHaveLength(0);
     } finally {
       process.chdir(prev);
       fs.rmSync(tmp, { recursive: true, force: true });

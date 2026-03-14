@@ -14,6 +14,8 @@ import { KanbanTaskEditorModal, KanbanTaskEditorSubmit } from "./KanbanTaskEdito
 import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
 import { ThemeMode } from "../utils/theme";
 
+const COLUMN_PAGE_SIZE = 10;
+
 const COLUMNS: Array<{ status: KanbanStatus; label: string; emptyText: string }> = [
   { status: "backlog", label: "Backlog", emptyText: "Store raw ideas here before grooming starts." },
   { status: "refinement", label: "Refinement", emptyText: "Clarify missing scope, inputs, and acceptance criteria here." },
@@ -67,6 +69,15 @@ export const KanbanBoard = (props: Props) => {
   const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false);
   const [editingTask, setEditingTask] = useState<KanbanTask | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [columnVisibleCounts, setColumnVisibleCounts] = useState<Record<KanbanStatus, number>>({
+    backlog: COLUMN_PAGE_SIZE,
+    refinement: COLUMN_PAGE_SIZE,
+    ready: COLUMN_PAGE_SIZE,
+    queued: COLUMN_PAGE_SIZE,
+    in_progress: COLUMN_PAGE_SIZE,
+    blocked: COLUMN_PAGE_SIZE,
+    done: COLUMN_PAGE_SIZE
+  });
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const { ref: boardRef, isDragging: isBoardDragging, handlers: boardHandlers } = useDraggableScroll();
@@ -113,8 +124,21 @@ export const KanbanBoard = (props: Props) => {
     });
   }, [projectFilter, props.activeProjectSlug, props.scope, props.tasks, search]);
 
+  useEffect(() => {
+    /* Filter changes should collapse every column back to the first page so pagination stays predictable. */
+    setColumnVisibleCounts({
+      backlog: COLUMN_PAGE_SIZE,
+      refinement: COLUMN_PAGE_SIZE,
+      ready: COLUMN_PAGE_SIZE,
+      queued: COLUMN_PAGE_SIZE,
+      in_progress: COLUMN_PAGE_SIZE,
+      blocked: COLUMN_PAGE_SIZE,
+      done: COLUMN_PAGE_SIZE
+    });
+  }, [filteredTasks]);
+
   const tasksByStatus = useMemo(() => {
-    /* Pre-group cards per column so render logic stays predictable and lightweight. */
+    /* Pre-group cards per column and sort by last update so the newest activity always surfaces first. */
     const buckets: Record<KanbanStatus, KanbanTask[]> = {
       backlog: [],
       refinement: [],
@@ -131,6 +155,23 @@ export const KanbanBoard = (props: Props) => {
         continue;
       }
       bucket.push(task);
+    }
+
+    /* Stable newest-first order keeps each column focused on recent work rather than original creation time. */
+    for (const status of Object.keys(buckets) as KanbanStatus[]) {
+      buckets[status].sort((left, right) => {
+        const updatedDiff = Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
+        if (updatedDiff !== 0) {
+          return updatedDiff;
+        }
+
+        const createdDiff = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+        if (createdDiff !== 0) {
+          return createdDiff;
+        }
+
+        return right.id.localeCompare(left.id);
+      });
     }
 
     return buckets;
@@ -304,7 +345,7 @@ export const KanbanBoard = (props: Props) => {
                 <div className="kanban-empty-state">{props.isLoading ? "Loading…" : column.emptyText}</div>
               ) : null}
 
-              {tasksByStatus[column.status].map((task) => (
+              {tasksByStatus[column.status].slice(0, columnVisibleCounts[column.status]).map((task) => (
                 <article
                   key={task.id}
                   className={`kanban-card kanban-card-${task.status}`}
@@ -342,20 +383,6 @@ export const KanbanBoard = (props: Props) => {
 
                   </div>
 
-                  {task.claimedBy ? (
-                    <div className="kanban-card-meta">Claimed: {task.claimedBy}</div>
-                  ) : null}
-
-                  {task.blockedReason ? (
-                    <div className="kanban-card-note">Blocked: {task.blockedReason}</div>
-                  ) : null}
-
-                  {task.resultSummary ? (
-                    <div className="kanban-card-note">Result: {task.resultSummary}</div>
-                  ) : null}
-
-
-
                   {task.acceptanceCriteria.length > 0 ? (
                     <div className="kanban-card-progress">
                       {task.acceptanceCriteria.map((criterion, index) => (
@@ -375,6 +402,22 @@ export const KanbanBoard = (props: Props) => {
                   ) : null}
                 </article>
               ))}
+
+              {tasksByStatus[column.status].length > columnVisibleCounts[column.status] ? (
+                <button
+                  className="btn outline kanban-load-more-button"
+                  type="button"
+                  onClick={() => {
+                    /* Reveal the next slice in-place so long columns stay compact without hiding older work completely. */
+                    setColumnVisibleCounts((current) => ({
+                      ...current,
+                      [column.status]: current[column.status] + COLUMN_PAGE_SIZE
+                    }));
+                  }}
+                >
+                  ЗАГРУЗИТЬ ЕЩЕ
+                </button>
+              ) : null}
             </div>
           </section>
         ))}

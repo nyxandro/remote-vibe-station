@@ -13,7 +13,7 @@ import { OpenCodeCommand, OpenCodeExecutionModel, OpenCodePromptInputPart } from
 import { OpenCodeClient, SessionResolution } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
 import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
-import { isOpenCodeFetchTransportFailure } from "../open-code/opencode-transport-errors";
+import { isOpenCodeFetchTransportFailure, logOpenCodeTransportFailure } from "../open-code/opencode-transport-errors";
 import { summarizeOpenCodeParts } from "../open-code/opencode-telemetry";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { ProjectsService } from "../projects/projects.service";
@@ -172,6 +172,19 @@ export class PromptService {
             tokens: { input: 0, output: 0, reasoning: 0 }
           };
         }
+      }
+
+      /* Log one concise transport breadcrumb only when the synchronous call really failed without runtime recovery. */
+      if (isOpenCodeFetchTransportFailure(error)) {
+        logOpenCodeTransportFailure({
+          scope: "prompt.dispatchPromptParts",
+          action: input.allowEmptyResponse ? "wait_for_runtime_settle" : "send_prompt_parts",
+          directory: input.directory,
+          sessionID: resolvedSessionID,
+          projectSlug: input.projectSlug,
+          adminId: input.adminId ?? null,
+          error
+        });
       }
 
       throw error;

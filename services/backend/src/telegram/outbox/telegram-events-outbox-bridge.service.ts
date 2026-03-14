@@ -141,8 +141,8 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       return;
     }
 
-    if (event.type === "kanban.runner.finished") {
-      /* Telegram should announce only completed runner steps, never speculative starts that may fail immediately after. */
+    if (event.type === "kanban.runner.started") {
+      /* Task pickup should be announced immediately so Telegram never lags behind the active runner session. */
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
       const taskTitle = String((event.data as any)?.taskTitle ?? "").trim();
       const action = String((event.data as any)?.action ?? "continued").trim();

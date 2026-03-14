@@ -193,4 +193,13 @@ describe("buildTranscriptionFailureMessage", () => {
     expect(message).toContain("Не удалось распознать голосовое сообщение");
     expect(message).toContain("Groq transcription failed: 429");
   });
+
+  it("returns explicit remediation for rejected Groq credentials", () => {
+    /* Auth failures should point straight to the saved Groq key instead of looking like a random provider outage. */
+    const message = buildTranscriptionFailureMessage(new Error("Groq transcription failed: 403"));
+
+    expect(message).toBe(
+      "Не удалось распознать голосовое сообщение: Groq отклонил сохраненный API key. Обновите ключ в настройках голосового управления."
+    );
+  });
 });
