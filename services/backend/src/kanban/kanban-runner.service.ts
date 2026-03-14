@@ -116,11 +116,9 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         }
       });
 
-      const promptResult = await this.opencode.sendPrompt(prompt, {
+      const promptResult = await this.opencode.sendPromptToSession(prompt, {
         directory,
-        onSessionResolved: (resolvedSessionId) => {
-          void this.runnerSessions.setTaskSessionId(taskId, resolvedSessionId);
-        }
+        sessionID: sessionId
       });
 
       this.events.publish({
@@ -175,15 +173,10 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     /* Reuse stored task sessions whenever possible so unfinished work keeps its accumulated context. */
     const existingSessionId = await this.runnerSessions.getTaskSessionId(input.taskId);
     if (existingSessionId) {
-      try {
-        await this.opencode.selectSession({ directory: input.directory, sessionID: existingSessionId });
-        return existingSessionId;
-      } catch {
-        /* If the old session no longer exists, fall through and mint a replacement for the same task. */
-      }
+      return existingSessionId;
     }
 
-    const created = await this.opencode.createSession({ directory: input.directory });
+    const created = await this.opencode.createDetachedSession({ directory: input.directory });
     await this.runnerSessions.setTaskSessionId(input.taskId, created.id);
     return created.id;
   }

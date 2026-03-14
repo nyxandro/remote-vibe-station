@@ -84,6 +84,19 @@ export class OpenCodeClient {
     return this.sendPromptParts([{ type: "text", text: prompt }], input);
   }
 
+  public async sendPromptToSession(
+    prompt: string,
+    input: {
+      directory: string;
+      sessionID: string;
+      model?: OpenCodeExecutionModel;
+      agent?: string | null;
+    }
+  ): Promise<PromptResult> {
+    /* Detached callers like kanban runner must target a known session without mutating the shared active-session cache. */
+    return this.sendPromptPartsToSession([{ type: "text", text: prompt }], input);
+  }
+
   public async sendPromptParts(
     parts: OpenCodePromptInputPart[],
     input: {
@@ -102,12 +115,39 @@ export class OpenCodeClient {
     const session = await this.ensureSession(input.directory);
     input.onSessionResolved?.(session.sessionID, session);
 
+    return this.sendPromptPartsToSession(parts, {
+      directory: input.directory,
+      sessionID: session.sessionID,
+      model: input.model,
+      agent: input.agent
+    });
+  }
+
+  public async sendPromptPartsToSession(
+    parts: OpenCodePromptInputPart[],
+    input: {
+      directory: string;
+      sessionID: string;
+      model?: OpenCodeExecutionModel;
+      agent?: string | null;
+    }
+  ): Promise<PromptResult> {
+    /* Reuse an explicit session without touching directory-level selection state that user chats rely on. */
+    if (!Array.isArray(parts) || parts.length === 0) {
+      throw new Error("parts must contain at least one item");
+    }
+
+    const sessionID = input.sessionID.trim();
+    if (!sessionID) {
+      throw new Error("sessionID is required");
+    }
+
     /* Use synchronous message endpoint to get parts in one HTTP response. */
     const model = input.model ?? (await this.getDefaultModel());
     const agent = input.agent ?? "build";
 
     const response = await this.request<OpenCodeMessageResponse>(
-      `/session/${session.sessionID}/message?directory=${encodeURIComponent(input.directory)}`,
+      `/session/${sessionID}/message?directory=${encodeURIComponent(input.directory)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -122,7 +162,7 @@ export class OpenCodeClient {
     /* Some multipart prompt flows return 204/empty body while the real answer arrives via runtime events. */
     if (!response) {
       return {
-          sessionId: session.sessionID,
+        sessionId: sessionID,
         responseText: "",
         emptyResponse: true,
         info: {
@@ -143,7 +183,7 @@ export class OpenCodeClient {
 
     const responseText = this.extractText(response);
     return {
-      sessionId: session.sessionID,
+      sessionId: sessionID,
       responseText,
       info: {
         providerID: response.info.providerID,
@@ -154,6 +194,19 @@ export class OpenCodeClient {
       },
       parts: (response.parts ?? []) as any
     };
+  }
+
+  public async createDetachedSession(input: { directory: string }): Promise<{ id: string }> {
+    /* Automation-only sessions should exist in OpenCode without becoming the human user's selected thread. */
+    const response = await this.request<{ id?: string }>(
+      `/session?directory=${encodeURIComponent(input.directory)}`,
+      { method: "POST" }
+    );
+    const id = String(response?.id ?? "").trim();
+    if (!id) {
+      throw new Error(`OpenCode did not return a session id for directory ${input.directory}`);
+    }
+    return { id };
   }
 
   public async listCommands(input?: { directory?: string }): Promise<OpenCodeCommand[]> {

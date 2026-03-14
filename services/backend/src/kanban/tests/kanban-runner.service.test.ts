@@ -57,9 +57,8 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
-      createSession: jest.fn(async () => ({ id: "session-1" })),
-      selectSession: jest.fn(async () => undefined),
-      sendPrompt: jest.fn(async () => ({
+      createDetachedSession: jest.fn(async () => ({ id: "session-1" })),
+      sendPromptToSession: jest.fn(async () => ({
         sessionId: "session-existing",
         responseText: "Continuing task",
         info: {
@@ -91,14 +90,10 @@ describe("KanbanRunnerService", () => {
     await runner.runOnce("interval");
 
     expect(kanban.claimNextTask).not.toHaveBeenCalled();
-    expect(opencode.createSession).not.toHaveBeenCalled();
-    expect(opencode.selectSession).toHaveBeenCalledWith({
-      directory: "/srv/projects/alpha",
-      sessionID: "session-existing"
-    });
-    expect(opencode.sendPrompt).toHaveBeenCalledWith(
+    expect(opencode.createDetachedSession).not.toHaveBeenCalled();
+    expect(opencode.sendPromptToSession).toHaveBeenCalledWith(
       expect.stringContaining("Continue kanban task task-1"),
-      expect.objectContaining({ directory: "/srv/projects/alpha" })
+      expect.objectContaining({ directory: "/srv/projects/alpha", sessionID: "session-existing" })
     );
   });
 
@@ -133,9 +128,8 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
-      createSession: jest.fn(async () => ({ id: "session-2" })),
-      selectSession: jest.fn(async () => undefined),
-      sendPrompt: jest.fn(async () => ({
+      createDetachedSession: jest.fn(async () => ({ id: "session-2" })),
+      sendPromptToSession: jest.fn(async () => ({
         sessionId: "session-2",
         responseText: "Started task",
         info: {
@@ -171,11 +165,11 @@ describe("KanbanRunnerService", () => {
       agentId: KANBAN_RUNNER_AGENT_ID,
       leaseMs: 1_800_000
     });
-    expect(opencode.createSession).toHaveBeenCalledWith({ directory: "/srv/projects/alpha" });
+    expect(opencode.createDetachedSession).toHaveBeenCalledWith({ directory: "/srv/projects/alpha" });
     expect(runnerSessions.setTaskSessionId).toHaveBeenCalledWith("task-queued", "session-2");
-    expect(opencode.sendPrompt).toHaveBeenCalledWith(
+    expect(opencode.sendPromptToSession).toHaveBeenCalledWith(
       expect.stringContaining("Continue kanban task task-queued"),
-      expect.objectContaining({ directory: "/srv/projects/alpha" })
+      expect.objectContaining({ directory: "/srv/projects/alpha", sessionID: "session-2" })
     );
   });
 
@@ -208,9 +202,8 @@ describe("KanbanRunnerService", () => {
       getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
     };
     const opencode = {
-      createSession: jest.fn(async () => ({ id: "session-3" })),
-      selectSession: jest.fn(async () => undefined),
-      sendPrompt: jest.fn(async () => ({
+      createDetachedSession: jest.fn(async () => ({ id: "session-3" })),
+      sendPromptToSession: jest.fn(async () => ({
         sessionId: "session-returned",
         responseText: "Resumed queued task",
         info: {
@@ -241,10 +234,10 @@ describe("KanbanRunnerService", () => {
 
     await runner.runOnce("interval");
 
-    expect(opencode.createSession).not.toHaveBeenCalled();
-    expect(opencode.selectSession).toHaveBeenCalledWith({
-      directory: "/srv/projects/alpha",
-      sessionID: "session-returned"
-    });
+    expect(opencode.createDetachedSession).not.toHaveBeenCalled();
+    expect(opencode.sendPromptToSession).toHaveBeenCalledWith(
+      expect.stringContaining("Continue kanban task task-returned"),
+      expect.objectContaining({ directory: "/srv/projects/alpha", sessionID: "session-returned" })
+    );
   });
 });
