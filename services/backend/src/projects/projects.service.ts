@@ -105,7 +105,7 @@ export class ProjectsService {
     this.active.set(project.slug, options?.adminId);
 
     /* Ensure terminal exists so the UI can attach immediately. */
-    this.terminals.ensure(project.slug, project.rootPath);
+    await this.terminals.ensure(project.slug, project.rootPath);
 
     /* Emit selection event for Telegram UX (only on change). */
     const emitEvent = options?.emitEvent ?? true;
@@ -163,10 +163,10 @@ export class ProjectsService {
     return project.rootPath;
   }
 
-  public sendTerminalInput(slug: string, input: string): void {
+  public async sendTerminalInput(slug: string, input: string): Promise<void> {
     /* Send input to per-project terminal, ensuring it exists. */
     const project = this.requireDiscoveredProject(slug);
-    this.terminals.ensure(project.slug, project.rootPath);
+    await this.terminals.ensure(project.slug, project.rootPath);
     this.terminals.sendInput(project.slug, input);
   }
 

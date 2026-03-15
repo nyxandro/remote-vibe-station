@@ -354,7 +354,7 @@ export class ProjectsController {
       throw new BadRequestException("Terminal input is required");
     }
 
-    this.projects.sendTerminalInput(id, body.input);
+    await this.projects.sendTerminalInput(id, body.input);
     return { ok: true };
   }
 
