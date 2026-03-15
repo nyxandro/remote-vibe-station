@@ -84,6 +84,8 @@ services:
       - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL:?OPENCODE_PUBLIC_BASE_URL must be set}
     volumes:
       - bot_data:/app/data
+      # Media delivery reads staged agent files from the shared OpenCode data volume.
+      - opencode_data:/opencode-data:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.bot.rule=Host(`${PUBLIC_DOMAIN}`) && Path(`/bot/webhook`)"

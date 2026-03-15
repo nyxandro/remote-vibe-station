@@ -7,6 +7,7 @@
 
 import { Injectable } from "@nestjs/common";
 
+import { fetchWithOptionalProxy } from "../../http/fetch-with-optional-proxy";
 import {
   OpenCodeAgent,
   OpenCodeExecutionModel,
@@ -131,7 +132,7 @@ export class TelegramPreferencesService {
 
   private async validateGroqApiKey(apiKey: string): Promise<void> {
     /* Save-time validation prevents stale/forbidden keys from breaking voice flow minutes or days later. */
-    const response = await fetch(GROQ_MODELS_URL, {
+    const response = await fetchWithOptionalProxy(GROQ_MODELS_URL, {
       headers: {
         Authorization: `Bearer ${apiKey}`
       }
@@ -141,10 +142,17 @@ export class TelegramPreferencesService {
       return;
     }
 
-    /* Groq rejects invalid or unauthorized keys with auth-like statuses; keep the remediation message explicit. */
-    if (response.status === 401 || response.status === 403) {
+    /* 401 is the reliable invalid-key signal for Groq auth failures. */
+    if (response.status === 401) {
       throw new Error(
         "APP_GROQ_API_KEY_REJECTED: Groq отклонил API key. Сохраните действительный ключ Groq в настройках голосового управления и повторите попытку."
+      );
+    }
+
+    /* 403 usually means forbidden access from this runtime, project permissions, or geo/IP policy rather than a typo in the key. */
+    if (response.status === 403) {
+      throw new Error(
+        "APP_GROQ_ACCESS_FORBIDDEN: Groq вернул 403 Forbidden. Это обычно означает блокировку доступа для текущего сервера/IP, прокси-маршрута или project permissions, а не ошибку в самом API key. Проверьте прокси-маршрут и доступ к api.groq.com именно с этого сервера."
       );
     }
 

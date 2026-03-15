@@ -6,6 +6,7 @@
  * - TELEGRAM_SAFE_CHUNK_CHARS - Conservative chunk size to avoid edge cases.
  * - OUTBOX_MAX_ATTEMPTS - Bounded retry limit for delivery.
  * - OUTBOX_LEASE_MS - Lease time for pulled messages.
+ * - TelegramOutboxMediaDescriptor - Media payload for photo/document/album delivery.
  * - TelegramOutboxItem - Persistent outbox record.
  * - OutboxPullItem - DTO returned to bot.
  * - OutboxReportResult - Delivery report from bot.
@@ -28,15 +29,42 @@ export const OUTBOX_MAX_ATTEMPTS = 20;
  */
 export const OUTBOX_LEASE_MS = 30_000;
 
+export type TelegramOutboxMediaItem = {
+  kind: "photo";
+  filePath: string;
+  fileName: string;
+};
+
+export type TelegramOutboxMediaDescriptor =
+  | {
+      kind: "photo";
+      filePath: string;
+      fileName: string;
+      caption?: string;
+    }
+  | {
+      kind: "document";
+      filePath: string;
+      fileName: string;
+      caption?: string;
+    }
+  | {
+      kind: "media_group";
+      items: TelegramOutboxMediaItem[];
+      caption?: string;
+    };
+
 export type TelegramOutboxItem = {
   id: string;
   adminId: number;
   chatId: number;
   text: string;
+   kind?: "text" | "media";
   parseMode?: "HTML";
   disableNotification?: boolean;
   mode?: "send" | "replace";
   progressKey?: string;
+   media?: TelegramOutboxMediaDescriptor;
   control?: {
     kind: "thinking";
     action: "start" | "stop";
@@ -71,10 +99,12 @@ export type OutboxPullItem = {
   id: string;
   chatId: number;
   text: string;
+   kind?: "text" | "media";
   parseMode?: "HTML";
   disableNotification?: boolean;
   mode?: "send" | "replace";
   progressKey?: string;
+   media?: TelegramOutboxMediaDescriptor;
   control?: {
     kind: "thinking";
     action: "start" | "stop";

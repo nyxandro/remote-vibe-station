@@ -6,13 +6,14 @@
  * - KanbanRunnerService - Reacts to kanban/session events, starts OpenCode sessions, and resumes tasks.
  */
 
-import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
 import { EventEnvelope } from "../events/events.types";
 import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
+import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
 import {
   isOpenCodeFetchTransportFailure,
@@ -55,7 +56,8 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly projects: ProjectsService,
     private readonly opencode: OpenCodeClient,
     private readonly opencodeEvents: OpenCodeEventsService,
-    private readonly events: EventsService
+    private readonly events: EventsService,
+    @Optional() private readonly sessionRouting?: OpenCodeSessionRoutingStore
   ) {}
 
   public onModuleInit(): void {
@@ -169,6 +171,13 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         this.opencode.rememberSelectedSession({ directory, sessionID: sessionId });
       }
 
+      /* Telegram runtime output needs an explicit session->admin route, otherwise the new runner thread stays invisible in chat. */
+      await this.bindTelegramSessionRouteForRunnerSession({
+        directory,
+        projectSlug: input.projectSlug,
+        sessionId
+      });
+
       const prompt = buildKanbanRunnerPrompt(task);
 
       this.events.publish({
@@ -277,6 +286,34 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     }
 
     return { task: queuedTask, action: "started" };
+  }
+
+  private async bindTelegramSessionRouteForRunnerSession(input: {
+    directory: string;
+    projectSlug: string;
+    sessionId: string;
+  }): Promise<void> {
+    /* Runner sessions have no direct Telegram caller, so recover the admin by the currently active project selection. */
+    if (!this.sessionRouting) {
+      return;
+    }
+
+    for (const adminId of this.config.adminIds) {
+      const activeProject = await this.projects.getActiveProject(adminId);
+      if (!activeProject || activeProject.slug !== input.projectSlug || activeProject.rootPath !== input.directory) {
+        continue;
+      }
+
+      this.sessionRouting.bind(input.sessionId, {
+        adminId,
+        directory: input.directory
+      });
+      this.opencodeEvents.watchPermissionOnce({
+        directory: input.directory,
+        sessionID: input.sessionId
+      });
+      return;
+    }
   }
 
   private onEvent(event: EventEnvelope): void {

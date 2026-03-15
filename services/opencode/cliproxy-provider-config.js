@@ -2,8 +2,9 @@
  * @fileoverview Dynamic OpenCode provider config generator using CLIProxy /v1/models catalog.
  *
  * Exports:
- * - extractModelIdsFromCatalog - Validates and normalizes model ids from OpenAI-compatible /models payload.
- * - buildModelsMap - Converts model id list into OpenCode provider `models` object.
+ * - extractModelCatalogEntries - Validates and normalizes model descriptors from OpenAI-compatible /models payload.
+ * - extractModelIdsFromCatalog - Backward-compatible helper that returns only normalized model ids.
+ * - buildModelsMap - Converts model catalog rows into OpenCode provider `models` object.
  * - fetchCliproxyModelIds - Downloads model catalog from CLIProxyAPI with bearer authentication.
  * - generateOpenCodeConfigFromEnv - Builds final opencode.json payload from env + dynamic model list.
  * - writeOpenCodeConfigFromEnv - Writes generated config to target path.
@@ -13,6 +14,8 @@ const fs = require("node:fs");
 
 const CLIPROXY_MODELS_ENDPOINT_SUFFIX = "/models";
 const DEFAULT_FETCH_TIMEOUT_MS = 10000;
+const TELEGRAM_ATTACHMENT_DIRECTORY = "/root/.local/share/opencode/telegram-prompt-attachments/**";
+const TELEGRAM_AGENT_SHARE_DIRECTORY = "/root/.local/share/opencode/agent-share/**";
 const OPENAI_GPT5_DEFAULT_VARIANTS = {
   low: {
     reasoningEffort: "low",
@@ -93,8 +96,8 @@ function normalizeBaseUrl(baseUrl) {
   return normalizeNonEmpty(baseUrl, "CLIPROXY_BASE_URL").replace(/\/+$/u, "");
 }
 
-function extractModelIdsFromCatalog(payload) {
-  /* CLIProxy follows OpenAI-compatible response format: { object: "list", data: [{ id }] }. */
+function extractModelCatalogEntries(payload) {
+  /* CLIProxy follows OpenAI-compatible response format: { object: "list", data: [{ id, modalities? }] }. */
   const rows = payload && typeof payload === "object" ? payload.data : null;
   if (!Array.isArray(rows)) {
     throw new Error("CLIProxy /models payload must contain data array");
@@ -102,30 +105,164 @@ function extractModelIdsFromCatalog(payload) {
 
   /* Preserve provider order, but deduplicate and drop malformed ids. */
   const seen = new Set();
-  const ids = [];
+  const entries = [];
   for (const row of rows) {
     const modelID = String(row?.id ?? "").trim();
     if (!modelID || seen.has(modelID)) {
       continue;
     }
     seen.add(modelID);
-    ids.push(modelID);
+    const modalities = normalizeModalities(row?.modalities);
+    entries.push({
+      id: modelID,
+      ...(modalities ? { modalities } : {})
+    });
   }
 
-  if (ids.length === 0) {
+  if (entries.length === 0) {
     throw new Error("CLIProxy /models did not return any models");
   }
 
-  return ids;
+  return entries;
 }
 
-function buildModelsMap(modelIDs) {
-  /* OpenCode provider config expects object map: modelId -> { name, variants? }. */
-  return modelIDs.reduce((acc, modelID) => {
+function extractModelIdsFromCatalog(payload) {
+  /* Keep the legacy helper for existing tests and callers that only need ids. */
+  return extractModelCatalogEntries(payload).map((entry) => entry.id);
+}
+
+function buildModelsMap(modelCatalog) {
+  /* OpenCode provider config expects object map: modelId -> { name, attachment?, modalities?, variants? }. */
+  return modelCatalog.reduce((acc, entry) => {
+    const descriptor = typeof entry === "string" ? { id: entry } : entry;
+    const modelID = String(descriptor?.id ?? "").trim();
+    if (!modelID) {
+      return acc;
+    }
+
+    /* Fall back to inferred modalities because CLIProxy /models currently returns ids only. */
+    const normalizedModalities = normalizeModalities(descriptor?.modalities) ?? inferModalitiesFromModelID(modelID);
+    const attachment = supportsAttachments({ modelID, modalities: normalizedModalities });
     const variants = resolveVariantsForModel(modelID);
-    acc[modelID] = variants ? { name: modelID, variants } : { name: modelID };
+
+    acc[modelID] = {
+      name: modelID,
+      ...(attachment ? { attachment: true } : {}),
+      ...(normalizedModalities ? { modalities: normalizedModalities } : {}),
+      ...(variants ? { variants } : {})
+    };
     return acc;
   }, {});
+}
+
+function normalizeModalities(modalities) {
+  /* Persist only schema-compatible modality arrays so malformed proxy metadata never corrupts config. */
+  if (!modalities || typeof modalities !== "object" || Array.isArray(modalities)) {
+    return null;
+  }
+
+  const input = normalizeModalityList(modalities.input);
+  const output = normalizeModalityList(modalities.output);
+  if (!input || !output) {
+    return null;
+  }
+
+  return { input, output };
+}
+
+function normalizeModalityList(value) {
+  /* Keep deterministic modality order while dropping invalid enum values. */
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const allowed = new Set(["text", "audio", "image", "video", "pdf"]);
+  const seen = new Set();
+  const items = [];
+  for (const item of value) {
+    const normalized = String(item ?? "").trim().toLowerCase();
+    if (!allowed.has(normalized) || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    items.push(normalized);
+  }
+
+  return items.length > 0 ? items : null;
+}
+
+function supportsAttachments(input) {
+  /* Recreate OpenCode multimodal gating for custom OpenAI-compatible providers. */
+  const modalityInputs = input.modalities?.input ?? [];
+  if (modalityInputs.some((item) => item !== "text")) {
+    return true;
+  }
+
+  /* CLIProxy often exposes only bare ids, so infer support for well-known multimodal families. */
+  const normalized = String(input.modelID ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  if (
+    normalized.startsWith("gpt-4.1") ||
+    normalized.startsWith("gpt-4o") ||
+    normalized.startsWith("gpt-5") ||
+    normalized.startsWith("claude-3") ||
+    normalized.startsWith("claude-4") ||
+    normalized.startsWith("claude-haiku-4") ||
+    normalized.startsWith("claude-sonnet-4") ||
+    normalized.startsWith("claude-opus-4") ||
+    normalized.startsWith("gemini")
+  ) {
+    return true;
+  }
+
+  if (
+    normalized.includes("vision") ||
+    normalized.includes("multimodal") ||
+    normalized.includes("omni") ||
+    normalized.includes("pixtral") ||
+    normalized.includes("vl") ||
+    normalized.endsWith("v")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function inferModalitiesFromModelID(modelID) {
+  /* Mirror current upstream families so OpenCode exposes input.image=true when catalog metadata is missing. */
+  const normalized = String(modelID ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (
+    normalized.startsWith("gpt-4.1") ||
+    normalized.startsWith("gpt-4o") ||
+    normalized.startsWith("gpt-5") ||
+    normalized.startsWith("claude-3") ||
+    normalized.startsWith("claude-4") ||
+    normalized.startsWith("claude-haiku-4") ||
+    normalized.startsWith("claude-sonnet-4") ||
+    normalized.startsWith("claude-opus-4") ||
+    normalized.startsWith("gemini") ||
+    normalized.includes("vision") ||
+    normalized.includes("multimodal") ||
+    normalized.includes("omni") ||
+    normalized.includes("pixtral") ||
+    normalized.includes("vl") ||
+    normalized.endsWith("v")
+  ) {
+    return {
+      input: ["text", "image"],
+      output: ["text"]
+    };
+  }
+
+  return null;
 }
 
 function resolveVariantsForModel(modelID) {
@@ -172,7 +309,7 @@ function cloneVariants(variants) {
   return JSON.parse(JSON.stringify(variants));
 }
 
-async function fetchCliproxyModelIds(input) {
+async function fetchCliproxyModelCatalog(input) {
   /* Fetch model catalog with strict timeout to fail fast on unavailable upstream. */
   const baseURL = normalizeBaseUrl(input.baseURL);
   const apiKey = normalizeNonEmpty(input.apiKey, "CLIPROXY_API_KEY");
@@ -211,10 +348,15 @@ async function fetchCliproxyModelIds(input) {
       throw new Error(`CLIProxy /models returned invalid JSON: ${details}`);
     }
 
-    return extractModelIdsFromCatalog(payload);
+    return extractModelCatalogEntries(payload);
   } finally {
     clearTimeout(timeoutHandle);
   }
+}
+
+async function fetchCliproxyModelIds(input) {
+  /* Keep legacy id-only helper for unit tests and low-level callers. */
+  return (await fetchCliproxyModelCatalog(input)).map((entry) => entry.id);
 }
 
 async function generateOpenCodeConfigFromEnv(env, options = {}) {
@@ -223,12 +365,13 @@ async function generateOpenCodeConfigFromEnv(env, options = {}) {
   const providerName = String(env.CLIPROXY_PROVIDER_NAME || "CLIProxy").trim();
   const baseURL = normalizeBaseUrl(env.CLIPROXY_BASE_URL);
   const apiKey = normalizeNonEmpty(env.CLIPROXY_API_KEY, "CLIPROXY_API_KEY");
-  const modelIDs = await fetchCliproxyModelIds({
+  const modelCatalog = await fetchCliproxyModelCatalog({
     baseURL,
     apiKey,
     fetchImpl: options.fetchImpl,
     timeoutMs: options.timeoutMs
   });
+  const modelIDs = modelCatalog.map((entry) => entry.id);
 
   /* Explicit default model must exist in discovered runtime catalog. */
   const explicitDefaultModel = String(env.CLIPROXY_DEFAULT_MODEL_ID || "").trim();
@@ -238,6 +381,7 @@ async function generateOpenCodeConfigFromEnv(env, options = {}) {
 
   return {
     $schema: "https://opencode.ai/config.json",
+    permission: buildManagedPermissionConfig(),
     provider: {
       [providerID]: {
         npm: "@ai-sdk/openai-compatible",
@@ -246,7 +390,7 @@ async function generateOpenCodeConfigFromEnv(env, options = {}) {
           baseURL,
           apiKey
         },
-        models: buildModelsMap(modelIDs)
+        models: buildModelsMap(modelCatalog)
       }
     }
   };
@@ -286,14 +430,61 @@ function mergeManagedProviderConfig(existingConfig, generatedConfig, providerID)
   /* Refresh only the managed CLIProxy provider branch and keep unrelated OpenCode settings untouched. */
   const existingProviders = isPlainObject(existingConfig.provider) ? existingConfig.provider : {};
   const generatedProviders = isPlainObject(generatedConfig.provider) ? generatedConfig.provider : {};
+  const mergedPermission = mergeManagedPermissionConfig(existingConfig.permission, generatedConfig.permission);
 
   return {
     ...existingConfig,
     ...generatedConfig,
+    ...(mergedPermission ? { permission: mergedPermission } : {}),
     provider: {
       ...existingProviders,
       ...generatedProviders,
       [providerID]: generatedProviders[providerID]
+    }
+  };
+}
+
+function mergeManagedPermissionConfig(existingPermission, generatedPermission) {
+  /* Preserve user policy while auto-allowing known Telegram attachment directory for image prompts. */
+  const normalizedExisting = isPlainObject(existingPermission) ? existingPermission : null;
+  const normalizedGenerated = isPlainObject(generatedPermission) ? generatedPermission : null;
+
+  if (!normalizedExisting && !normalizedGenerated) {
+    return null;
+  }
+
+  const existingExternalDirectory = normalizePermissionRule(normalizedExisting?.external_directory);
+  const generatedExternalDirectory = normalizePermissionRule(normalizedGenerated?.external_directory);
+
+  return {
+    ...(normalizedExisting ?? {}),
+    ...(normalizedGenerated ?? {}),
+    external_directory: {
+      ...(existingExternalDirectory ?? {}),
+      ...(generatedExternalDirectory ?? {})
+    }
+  };
+}
+
+function normalizePermissionRule(rule) {
+  /* Schema allows either scalar action or object map; use object form for targeted path exceptions. */
+  if (!rule) {
+    return null;
+  }
+
+  if (typeof rule === "string") {
+    return { "*": rule };
+  }
+
+  return isPlainObject(rule) ? rule : null;
+}
+
+function buildManagedPermissionConfig() {
+  /* Telegram uploads and agent share files live outside the project worktree, so OpenCode must not ask every time. */
+  return {
+    external_directory: {
+      [TELEGRAM_ATTACHMENT_DIRECTORY]: "allow",
+      [TELEGRAM_AGENT_SHARE_DIRECTORY]: "allow"
     }
   };
 }
@@ -313,7 +504,9 @@ async function writeOpenCodeConfigFromEnv(outPath, env = process.env, options = 
 
 module.exports = {
   extractModelIdsFromCatalog,
+  extractModelCatalogEntries,
   buildModelsMap,
+  fetchCliproxyModelCatalog,
   fetchCliproxyModelIds,
   generateOpenCodeConfigFromEnv,
   mergeManagedProviderConfig,

@@ -4,7 +4,7 @@
 
 /* @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { KanbanBoard } from "../KanbanBoard";
@@ -53,6 +53,7 @@ const buildTask = (overrides?: Partial<KanbanTask>): KanbanTask => ({
 describe("KanbanBoard", () => {
   afterEach(() => {
     cleanup();
+    localStorage.clear();
   });
 
   it("creates a backlog task for the active project", () => {
@@ -122,6 +123,48 @@ describe("KanbanBoard", () => {
       priority: "medium",
       acceptanceCriteria: [{ id: expect.any(String), text: "Queue entry has clear scope", status: "pending" }]
     });
+  });
+
+  it("restores the unfinished create draft after closing the modal and clears it after successful creation", async () => {
+    /* Project drafts should survive accidental modal close, then reset once the task is really created. */
+    const onCreateTask = vi.fn(async () => undefined);
+
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={onCreateTask}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create new task" }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Persist me" } });
+    fireEvent.change(screen.getByLabelText("Acceptance criterion"), {
+      target: { value: "Remember my progress" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Create new task" }));
+
+    expect(screen.getByDisplayValue("Persist me")).toBeTruthy();
+    expect(screen.getByDisplayValue("Remember my progress")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create task" }));
+    await waitFor(() => {
+      expect(onCreateTask).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create new task" }));
+
+    expect(screen.queryByDisplayValue("Persist me")).toBeNull();
+    expect(screen.queryByDisplayValue("Remember my progress")).toBeNull();
   });
 
   it("renders all workflow columns including agent execution states", () => {

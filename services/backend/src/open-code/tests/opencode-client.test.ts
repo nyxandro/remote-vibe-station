@@ -76,6 +76,50 @@ describe("OpenCodeClient command APIs", () => {
       "http://opencode:4096/session/session-1/command?directory=%2Fsrv%2Fprojects%2Fdemo",
       expect.objectContaining({ method: "POST" })
     );
+    const requestInit = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(JSON.parse(String(requestInit.body))).toEqual({
+      command: "help",
+      arguments: "x"
+    });
+  });
+
+  it("serializes command arguments as one string for OpenCode runtime", async () => {
+    /* OpenCode command endpoint validates `arguments` as a string placeholder payload, not as an array. */
+    const fetchMock = jest
+      .spyOn(global, "fetch" as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ id: "session-2" })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            info: {
+              id: "msg-2",
+              sessionID: "session-2",
+              providerID: "opencode",
+              modelID: "gpt-5.4",
+              mode: "primary",
+              agent: "build",
+              cost: 0,
+              tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
+            },
+            parts: [{ type: "text", text: "done" }]
+          })
+      } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await client.executeCommand(
+      { command: "gitaddmaster", arguments: ["feature/foo", "--dry-run"] },
+      { directory: "/srv/projects/demo" }
+    );
+
+    const requestInit = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(JSON.parse(String(requestInit.body))).toEqual({
+      command: "gitaddmaster",
+      arguments: "feature/foo --dry-run"
+    });
   });
 
   it("sends prompt with selected model variant and agent", async () => {

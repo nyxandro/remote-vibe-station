@@ -82,6 +82,13 @@ test("main compose grants backend shared host git auth", () => {
   assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });
 
+test("main compose mounts shared OpenCode media volume into bot", () => {
+  /* Telegram media delivery needs read-only access to staged agent files. */
+  const compose = readRepoFile("docker-compose.yml");
+
+  assert.match(compose, /bot:[\s\S]*- opencode_data:\/opencode-data:ro/);
+});
+
 test("runtime template keeps opencode host access and shared git auth", () => {
   /* Installed runtime must preserve the same operator capabilities after image-only rollout. */
   const compose = readRepoFile("scripts/templates/runtime-docker-compose.yml");
@@ -109,6 +116,13 @@ test("runtime template grants backend shared host git auth", () => {
   assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
 });
 
+test("runtime template mounts shared OpenCode media volume into bot", () => {
+  /* Image/document delivery must work in image-only runtime installs too. */
+  const compose = readRepoFile("scripts/templates/runtime-docker-compose.yml");
+
+  assert.match(compose, /bot:[\s\S]*- opencode_data:\/opencode-data:ro/);
+});
+
 test("dev compose keeps opencode host access and shared git auth", () => {
   /* Local dev stack should mirror server-side auth behavior for reproducible debugging. */
   const compose = readRepoFile("docker-compose.dev.yml");
@@ -134,4 +148,11 @@ test("dev compose grants backend shared host git auth", () => {
   assert.match(compose, /backend:[\s\S]*- \/root\/\.config\/gh:\/root\/\.config\/gh/);
   assert.match(compose, /backend:[\s\S]*GIT_CONFIG_KEY_0=credential\.https:\/\/github\.com\.helper/);
   assert.match(compose, /backend:[\s\S]*GIT_CONFIG_VALUE_0=!node \/usr\/local\/bin\/github-git-credential\.js/);
+});
+
+test("dev compose mounts shared OpenCode media volume into bot", () => {
+  /* Local media delivery should mirror the production volume topology. */
+  const compose = readRepoFile("docker-compose.dev.yml");
+
+  assert.match(compose, /bot:[\s\S]*- opencode_data:\/opencode-data:ro/);
 });

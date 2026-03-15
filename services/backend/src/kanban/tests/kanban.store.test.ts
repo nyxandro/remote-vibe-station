@@ -91,4 +91,55 @@ describe("KanbanStore", () => {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  test("writeTaskCompletionBackup stores a board snapshot and keeps only five newest files", async () => {
+    /* Completion backups should survive outside the main store while staying bounded for easy operator recovery. */
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-kanban-store-"));
+    const storePath = path.join(tempRoot, "data", "kanban.tasks.json");
+    const backupDir = path.join(tempRoot, "runtime", "backups", "kanban");
+
+    try {
+      const store = new KanbanStore(storePath, backupDir);
+      await store.transact((draft) => {
+        draft.tasks.push({
+          id: "task-1",
+          projectSlug: "alpha",
+          title: "Backup me",
+          description: "",
+          status: "done",
+          priority: "medium",
+          acceptanceCriteria: [],
+          resultSummary: "Done",
+          blockedReason: null,
+          createdAt: "2026-03-10T09:00:00.000Z",
+          updatedAt: "2026-03-10T09:00:00.000Z",
+          claimedBy: null,
+          leaseUntil: null,
+          executionSource: null,
+          executionSessionId: null
+        });
+      });
+
+      for (let index = 0; index < 7; index += 1) {
+        await store.writeTaskCompletionBackup();
+      }
+
+      const backupFiles = fs
+        .readdirSync(backupDir)
+        .filter((name) => name.startsWith("kanban.tasks.backup-") && name.endsWith(".json"))
+        .sort();
+
+      expect(backupFiles).toHaveLength(5);
+
+      const backupJson = JSON.parse(fs.readFileSync(path.join(backupDir, backupFiles[0] as string), "utf-8")) as {
+        tasks: Array<{ id: string; status: string }>;
+      };
+
+      expect(backupJson.tasks).toEqual([
+        expect.objectContaining({ id: "task-1", status: "done" })
+      ]);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
 });

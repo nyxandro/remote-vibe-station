@@ -39,6 +39,15 @@ services:
     logging: *logging_defaults
     restart: unless-stopped
 
+  backend:
+    # Route backend validation calls for external AI providers through VLESS too.
+    env_file:
+      - ./infra/vless/proxy.env
+    depends_on:
+      - vless-proxy
+    networks:
+      - ai_proxy
+
   bot:
     # Route bot external AI calls through VLESS while keeping internal calls direct.
     env_file:

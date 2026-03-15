@@ -23,10 +23,18 @@ type PullResponse = {
     id: string;
     chatId: number;
     text: string;
+    kind?: "text" | "media";
     parseMode?: "HTML";
     disableNotification?: boolean;
     mode?: "send" | "replace";
     progressKey?: string;
+    media?: {
+      kind: "photo" | "document" | "media_group";
+      filePath?: string;
+      fileName?: string;
+      caption?: string;
+      items?: Array<{ kind: "photo"; filePath: string; fileName: string }>;
+    };
     control?: {
       kind: "thinking";
       action: "start" | "stop";
@@ -270,10 +278,18 @@ export class OutboxWorker {
     id: string;
     chatId: number;
     text: string;
+    kind?: "text" | "media";
     parseMode?: "HTML";
     disableNotification?: boolean;
     mode?: "send" | "replace";
     progressKey?: string;
+    media?: {
+      kind: "photo" | "document" | "media_group";
+      filePath?: string;
+      fileName?: string;
+      caption?: string;
+      items?: Array<{ kind: "photo"; filePath: string; fileName: string }>;
+    };
     control?: {
       kind: "thinking";
       action: "start" | "stop";
@@ -307,7 +323,16 @@ export class OutboxWorker {
 
       let sentMessageId: number;
 
-      if (item.mode === "replace" && item.progressKey) {
+      if (item.kind === "media" && item.media) {
+        /* Media sends use dedicated Telegram Bot API methods instead of text message delivery. */
+        sentMessageId = await this.deliverMedia({
+          chatId: item.chatId,
+          parseMode: item.parseMode,
+          disableNotification: item.disableNotification,
+          replyMarkup: item.replyMarkup,
+          media: item.media
+        });
+      } else if (item.mode === "replace" && item.progressKey) {
         /* Replace mode preserves one live progress message in chat history. */
         sentMessageId = await this.deliverReplace({
           chatId: item.chatId,
@@ -414,6 +439,112 @@ export class OutboxWorker {
       updatedAtMs: Date.now()
     });
     return sent.message_id;
+  }
+
+  private async deliverMedia(item: {
+    chatId: number;
+    parseMode?: "HTML";
+    disableNotification?: boolean;
+    replyMarkup?: {
+      inlineKeyboard: Array<Array<{ text: string; callback_data: string }>>;
+    };
+    media: {
+      kind: "photo" | "document" | "media_group";
+      filePath?: string;
+      fileName?: string;
+      caption?: string;
+      items?: Array<{ kind: "photo"; filePath: string; fileName: string }>;
+    };
+  }): Promise<number> {
+    /* Media delivery keeps files in the shared volume and reuses Telegram-native send methods. */
+    const singleFilePath = item.media.filePath;
+    const singleFileName = item.media.fileName;
+
+    if (item.media.kind === "photo") {
+      if (!singleFilePath || !singleFileName) {
+        throw new Error("Telegram photo payload is missing filePath or fileName");
+      }
+      const sent = await this.bot.telegram.sendPhoto(
+        item.chatId,
+        {
+          source: singleFilePath,
+          filename: singleFileName
+        },
+        {
+          caption: item.media.caption,
+          parse_mode: item.parseMode,
+          disable_notification: item.disableNotification,
+          reply_markup: this.buildReplyMarkup(item.chatId, item.replyMarkup)
+        }
+      );
+      return sent.message_id;
+    }
+
+    if (item.media.kind === "document") {
+      if (!singleFilePath || !singleFileName) {
+        throw new Error("Telegram document payload is missing filePath or fileName");
+      }
+      const sent = await this.bot.telegram.sendDocument(
+        item.chatId,
+        {
+          source: singleFilePath,
+          filename: singleFileName
+        },
+        {
+          caption: item.media.caption,
+          parse_mode: item.parseMode,
+          disable_notification: item.disableNotification,
+          reply_markup: this.buildReplyMarkup(item.chatId, item.replyMarkup)
+        }
+      );
+      return sent.message_id;
+    }
+
+    const items = item.media.items ?? [];
+    if (items.length === 0) {
+      throw new Error("Telegram media group payload is empty");
+    }
+    if (items.length === 1) {
+      const [singleItem] = items;
+      const sent = await this.bot.telegram.sendPhoto(
+        item.chatId,
+        {
+          source: singleItem.filePath,
+          filename: singleItem.fileName
+        },
+        {
+          caption: item.media.caption,
+          parse_mode: item.parseMode,
+          disable_notification: item.disableNotification,
+          reply_markup: this.buildReplyMarkup(item.chatId, item.replyMarkup)
+        }
+      );
+      return sent.message_id;
+    }
+    if (items.length > 10) {
+      throw new Error("Telegram media group exceeds the 10 item limit");
+    }
+
+    const group = await this.bot.telegram.sendMediaGroup(
+      item.chatId,
+      items.map((mediaItem, index) => ({
+        type: mediaItem.kind,
+        media: {
+          source: mediaItem.filePath,
+          filename: mediaItem.fileName
+        },
+        ...(index === 0 && item.media.caption ? { caption: item.media.caption, parse_mode: item.parseMode } : {})
+      })),
+      {
+        disable_notification: item.disableNotification
+      }
+    );
+
+    if (!Array.isArray(group) || group.length === 0 || typeof group[0]?.message_id !== "number") {
+      throw new Error("Telegram media group returned no message ids");
+    }
+
+    return group[0].message_id;
   }
 
 }

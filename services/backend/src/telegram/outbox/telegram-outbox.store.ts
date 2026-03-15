@@ -20,6 +20,7 @@ import {
   OUTBOX_MAX_ATTEMPTS,
   OutboxPullItem,
   OutboxReportResult,
+  TelegramOutboxMediaDescriptor,
   TelegramOutboxItem
 } from "./telegram-outbox.types";
 import { readJsonFileSync, writeJsonFileSyncAtomic } from "../../storage/json-file";
@@ -82,11 +83,13 @@ export class TelegramOutboxStore {
     adminId: number;
     chatId: number;
     text: string;
+    kind?: "text" | "media";
     parseMode?: "HTML";
     disableNotification?: boolean;
     nowMs?: number;
-      mode?: "send" | "replace";
+    mode?: "send" | "replace";
     progressKey?: string;
+    media?: TelegramOutboxMediaDescriptor;
     control?: {
       kind: "thinking";
       action: "start" | "stop";
@@ -101,7 +104,13 @@ export class TelegramOutboxStore {
     const file = this.readAll();
 
     /* Collapse accidental duplicate plain messages caused by repeated event delivery in the same short burst. */
-    if (!input.control && !input.progressKey && (input.mode === undefined || input.mode === "send") && input.text.trim()) {
+    if (
+      (input.kind ?? "text") === "text" &&
+      !input.control &&
+      !input.progressKey &&
+      (input.mode === undefined || input.mode === "send") &&
+      input.text.trim()
+    ) {
       const existing = this.findRecentPlainDuplicate({
         items: file.items,
         input,
@@ -161,10 +170,12 @@ export class TelegramOutboxStore {
       adminId: input.adminId,
       chatId: input.chatId,
       text: input.text,
+      kind: input.kind,
       parseMode: input.parseMode,
       disableNotification: input.disableNotification,
       mode: input.mode,
       progressKey: input.progressKey,
+      media: input.media,
       control: input.control,
       replyMarkup: input.replyMarkup,
       createdAt: now,
@@ -226,13 +237,20 @@ export class TelegramOutboxStore {
       id: item.id,
       chatId: item.chatId,
       text: item.text,
+      kind: item.kind,
       parseMode: item.parseMode,
       disableNotification: item.disableNotification,
       mode: item.mode,
       progressKey: item.progressKey,
+      media: item.media,
       control: item.control,
       replyMarkup: item.replyMarkup
     }));
+  }
+
+  public listAll(): TelegramOutboxItem[] {
+    /* Cleanup jobs need a stable snapshot of current references without mutating delivery state. */
+    return this.readAll().items;
   }
 
   public report(input: { adminId: number; workerId: string; results: OutboxReportResult[]; nowMs?: number }): void {

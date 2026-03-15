@@ -195,11 +195,19 @@ describe("buildTranscriptionFailureMessage", () => {
   });
 
   it("returns explicit remediation for rejected Groq credentials", () => {
-    /* Auth failures should point straight to the saved Groq key instead of looking like a random provider outage. */
-    const message = buildTranscriptionFailureMessage(new Error("Groq transcription failed: 403"));
+    /* 401 should still point straight to the saved Groq key instead of looking like a random provider outage. */
+    const message = buildTranscriptionFailureMessage(new Error("Groq transcription failed: 401"));
 
     expect(message).toBe(
       "Не удалось распознать голосовое сообщение: Groq отклонил сохраненный API key. Обновите ключ в настройках голосового управления."
     );
+  });
+
+  it("returns forbidden-access hint for Groq 403 responses", () => {
+    /* 403 often means server/IP/proxy restrictions, so blaming only the key is misleading. */
+    const message = buildTranscriptionFailureMessage(new Error("Groq transcription failed: 403"));
+
+    expect(message).toContain("Groq вернул 403 Forbidden");
+    expect(message).toContain("сервера/IP");
   });
 });

@@ -56,6 +56,7 @@ const buildTask = (overrides?: Partial<KanbanTask>): KanbanTask => ({
 describe("KanbanTaskEditorModal", () => {
   afterEach(() => {
     cleanup();
+    localStorage.clear();
   });
 
   it("builds acceptance criteria through explicit checklist items before submit", () => {

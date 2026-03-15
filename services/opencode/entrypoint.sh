@@ -48,6 +48,7 @@ node /usr/local/bin/cliproxy-provider-config.js "$TMP_PATH"
 
 # Sync default local plugins into the persisted config volume before OpenCode loads them.
 node /usr/local/bin/kanban-plugin-sync.js /usr/local/share/opencode/kanban-tools-plugin.ts
+node /usr/local/bin/telegram-media-plugin-sync.js /usr/local/share/opencode/telegram-media-tools-plugin.ts
 
 mv "$TMP_PATH" "$CONFIG_PATH"
 

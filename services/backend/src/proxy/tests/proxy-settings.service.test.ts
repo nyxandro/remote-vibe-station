@@ -47,6 +47,8 @@ describe("ProxySettingsService", () => {
       expect(proxyEnvContent).toContain("HTTP_PROXY=socks5://vless-proxy:1080");
       expect(proxyEnvContent).toContain("NO_PROXY=localhost,127.0.0.1,backend");
       expect(overrideContent).toContain("vless-proxy");
+      expect(overrideContent).toContain("backend:");
+      expect(overrideContent).toContain("bot:");
       expect(snapshot.runtimeFiles.runtimeConfigDir).toBe(runtimeDir);
     } finally {
       if (prevRuntimeDir === undefined) {

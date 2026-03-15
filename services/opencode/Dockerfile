@@ -108,7 +108,9 @@ COPY cliproxy-provider-config.js /usr/local/bin/cliproxy-provider-config.js
 COPY --chmod=755 github-git-credential.js /usr/local/bin/github-git-credential.js
 COPY --chmod=755 github-gh-auth-wrapper.sh /usr/local/bin/gh
 COPY kanban-plugin-sync.js /usr/local/bin/kanban-plugin-sync.js
+COPY telegram-media-plugin-sync.js /usr/local/bin/telegram-media-plugin-sync.js
 COPY kanban-tools-plugin.ts /usr/local/share/opencode/kanban-tools-plugin.ts
+COPY telegram-media-tools-plugin.ts /usr/local/share/opencode/telegram-media-tools-plugin.ts
 COPY --chmod=755 docker-wrapper.sh /usr/local/bin/docker
 COPY toolbox-profile.sh /etc/profile.d/toolbox.sh
 

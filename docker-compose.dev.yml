@@ -133,6 +133,9 @@ services:
       - BACKEND_URL=http://backend:3000
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:-dev-bot-backend-token}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+    volumes:
+      # Media delivery reads staged agent files from the shared OpenCode data volume.
+      - opencode_data:/opencode-data:ro
     depends_on:
       - backend
     restart: unless-stopped

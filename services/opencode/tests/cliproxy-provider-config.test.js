@@ -13,10 +13,72 @@ const path = require("node:path");
 
 const {
   buildModelsMap,
+  extractModelCatalogEntries,
   extractModelIdsFromCatalog,
   generateOpenCodeConfigFromEnv,
   writeOpenCodeConfigFromEnv
 } = require("../cliproxy-provider-config");
+
+const GPT5_XHIGH_VARIANTS = {
+  low: {
+    reasoningEffort: "low",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  },
+  medium: {
+    reasoningEffort: "medium",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  },
+  high: {
+    reasoningEffort: "high",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  },
+  xhigh: {
+    reasoningEffort: "xhigh",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  }
+};
+
+const GPT5_HIGH_VARIANTS = {
+  high: {
+    reasoningEffort: "high",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"]
+  }
+};
+
+const CLAUDE_VARIANTS = {
+  high: {
+    thinking: {
+      type: "enabled",
+      budgetTokens: 16000
+    }
+  },
+  max: {
+    thinking: {
+      type: "enabled",
+      budgetTokens: 31999
+    }
+  }
+};
+
+const GEMINI_VARIANTS = {
+  high: {
+    thinkingConfig: {
+      includeThoughts: true,
+      thinkingBudget: 16000
+    }
+  },
+  max: {
+    thinkingConfig: {
+      includeThoughts: true,
+      thinkingBudget: 24576
+    }
+  }
+};
 
 test("extractModelIdsFromCatalog returns unique non-empty model ids", () => {
   /* Catalog parser should keep deterministic model order while skipping invalid entries. */
@@ -40,8 +102,44 @@ test("extractModelIdsFromCatalog throws on empty catalog", () => {
   }, /did not return any models/i);
 });
 
+test("extractModelCatalogEntries keeps schema-compatible modalities", () => {
+  /* Proxy metadata should survive into OpenCode config so multimodal gating matches the upstream catalog. */
+  assert.deepEqual(
+    extractModelCatalogEntries({
+      data: [
+        {
+          id: "gpt-5.4",
+          modalities: {
+            input: ["text", "image", "image", "invalid"],
+            output: ["text"]
+          }
+        },
+        {
+          id: "broken-modalities",
+          modalities: {
+            input: [],
+            output: ["text"]
+          }
+        }
+      ]
+    }),
+    [
+      {
+        id: "gpt-5.4",
+        modalities: {
+          input: ["text", "image"],
+          output: ["text"]
+        }
+      },
+      {
+        id: "broken-modalities"
+      }
+    ]
+  );
+});
+
 test("buildModelsMap maps every id to OpenCode model descriptor", () => {
-  /* Dynamic mapper should attach thinking variants for known model families. */
+  /* Dynamic mapper should preserve multimodal support and attach thinking variants for known model families. */
   assert.deepEqual(
     buildModelsMap([
       "gpt-5.2",
@@ -55,127 +153,82 @@ test("buildModelsMap maps every id to OpenCode model descriptor", () => {
     {
     "gpt-5.2": {
       name: "gpt-5.2",
-      variants: {
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        xhigh: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_XHIGH_VARIANTS
     },
     "gpt-5.3-codex": {
       name: "gpt-5.3-codex",
-      variants: {
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        xhigh: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_XHIGH_VARIANTS
     },
     "gpt-5.4": {
       name: "gpt-5.4",
-      variants: {
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        xhigh: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_XHIGH_VARIANTS
     },
     "gpt-5-pro": {
       name: "gpt-5-pro",
-      variants: {
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_HIGH_VARIANTS
     },
     "claude-sonnet": {
       name: "claude-sonnet",
-      variants: {
-        high: {
-          thinking: {
-            type: "enabled",
-            budgetTokens: 16000
-          }
-        },
-        max: {
-          thinking: {
-            type: "enabled",
-            budgetTokens: 31999
-          }
-        }
-      }
+      variants: CLAUDE_VARIANTS
     },
     "gemini-2.5-pro": {
       name: "gemini-2.5-pro",
-      variants: {
-        high: {
-          thinkingConfig: {
-            includeThoughts: true,
-            thinkingBudget: 16000
-          }
-        },
-        max: {
-          thinkingConfig: {
-            includeThoughts: true,
-            thinkingBudget: 24576
-          }
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GEMINI_VARIANTS
     },
     "random-model": {
       name: "random-model"
     }
   }
+  );
+});
+
+test("buildModelsMap enables attachments from explicit modalities metadata", () => {
+  /* Catalog-declared image/pdf input should win even for unknown model ids. */
+  assert.deepEqual(
+    buildModelsMap([
+      {
+        id: "custom-model",
+        modalities: {
+          input: ["text", "image", "pdf"],
+          output: ["text"]
+        }
+      }
+    ]),
+    {
+      "custom-model": {
+        name: "custom-model",
+        attachment: true,
+        modalities: {
+          input: ["text", "image", "pdf"],
+          output: ["text"]
+        }
+      }
+    }
   );
 });
 
@@ -208,88 +261,45 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
   assert.deepEqual(config.provider.cliproxy.models, {
     "gpt-5.2": {
       name: "gpt-5.2",
-      variants: {
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        xhigh: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_XHIGH_VARIANTS
     },
     "gpt-5.3-codex": {
       name: "gpt-5.3-codex",
-      variants: {
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        xhigh: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_XHIGH_VARIANTS
     },
     "gpt-5.4": {
       name: "gpt-5.4",
-      variants: {
-        low: {
-          reasoningEffort: "low",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        medium: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        },
-        xhigh: {
-          reasoningEffort: "xhigh",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_XHIGH_VARIANTS
     },
     "gpt-5-pro": {
       name: "gpt-5-pro",
-      variants: {
-        high: {
-          reasoningEffort: "high",
-          reasoningSummary: "auto",
-          include: ["reasoning.encrypted_content"]
-        }
-      }
+      attachment: true,
+      modalities: {
+        input: ["text", "image"],
+        output: ["text"]
+      },
+      variants: GPT5_HIGH_VARIANTS
+    }
+  });
+  assert.deepEqual(config.permission, {
+    external_directory: {
+      "/root/.local/share/opencode/telegram-prompt-attachments/**": "allow",
+      "/root/.local/share/opencode/agent-share/**": "allow"
     }
   });
 });
@@ -335,6 +345,13 @@ test("writeOpenCodeConfigFromEnv preserves unrelated OpenCode config sections", 
                 command: "npx",
                 args: ["-y", "@modelcontextprotocol/server-github"]
               }
+            }
+          },
+          permission: {
+            "*": "allow",
+            external_directory: {
+              "*": "ask",
+              "/tmp/manual/**": "allow"
             }
           },
           provider: {
@@ -395,6 +412,15 @@ test("writeOpenCodeConfigFromEnv preserves unrelated OpenCode config sections", 
         }
       }
     });
+    assert.deepEqual(saved.permission, {
+      "*": "allow",
+      external_directory: {
+        "*": "ask",
+        "/tmp/manual/**": "allow",
+        "/root/.local/share/opencode/telegram-prompt-attachments/**": "allow",
+        "/root/.local/share/opencode/agent-share/**": "allow"
+      }
+    });
     assert.deepEqual(saved.provider.other, {
       npm: "@ai-sdk/openai",
       name: "OpenAI",
@@ -413,28 +439,12 @@ test("writeOpenCodeConfigFromEnv preserves unrelated OpenCode config sections", 
     assert.deepEqual(saved.provider.cliproxy.models, {
       "gpt-5.4": {
         name: "gpt-5.4",
-        variants: {
-          low: {
-            reasoningEffort: "low",
-            reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"]
-          },
-          medium: {
-            reasoningEffort: "medium",
-            reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"]
-          },
-          high: {
-            reasoningEffort: "high",
-            reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"]
-          },
-          xhigh: {
-            reasoningEffort: "xhigh",
-            reasoningSummary: "auto",
-            include: ["reasoning.encrypted_content"]
-          }
-        }
+        attachment: true,
+        modalities: {
+          input: ["text", "image"],
+          output: ["text"]
+        },
+        variants: GPT5_XHIGH_VARIANTS
       }
     });
   } finally {

@@ -184,9 +184,14 @@ export const buildTranscriptionFailureMessage = (error: unknown): string => {
     return VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE;
   }
 
-  /* Invalid Groq credentials need an explicit remediation hint instead of a raw auth status code. */
-  if (error instanceof Error && /Groq transcription failed: (401|403)/.test(error.message)) {
+  /* 401 is the reliable invalid-key signal for Groq auth failures. */
+  if (error instanceof Error && /Groq transcription failed: 401/.test(error.message)) {
     return "Не удалось распознать голосовое сообщение: Groq отклонил сохраненный API key. Обновите ключ в настройках голосового управления.";
+  }
+
+  /* 403 usually points to server/IP/proxy/project restrictions, not necessarily a broken key. */
+  if (error instanceof Error && /Groq transcription failed: 403/.test(error.message)) {
+    return "Не удалось распознать голосовое сообщение: Groq вернул 403 Forbidden. Обычно это означает блокировку доступа для текущего сервера/IP, прокси-маршрута или project permissions, а не ошибку в сохраненном API key.";
   }
 
   /* Surface actionable API/runtime details instead of misleading setup text. */

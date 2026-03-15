@@ -95,6 +95,27 @@ describe("TelegramPreferencesService voice control", () => {
         apiKey: "gsk_live_123",
         model: "whisper-large-v3-turbo"
       })
+    ).rejects.toThrow(/APP_GROQ_ACCESS_FORBIDDEN/);
+
+    expect(store.set).not.toHaveBeenCalled();
+  });
+
+  it("marks 401 as an invalid Groq key instead of generic forbidden access", async () => {
+    /* 401 is the canonical auth rejection and should still point the operator to the saved key. */
+    jest.spyOn(global, "fetch").mockResolvedValue({ ok: false, status: 401 } as Response);
+
+    const store = {
+      get: jest.fn().mockReturnValue({}),
+      set: jest.fn()
+    };
+
+    const service = new TelegramPreferencesService(store as never, {} as never, {} as never);
+
+    await expect(
+      service.updateVoiceControlSettings(42, {
+        apiKey: "gsk_live_123",
+        model: "whisper-large-v3-turbo"
+      })
     ).rejects.toThrow(
       "APP_GROQ_API_KEY_REJECTED: Groq отклонил API key. Сохраните действительный ключ Groq в настройках голосового управления и повторите попытку."
     );

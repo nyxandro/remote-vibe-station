@@ -24,6 +24,10 @@ import {
 } from "lucide-react";
 
 import { KanbanCriterion, KanbanCriterionStatus, KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
+import {
+  readStoredKanbanTaskEditorDraft,
+  writeStoredKanbanTaskEditorDraft
+} from "./kanban-task-editor-draft";
 import { KanbanCriteriaEditor } from "./KanbanCriteriaEditor";
 import { VisualMarkdownEditor } from "./VisualMarkdownEditor";
 import { ThemeMode } from "../utils/theme";
@@ -119,6 +123,44 @@ export const KanbanTaskEditorModal = (props: Props) => {
   const [resultSummary, setResultSummary] = useState<string>("");
   const [blockedReason, setBlockedReason] = useState<string>("");
 
+  const resetCreateState = useCallback((nextProjectSlug: string) => {
+    /* Fresh create sessions start from the requested project while keeping workflow defaults consistent. */
+    setProjectSlug(nextProjectSlug);
+    setTitle("");
+    setDescription("");
+    setStatus("backlog");
+    setPriority("medium");
+    setCriteriaItems([]);
+    setCriterionDraft(DEFAULT_CRITERION_DRAFT);
+    setResultSummary("");
+    setBlockedReason("");
+  }, []);
+
+  const restoreStoredCreateDraft = useCallback(
+    (nextProjectSlug: string): boolean => {
+      /* Reopening the modal should revive the unfinished draft for the same project instead of forcing retyping. */
+      const storedDraft = readStoredKanbanTaskEditorDraft({
+        scope: props.scope,
+        projectSlug: nextProjectSlug
+      });
+      if (!storedDraft) {
+        return false;
+      }
+
+      setProjectSlug(storedDraft.projectSlug);
+      setTitle(storedDraft.title);
+      setDescription(storedDraft.description);
+      setStatus(storedDraft.status);
+      setPriority(storedDraft.priority);
+      setCriteriaItems(storedDraft.acceptanceCriteria);
+      setCriterionDraft(storedDraft.criterionDraft);
+      setResultSummary(storedDraft.resultSummary);
+      setBlockedReason(storedDraft.blockedReason);
+      return true;
+    },
+    [props.scope]
+  );
+
   useEffect(() => {
     /* Reinitialize form state every time the dialog switches task or create/edit mode. */
     if (props.task) {
@@ -134,16 +176,64 @@ export const KanbanTaskEditorModal = (props: Props) => {
       return;
     }
 
-    setProjectSlug(props.activeProjectSlug ?? "");
-    setTitle("");
-    setDescription("");
-    setStatus("backlog");
-    setPriority("medium");
-    setCriteriaItems([]);
-    setCriterionDraft(DEFAULT_CRITERION_DRAFT);
-    setResultSummary("");
-    setBlockedReason("");
-  }, [props.activeProjectSlug, props.mode, props.task]);
+    const initialProjectSlug = props.activeProjectSlug ?? "";
+    if (!restoreStoredCreateDraft(initialProjectSlug)) {
+      resetCreateState(initialProjectSlug);
+    }
+  }, [props.activeProjectSlug, props.mode, props.task, resetCreateState, restoreStoredCreateDraft]);
+
+  useEffect(() => {
+    /* Only create mode persists drafts; edit mode must always reflect the saved task directly. */
+    if (props.mode !== "create" || props.task) {
+      return;
+    }
+
+    writeStoredKanbanTaskEditorDraft({
+      scope: props.scope,
+      projectSlug,
+      draft: {
+        projectSlug,
+        title,
+        description,
+        status,
+        priority,
+        acceptanceCriteria: criteriaItems,
+        criterionDraft,
+        resultSummary,
+        blockedReason
+      }
+    });
+  }, [
+    blockedReason,
+    criteriaItems,
+    criterionDraft,
+    description,
+    priority,
+    projectSlug,
+    props.mode,
+    props.scope,
+    props.task,
+    resultSummary,
+    status,
+    title
+  ]);
+
+  const handleProjectChange = useCallback(
+    (nextProjectSlug: string) => {
+      /* Switching projects should restore that project's draft when it exists, otherwise keep the current text and just retarget it. */
+      if (props.mode !== "create") {
+        setProjectSlug(nextProjectSlug);
+        return;
+      }
+
+      if (restoreStoredCreateDraft(nextProjectSlug)) {
+        return;
+      }
+
+      setProjectSlug(nextProjectSlug);
+    },
+    [props.mode, restoreStoredCreateDraft]
+  );
 
   const handleAddCriterion = useCallback(() => {
     /* New checklist items are appended explicitly so the user sees the exact done-definition being saved. */
@@ -234,7 +324,7 @@ export const KanbanTaskEditorModal = (props: Props) => {
             {showProjectSelector ? (
               <label className="kanban-field">
                 <span className="kanban-field-label">Project</span>
-                <select className="input" value={projectSlug} onChange={(event) => setProjectSlug(event.target.value)}>
+                <select className="input" value={projectSlug} onChange={(event) => handleProjectChange(event.target.value)}>
                   <option value="">Select project</option>
                   {props.projects.map((project) => (
                     <option key={project.id} value={project.slug}>

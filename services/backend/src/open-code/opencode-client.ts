@@ -237,6 +237,7 @@ export class OpenCodeClient {
     /* Use same directory session map as prompts to keep one conversation history. */
     const session = await this.ensureSession(context.directory);
     context.onSessionResolved?.(session.sessionID, session);
+    const argumentsText = input.arguments.join(" ");
     const response = await this.request<OpenCodeMessageResponse>(
       `/session/${session.sessionID}/command?directory=${encodeURIComponent(context.directory)}`,
       buildOpenCodeLongRunningRequestInit({
@@ -244,7 +245,7 @@ export class OpenCodeClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           command: input.command,
-          arguments: input.arguments
+          arguments: argumentsText
         })
       })
     );

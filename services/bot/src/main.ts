@@ -12,6 +12,7 @@ import { Telegraf } from "telegraf";
 
 import { buildBackendErrorMessage } from "./backend-error";
 import { buildBotBackendHeaders } from "./backend-auth";
+import { buildCommandQueuedMessage } from "./command-ack";
 import { fetchActiveSessionTitle, formatActiveSessionLine } from "./active-session";
 import { startPeriodicTask } from "./command-sync";
 import { loadConfig } from "./config";
@@ -609,6 +610,9 @@ const bootstrap = async (): Promise<void> => {
 
           await commandResponse.json();
           await indicator.stop(chatId);
+          await bot.telegram.sendMessage(chatId, buildCommandQueuedMessage(slash.command), {
+            disable_notification: true
+          });
         } catch (error) {
           await indicator.stop(chatId);
           const message = error instanceof Error ? error.message : String(error);

@@ -36,6 +36,9 @@ import { TelegramDiffPreviewStore } from "./telegram/diff-preview/telegram-diff-
 import { TelegramPromptAttachmentsService } from "./telegram/prompt-queue/telegram-prompt-attachments.service";
 import { TelegramPromptQueueService } from "./telegram/prompt-queue/telegram-prompt-queue.service";
 import { TelegramPromptQueueStore } from "./telegram/prompt-queue/telegram-prompt-queue.store";
+import { TelegramAgentMediaController } from "./telegram/media/telegram-agent-media.controller";
+import { TelegramAgentMediaService } from "./telegram/media/telegram-agent-media.service";
+import { TelegramAgentMediaStorageService } from "./telegram/media/telegram-agent-media-storage.service";
 import { PromptController } from "./prompt/prompt.controller";
 import { PromptService } from "./prompt/prompt.service";
 import { ProjectsController } from "./projects/projects.controller";
@@ -93,6 +96,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     TelegramController,
     TelegramProviderController,
     TelegramGithubController,
+    TelegramAgentMediaController,
     GithubGitCredentialController,
     TelegramSessionController,
     TelegramOutboxController,
@@ -107,6 +111,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     EventsGateway,
     OpenCodeClient,
     OpenCodeProviderAuthClient,
+    OpenCodeSessionRoutingStore,
     OpenCodeEventsService,
     OpenCodeSessionRoutingStore,
     OpenCodeWebLinkService,
@@ -138,6 +143,8 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     TelegramPromptQueueStore,
     TelegramPromptAttachmentsService,
     TelegramPromptQueueService,
+    TelegramAgentMediaStorageService,
+    TelegramAgentMediaService,
     DockerComposeService,
     TerminalService,
     AdminHeaderGuard,

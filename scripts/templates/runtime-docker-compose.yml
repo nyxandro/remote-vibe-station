@@ -80,6 +80,9 @@ services:
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL}
+    volumes:
+      # Media delivery reads staged agent files from the shared OpenCode data volume.
+      - opencode_data:/opencode-data:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.bot.rule=Host(`${PUBLIC_DOMAIN}`) && Path(`/bot/webhook`)"

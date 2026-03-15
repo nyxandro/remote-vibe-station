@@ -8,7 +8,7 @@
  * - useKanban - Loads tasks and executes board mutations.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiGet, apiPost } from "../api/client";
 import { KanbanCriterion, KanbanPriority, KanbanStatus, KanbanTask } from "../types";
@@ -42,17 +42,29 @@ export type UpdateKanbanCriterionPayload = {
   blockedReason?: string | null;
 };
 
+type KanbanTaskUpdatedEvent = {
+  projectSlug?: string;
+};
+
+const LIVE_RELOAD_DEBOUNCE_MS = 350;
+const INITIAL_WS_RECONNECT_DELAY_MS = 1_000;
+const MAX_WS_RECONNECT_DELAY_MS = 10_000;
+
 export const useKanban = () => {
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const filterRef = useRef<KanbanTaskFilter>({});
+  const liveReloadTimerRef = useRef<number | null>(null);
+  const liveReconnectTimerRef = useRef<number | null>(null);
 
-  const loadTasks = useCallback(async (filter?: KanbanTaskFilter): Promise<void> => {
-    /* Keep the last filter so mutations can refresh the currently visible board view automatically. */
-    filterRef.current = filter ?? {};
-    setIsLoading(true);
+  const fetchTasks = useCallback(async (input: { filter?: KanbanTaskFilter; showLoading: boolean }): Promise<void> => {
+    /* One shared fetch path keeps manual loads, mutation refreshes, and live updates in sync. */
+    filterRef.current = input.filter ?? filterRef.current;
+    if (input.showLoading) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -70,14 +82,116 @@ export const useKanban = () => {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Failed to load kanban tasks");
     } finally {
-      setIsLoading(false);
+      if (input.showLoading) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
+  const loadTasks = useCallback(async (filter?: KanbanTaskFilter): Promise<void> => {
+    /* Keep the last filter so mutations can refresh the currently visible board view automatically. */
+    await fetchTasks({ filter: filter ?? {}, showLoading: true });
+  }, [fetchTasks]);
+
   const reloadTasks = useCallback(async (): Promise<void> => {
     /* Mutation handlers reuse the active filter to keep project/global boards in sync. */
-    await loadTasks(filterRef.current);
-  }, [loadTasks]);
+    await fetchTasks({ showLoading: true });
+  }, [fetchTasks]);
+
+  const reloadTasksSilently = useCallback(async (): Promise<void> => {
+    /* Live event refreshes should update the board without showing the full loading placeholder. */
+    await fetchTasks({ showLoading: false });
+  }, [fetchTasks]);
+
+  useEffect(() => {
+    /* Reuse the shared backend event stream so kanban columns react immediately to agent-side mutations. */
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    let disposed = false;
+    let reconnectDelayMs = INITIAL_WS_RECONNECT_DELAY_MS;
+    let ws: WebSocket | null = null;
+
+    const clearLiveReloadTimer = () => {
+      /* Timer cleanup is shared between reconnects and effect teardown so no stale reload survives a closed socket. */
+      if (liveReloadTimerRef.current !== null) {
+        window.clearTimeout(liveReloadTimerRef.current);
+        liveReloadTimerRef.current = null;
+      }
+    };
+
+    const clearReconnectTimer = () => {
+      /* Only one reconnect attempt should exist at a time even if the socket errors and closes in quick succession. */
+      if (liveReconnectTimerRef.current !== null) {
+        window.clearTimeout(liveReconnectTimerRef.current);
+        liveReconnectTimerRef.current = null;
+      }
+    };
+
+    const scheduleLiveReload = (eventProjectSlug?: string): void => {
+      /* Project-filtered boards ignore unrelated task updates, while global boards refresh for every task mutation. */
+      const activeProjectSlug = filterRef.current.projectSlug?.trim() || null;
+      const normalizedEventProjectSlug = eventProjectSlug?.trim() || null;
+      if (activeProjectSlug && normalizedEventProjectSlug && activeProjectSlug !== normalizedEventProjectSlug) {
+        return;
+      }
+
+      clearLiveReloadTimer();
+      liveReloadTimerRef.current = window.setTimeout(() => {
+        void reloadTasksSilently();
+      }, LIVE_RELOAD_DEBOUNCE_MS);
+    };
+
+    const connect = () => {
+      /* Reconnect in-place so transient backend restarts do not leave the board permanently stale. */
+      ws = new WebSocket(`${proto}://${window.location.host}/events`);
+
+      ws.onopen = () => {
+        /* A healthy socket resets backoff so later disconnects recover quickly again. */
+        reconnectDelayMs = INITIAL_WS_RECONNECT_DELAY_MS;
+        clearReconnectTimer();
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { type?: string; data?: KanbanTaskUpdatedEvent };
+          if (payload?.type !== "kanban.task.updated") {
+            return;
+          }
+
+          scheduleLiveReload(payload.data?.projectSlug);
+        } catch {
+          /* Malformed non-kanban events should never break the board subscription loop. */
+        }
+      };
+
+      ws.onerror = (event) => {
+        /* WebSocket transport issues are informational here because onclose handles the actual retry loop. */
+        console.error("Kanban live updates socket error", event);
+      };
+
+      ws.onclose = () => {
+        /* Retry with capped backoff unless the hook is already being disposed. */
+        ws = null;
+        if (disposed) {
+          return;
+        }
+
+        clearReconnectTimer();
+        liveReconnectTimerRef.current = window.setTimeout(() => {
+          connect();
+        }, reconnectDelayMs);
+        reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_WS_RECONNECT_DELAY_MS);
+      };
+    };
+
+    connect();
+
+    return () => {
+      disposed = true;
+      clearLiveReloadTimer();
+      clearReconnectTimer();
+      ws?.close();
+    };
+  }, [reloadTasksSilently]);
 
   const mutate = useCallback(
     async (request: () => Promise<unknown>): Promise<void> => {

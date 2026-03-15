@@ -11,6 +11,9 @@ import { OutboxWorker } from "../outbox-worker";
 type TelegramMock = {
   sendMessage: jest.Mock;
   editMessageText: jest.Mock;
+  sendPhoto: jest.Mock;
+  sendDocument: jest.Mock;
+  sendMediaGroup: jest.Mock;
 };
 
 const makeWorker = (telegram: TelegramMock): OutboxWorker => {
@@ -40,7 +43,10 @@ describe("OutboxWorker replace delivery", () => {
     /* Progress messages must stay editable, so they should not include reply keyboard markup. */
     const telegram: TelegramMock = {
       editMessageText: jest.fn(async () => true),
-      sendMessage: jest.fn(async () => ({ message_id: 701 }))
+      sendMessage: jest.fn(async () => ({ message_id: 701 })),
+      sendPhoto: jest.fn(),
+      sendDocument: jest.fn(),
+      sendMediaGroup: jest.fn()
     };
     const worker = makeWorker(telegram);
 
@@ -61,7 +67,10 @@ describe("OutboxWorker replace delivery", () => {
       editMessageText: jest.fn(async () => {
         throw new Error("400: Bad Request: message can't be edited");
       }),
-      sendMessage: jest.fn(async () => ({ message_id: 777 }))
+      sendMessage: jest.fn(async () => ({ message_id: 777 })),
+      sendPhoto: jest.fn(),
+      sendDocument: jest.fn(),
+      sendMediaGroup: jest.fn()
     };
     const worker = makeWorker(telegram);
 
@@ -88,7 +97,10 @@ describe("OutboxWorker replace delivery", () => {
       editMessageText: jest.fn(async () => {
         throw new Error("400: Bad Request: chat not found");
       }),
-      sendMessage: jest.fn(async () => ({ message_id: 888 }))
+      sendMessage: jest.fn(async () => ({ message_id: 888 })),
+      sendPhoto: jest.fn(),
+      sendDocument: jest.fn(),
+      sendMediaGroup: jest.fn()
     };
     const worker = makeWorker(telegram);
 
@@ -111,7 +123,10 @@ describe("OutboxWorker replace delivery", () => {
     /* Re-pulled items after a failed report must not send a second Telegram message. */
     const telegram: TelegramMock = {
       editMessageText: jest.fn(),
-      sendMessage: jest.fn(async () => ({ message_id: 909 }))
+      sendMessage: jest.fn(async () => ({ message_id: 909 })),
+      sendPhoto: jest.fn(),
+      sendDocument: jest.fn(),
+      sendMediaGroup: jest.fn()
     };
     const worker = makeWorker(telegram);
 
@@ -137,7 +152,10 @@ describe("OutboxWorker replace delivery", () => {
     /* Backend report failure must not cause the same Telegram message to be resent on the next poll. */
     const telegram: TelegramMock = {
       editMessageText: jest.fn(),
-      sendMessage: jest.fn(async () => ({ message_id: 1001 }))
+      sendMessage: jest.fn(async () => ({ message_id: 1001 })),
+      sendPhoto: jest.fn(),
+      sendDocument: jest.fn(),
+      sendMediaGroup: jest.fn()
     };
     const worker = makeWorker(telegram);
     const fetchSpy = jest.spyOn(globalThis, "fetch" as any);
@@ -195,5 +213,94 @@ describe("OutboxWorker replace delivery", () => {
       fetchSpy.mockRestore();
       errorSpy.mockRestore();
     }
+  });
+
+  it("sends Telegram photos through sendPhoto", async () => {
+    /* Media outbox items must call Telegram photo delivery instead of plain text sendMessage. */
+    const telegram: TelegramMock = {
+      editMessageText: jest.fn(),
+      sendMessage: jest.fn(),
+      sendPhoto: jest.fn(async () => ({ message_id: 1201 })),
+      sendDocument: jest.fn(),
+      sendMediaGroup: jest.fn()
+    };
+    const worker = makeWorker(telegram);
+
+    const result = await (worker as any).deliver({
+      id: "media-photo-1",
+      chatId: 100,
+      text: "",
+      kind: "media",
+      media: {
+        kind: "photo",
+        filePath: "/tmp/site.png",
+        fileName: "site.png",
+        caption: "Скриншот"
+      }
+    });
+
+    expect(result).toEqual({ id: "media-photo-1", ok: true, telegramMessageId: 1201 });
+    expect(telegram.sendPhoto).toHaveBeenCalledTimes(1);
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends Telegram documents through sendDocument", async () => {
+    /* Original files should use document delivery so Telegram does not recompress them. */
+    const telegram: TelegramMock = {
+      editMessageText: jest.fn(),
+      sendMessage: jest.fn(),
+      sendPhoto: jest.fn(),
+      sendDocument: jest.fn(async () => ({ message_id: 1301 })),
+      sendMediaGroup: jest.fn()
+    };
+    const worker = makeWorker(telegram);
+
+    const result = await (worker as any).deliver({
+      id: "media-document-1",
+      chatId: 100,
+      text: "",
+      kind: "media",
+      media: {
+        kind: "document",
+        filePath: "/tmp/site.png",
+        fileName: "site.png",
+        caption: "Оригинал"
+      }
+    });
+
+    expect(result).toEqual({ id: "media-document-1", ok: true, telegramMessageId: 1301 });
+    expect(telegram.sendDocument).toHaveBeenCalledTimes(1);
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends image albums through sendMediaGroup", async () => {
+    /* Multiple screenshots should land in one Telegram media group when the outbox item requests an album. */
+    const telegram: TelegramMock = {
+      editMessageText: jest.fn(),
+      sendMessage: jest.fn(),
+      sendPhoto: jest.fn(),
+      sendDocument: jest.fn(),
+      sendMediaGroup: jest.fn(async () => [{ message_id: 1401 }, { message_id: 1402 }])
+    };
+    const worker = makeWorker(telegram);
+
+    const result = await (worker as any).deliver({
+      id: "media-album-1",
+      chatId: 100,
+      text: "",
+      kind: "media",
+      media: {
+        kind: "media_group",
+        caption: "Мобильные экраны",
+        items: [
+          { kind: "photo", filePath: "/tmp/mobile-home.png", fileName: "mobile-home.png" },
+          { kind: "photo", filePath: "/tmp/mobile-list.png", fileName: "mobile-list.png" }
+        ]
+      }
+    });
+
+    expect(result).toEqual({ id: "media-album-1", ok: true, telegramMessageId: 1401 });
+    expect(telegram.sendMediaGroup).toHaveBeenCalledTimes(1);
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
   });
 });

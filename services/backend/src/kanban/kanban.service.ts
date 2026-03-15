@@ -233,10 +233,14 @@ export class KanbanService {
     resultSummary?: string | null;
   }): Promise<KanbanTaskView> {
     /* Completion persists a concise result summary for later review in the board. */
-    return this.updateTask(input.taskId, {
+    const task = await this.updateTask(input.taskId, {
       status: "done",
       resultSummary: normalizeNullableKanbanText(input.resultSummary)
     });
+
+    /* Every finished task also snapshots the full board into host-backed backups for fast disaster recovery. */
+    await this.writeTaskCompletionBackup();
+    return task;
   }
 
   public async completeTaskFromExecution(input: {
@@ -255,7 +259,11 @@ export class KanbanService {
       return task;
     });
 
-    return this.decorateTask(task);
+    const completed = await this.decorateTask(task);
+
+    /* Runner/session completions share the same external backup policy as manual board completion. */
+    await this.writeTaskCompletionBackup();
+    return completed;
   }
 
   public async blockTask(input: {
@@ -431,6 +439,17 @@ export class KanbanService {
       throw new KanbanValidationError(`Kanban task not found: ${taskId}`);
     }
     return task;
+  }
+
+  private async writeTaskCompletionBackup(): Promise<void> {
+    /* Older isolated unit mocks may not implement the backup helper, but production store always does. */
+    const writeBackup = (this.store as Pick<KanbanStore, "writeTaskCompletionBackup"> | Partial<KanbanStore>)
+      .writeTaskCompletionBackup;
+    if (typeof writeBackup !== "function") {
+      return;
+    }
+
+    await writeBackup.call(this.store);
   }
 
 }

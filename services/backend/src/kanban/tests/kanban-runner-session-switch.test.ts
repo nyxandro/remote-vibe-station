@@ -73,7 +73,15 @@ describe("Kanban runner session switch", () => {
       setTaskSessionId: jest.fn(async () => undefined)
     };
     const projects = {
-      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha"),
+      getActiveProject: jest.fn(async (adminId?: number) =>
+        adminId === 649624756
+          ? {
+              slug: "alpha",
+              rootPath: "/srv/projects/alpha"
+            }
+          : null
+      )
     };
     const opencode = {
       createDetachedSession: jest.fn(async () => ({ id: "session-created" })),
@@ -93,23 +101,36 @@ describe("Kanban runner session switch", () => {
     };
     const opencodeEvents = {
       ensureDirectory: jest.fn(),
-      waitUntilConnected: jest.fn(async () => undefined)
+      waitUntilConnected: jest.fn(async () => undefined),
+      watchPermissionOnce: jest.fn()
+    };
+    const sessionRouting = {
+      bind: jest.fn()
     };
     const events = createEventsServiceMock();
 
     const runner = new KanbanRunnerService(
-      { kanbanRunnerEnabled: true } as never,
+      { kanbanRunnerEnabled: true, adminIds: [649624756] } as never,
       kanban as never,
       runnerSessions as never,
       projects as never,
       opencode as never,
       opencodeEvents as never,
-      events as never
+      events as never,
+      sessionRouting as never
     );
 
     await runner.runOnce("startup");
 
     expect(opencode.rememberSelectedSession).toHaveBeenCalledWith({
+      directory: "/srv/projects/alpha",
+      sessionID: "session-created"
+    });
+    expect(sessionRouting.bind).toHaveBeenCalledWith("session-created", {
+      adminId: 649624756,
+      directory: "/srv/projects/alpha"
+    });
+    expect(opencodeEvents.watchPermissionOnce).toHaveBeenCalledWith({
       directory: "/srv/projects/alpha",
       sessionID: "session-created"
     });
@@ -154,7 +175,15 @@ describe("Kanban runner session switch", () => {
       setTaskSessionId: jest.fn(async () => undefined)
     };
     const projects = {
-      getProjectRootPath: jest.fn(() => "/srv/projects/alpha")
+      getProjectRootPath: jest.fn(() => "/srv/projects/alpha"),
+      getActiveProject: jest.fn(async (adminId?: number) =>
+        adminId === 649624756
+          ? {
+              slug: "alpha",
+              rootPath: "/srv/projects/alpha"
+            }
+          : null
+      )
     };
     const opencode = {
       createDetachedSession: jest.fn(),
@@ -174,23 +203,36 @@ describe("Kanban runner session switch", () => {
     };
     const opencodeEvents = {
       ensureDirectory: jest.fn(),
-      waitUntilConnected: jest.fn(async () => undefined)
+      waitUntilConnected: jest.fn(async () => undefined),
+      watchPermissionOnce: jest.fn()
+    };
+    const sessionRouting = {
+      bind: jest.fn()
     };
     const events = createEventsServiceMock();
 
     const runner = new KanbanRunnerService(
-      { kanbanRunnerEnabled: true } as never,
+      { kanbanRunnerEnabled: true, adminIds: [649624756] } as never,
       kanban as never,
       runnerSessions as never,
       projects as never,
       opencode as never,
       opencodeEvents as never,
-      events as never
+      events as never,
+      sessionRouting as never
     );
 
     await runner.runOnce("startup");
 
     expect(opencode.rememberSelectedSession).not.toHaveBeenCalled();
+    expect(sessionRouting.bind).toHaveBeenCalledWith("session-returned", {
+      adminId: 649624756,
+      directory: "/srv/projects/alpha"
+    });
+    expect(opencodeEvents.watchPermissionOnce).toHaveBeenCalledWith({
+      directory: "/srv/projects/alpha",
+      sessionID: "session-returned"
+    });
     expect(events.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "kanban.runner.finished",

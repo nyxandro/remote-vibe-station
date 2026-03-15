@@ -4,8 +4,11 @@
  * Exports:
  * - KanbanStoreFile - Full JSON payload persisted on disk.
  * - KanbanStore - Serialized read/write access for kanban task records.
+ * - KanbanBackupDirToken - Optional override for completion-backup directory.
  */
 
+import * as crypto from "node:crypto";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
 import { Inject, Injectable, Optional } from "@nestjs/common";
@@ -17,8 +20,14 @@ import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-fil
 
 const DATA_DIR = "data";
 const STORE_FILE = "kanban.tasks.json";
+const KANBAN_BACKUP_DIR_ENV = "KANBAN_BACKUP_DIR";
+const RUNTIME_CONFIG_DIR_ENV = "RUNTIME_CONFIG_DIR";
+const BACKUP_DIR_NAME = "backups/kanban";
+const BACKUP_FILE_PREFIX = "kanban.tasks.backup-";
+const MAX_BACKUP_FILES = 5;
 
 export const KanbanStoreFilePathToken = Symbol("KanbanStoreFilePathToken");
+export const KanbanBackupDirToken = Symbol("KanbanBackupDirToken");
 
 const taskSchema = z.object({
   id: z.string().min(1),
@@ -56,13 +65,18 @@ export type KanbanStoreFile = {
 @Injectable()
 export class KanbanStore {
   private readonly filePath: string;
+  private readonly backupDir: string | null;
   private writeQueue: Promise<void> = Promise.resolve();
+  private backupQueue: Promise<void> = Promise.resolve();
 
   public constructor(
-    @Optional() @Inject(KanbanStoreFilePathToken) filePath?: string
+    @Optional() @Inject(KanbanStoreFilePathToken) filePath?: string,
+    @Optional() @Inject(KanbanBackupDirToken) backupDir?: string
   ) {
-    /* Keep kanban state in backend data volume so board survives container restarts. */
-    this.filePath = filePath ?? path.join(process.cwd(), DATA_DIR, STORE_FILE);
+     /* Keep kanban state in backend data volume so board survives container restarts. */
+     this.filePath = filePath ?? path.join(process.cwd(), DATA_DIR, STORE_FILE);
+     /* Completion backups live outside the data volume so operators can restore tasks after volume loss. */
+     this.backupDir = this.resolveBackupDir(backupDir);
   }
 
   public async read(): Promise<KanbanStoreFile> {
@@ -92,6 +106,32 @@ export class KanbanStore {
     return result as T;
   }
 
+  public async writeTaskCompletionBackup(): Promise<void> {
+    /* Skip backup work when the runtime does not expose an external backup directory. */
+    if (!this.backupDir) {
+      return;
+    }
+
+    const run = async (): Promise<void> => {
+      /* Wait for pending writes so the backup always captures the latest committed kanban snapshot. */
+      await this.writeQueue;
+      const snapshot = await this.readRaw();
+      const backupPath = path.join(this.backupDir as string, this.buildBackupFileName());
+
+      /* Create the host-backed backup directory lazily to avoid startup requirements. */
+      await fs.mkdir(this.backupDir as string, { recursive: true });
+      await writeJsonFileAsyncAtomic(backupPath, snapshot);
+      await this.pruneOldBackups();
+    };
+
+    const queued = this.backupQueue.then(run, run);
+    this.backupQueue = queued.then(
+      () => undefined,
+      () => undefined
+    );
+    await queued;
+  }
+
   private async readRaw(): Promise<KanbanStoreFile> {
     /* Kanban state is durable product data, so malformed JSON must fail loudly. */
     return readJsonFileAsync({
@@ -107,5 +147,45 @@ export class KanbanStore {
   private async writeRaw(record: KanbanStoreFile): Promise<void> {
     /* Persist readable JSON so operators can inspect board state directly on the host when needed. */
     await writeJsonFileAsyncAtomic(this.filePath, record);
+  }
+
+  private resolveBackupDir(backupDir?: string): string | null {
+    /* Prefer an explicit DI override, then env wiring from docker-compose/runtime config. */
+    const explicitDir = backupDir?.trim();
+    if (explicitDir) {
+      return explicitDir;
+    }
+
+    const envBackupDir = process.env[KANBAN_BACKUP_DIR_ENV]?.trim();
+    if (envBackupDir) {
+      return envBackupDir;
+    }
+
+    const runtimeConfigDir = process.env[RUNTIME_CONFIG_DIR_ENV]?.trim();
+    if (!runtimeConfigDir) {
+      return null;
+    }
+
+    return path.join(runtimeConfigDir, BACKUP_DIR_NAME);
+  }
+
+  private buildBackupFileName(): string {
+    /* Keep filenames sortable by time and collision-safe during fast consecutive completions. */
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    return `${BACKUP_FILE_PREFIX}${timestamp}-${crypto.randomUUID()}.json`;
+  }
+
+  private async pruneOldBackups(): Promise<void> {
+    /* Retain only the newest snapshots so the backup folder stays bounded without manual cleanup. */
+    const entries = await fs.readdir(this.backupDir as string, { withFileTypes: true });
+    const backupNames = entries
+      .filter((entry) => entry.isFile() && entry.name.startsWith(BACKUP_FILE_PREFIX) && entry.name.endsWith(".json"))
+      .map((entry) => entry.name)
+      .sort();
+
+    const namesToDelete = backupNames.slice(0, Math.max(0, backupNames.length - MAX_BACKUP_FILES));
+    await Promise.all(
+      namesToDelete.map((name) => fs.rm(path.join(this.backupDir as string, name), { force: true }))
+    );
   }
 }

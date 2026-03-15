@@ -11,6 +11,7 @@ import { ExternalLink, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useDraggableScroll } from "../hooks/use-draggable-scroll";
 import { CreateKanbanTaskPayload, UpdateKanbanTaskPayload } from "../hooks/use-kanban";
 import { KanbanTaskEditorModal, KanbanTaskEditorSubmit } from "./KanbanTaskEditorModal";
+import { clearStoredKanbanTaskEditorDraft } from "./kanban-task-editor-draft";
 import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
 import { ThemeMode } from "../utils/theme";
 
@@ -204,6 +205,10 @@ export const KanbanBoard = (props: Props) => {
         priority: payload.priority,
         acceptanceCriteria: payload.acceptanceCriteria
       });
+
+      /* Successful creation consumes the saved draft so reopening the modal starts clean for that project. */
+      clearStoredKanbanTaskEditorDraft({ scope: props.scope, projectSlug: payload.projectSlug });
+      clearStoredKanbanTaskEditorDraft({ scope: props.scope, projectSlug: "" });
       setIsCreateOpen(false);
     } catch (error) {
       setEditorError(error instanceof Error ? error.message : "Failed to save task");

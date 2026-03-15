@@ -22,6 +22,7 @@ import { ActiveProjectStore } from "../projects/active-project.store";
 import { ProjectRegistry } from "../projects/project-registry";
 import { ProjectStateStore } from "../projects/project-state.store";
 import { TelegramDiffPreviewStore } from "../telegram/diff-preview/telegram-diff-preview.store";
+import { TelegramAgentMediaService } from "../telegram/media/telegram-agent-media.service";
 import { TelegramOutboxStore } from "../telegram/outbox/telegram-outbox.store";
 import { TelegramPreferencesStore } from "../telegram/preferences/telegram-preferences.store";
 import { TelegramStreamStore } from "../telegram/telegram-stream.store";
@@ -45,6 +46,7 @@ export class DataMaintenanceService implements OnModuleInit, OnModuleDestroy {
     @Inject(ConfigToken) private readonly config: AppConfig,
     private readonly events: EventsService,
     private readonly outbox: TelegramOutboxStore,
+    private readonly agentMedia: TelegramAgentMediaService,
     private readonly diffPreviews: TelegramDiffPreviewStore,
     private readonly preferences: TelegramPreferencesStore,
     private readonly stream: TelegramStreamStore,
@@ -106,6 +108,7 @@ export class DataMaintenanceService implements OnModuleInit, OnModuleDestroy {
       maxDeadToKeep: OUTBOX_MAX_DEAD_TO_KEEP,
       maxDeadAgeMs: OUTBOX_MAX_DEAD_AGE_MS
     });
+    this.agentMedia.cleanupExpiredFiles();
     this.diffPreviews.pruneNow();
 
     /* Keep per-admin stores bounded to configured admins. */

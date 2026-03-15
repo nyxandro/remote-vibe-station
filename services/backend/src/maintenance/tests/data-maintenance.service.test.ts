@@ -9,8 +9,11 @@ import * as path from "node:path";
 import { EventsService } from "../../events/events.service";
 import { ActiveProjectStore } from "../../projects/active-project.store";
 import { ProjectRegistry } from "../../projects/project-registry";
+import { OpenCodeSessionRoutingStore } from "../../open-code/opencode-session-routing.store";
 import { ProjectStateStore } from "../../projects/project-state.store";
 import { TelegramDiffPreviewStore } from "../../telegram/diff-preview/telegram-diff-preview.store";
+import { TelegramAgentMediaService } from "../../telegram/media/telegram-agent-media.service";
+import { TelegramAgentMediaStorageService } from "../../telegram/media/telegram-agent-media-storage.service";
 import { TelegramOutboxStore } from "../../telegram/outbox/telegram-outbox.store";
 import { TelegramPreferencesStore } from "../../telegram/preferences/telegram-preferences.store";
 import { TelegramStreamStore } from "../../telegram/telegram-stream.store";
@@ -133,6 +136,7 @@ describe("DataMaintenanceService", () => {
         publicBaseUrl: "http://localhost",
         publicDomain: "example.com",
         projectsRoot,
+        opencodeDataDir: path.join(tmp, "opencode-data"),
         opencodeSyncOnStart: false,
         opencodeWarmRecentsOnStart: false,
         opencodeWarmRecentsLimit: 0,
@@ -141,13 +145,29 @@ describe("DataMaintenanceService", () => {
       };
 
       const events = new EventsService(config as any);
+      const sessionRoutingStore = new OpenCodeSessionRoutingStore();
+      const projectsService = { getActiveProject: jest.fn().mockResolvedValue(null) };
+      const opencodeClient = { getSelectedSessionID: jest.fn().mockReturnValue(null) };
+      const streamStore = new TelegramStreamStore();
+      const outboxStore = new TelegramOutboxStore();
+      const agentMediaStorage = new TelegramAgentMediaStorageService(config as any);
+      const agentMedia = new TelegramAgentMediaService(
+        config as any,
+        sessionRoutingStore,
+        projectsService as any,
+        opencodeClient as any,
+        streamStore,
+        outboxStore,
+        agentMediaStorage
+      );
       const service = new DataMaintenanceService(
         config as any,
         events,
-        new TelegramOutboxStore(),
+        outboxStore,
+        agentMedia,
         new TelegramDiffPreviewStore(),
         new TelegramPreferencesStore(),
-        new TelegramStreamStore(),
+        streamStore,
         new ActiveProjectStore(),
         new ProjectStateStore(),
         new ProjectRegistry()

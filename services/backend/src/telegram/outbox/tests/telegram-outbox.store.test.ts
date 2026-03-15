@@ -81,6 +81,39 @@ describe("TelegramOutboxStore", () => {
     expect(Date.parse(stored.nextAttemptAt)).toBeGreaterThan(t0);
   });
 
+  it("pull preserves media payloads for photo/document delivery", () => {
+    /* Bot worker must receive the staged file payload exactly as backend enqueued it. */
+    const store = new TelegramOutboxStore();
+    const t0 = Date.parse("2026-02-05T00:00:00.000Z");
+
+    store.enqueue({
+      adminId: 4,
+      chatId: 40,
+      text: "caption",
+      kind: "media",
+      media: {
+        kind: "document",
+        filePath: "/tmp/report.pdf",
+        fileName: "report.pdf",
+        caption: "Смотри"
+      },
+      nowMs: t0
+    });
+
+    const pulled = store.pull({ adminId: 4, limit: 1, workerId: "w4", nowMs: t0 });
+
+    expect(pulled).toHaveLength(1);
+    expect(pulled[0]).toMatchObject({
+      kind: "media",
+      media: {
+        kind: "document",
+        filePath: "/tmp/report.pdf",
+        fileName: "report.pdf",
+        caption: "Смотри"
+      }
+    });
+  });
+
   it("coalesces pending replace updates by progressKey", () => {
     /* Live Telegram stream edits must keep one freshest pending snapshot per progress message. */
     const store = new TelegramOutboxStore();
