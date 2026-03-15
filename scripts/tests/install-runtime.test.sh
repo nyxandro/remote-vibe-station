@@ -58,6 +58,8 @@ grep -q 'image: ${RVS_BACKEND_IMAGE:?RVS_BACKEND_IMAGE must be set}' "$COMPOSE_F
 grep -q 'image: ${RVS_MINIAPP_IMAGE:?RVS_MINIAPP_IMAGE must be set}' "$COMPOSE_FILE"
 grep -q 'image: ${RVS_BOT_IMAGE:?RVS_BOT_IMAGE must be set}' "$COMPOSE_FILE"
 grep -q 'image: ${RVS_OPENCODE_IMAGE:?RVS_OPENCODE_IMAGE must be set}' "$COMPOSE_FILE"
+grep -q 'toolbox_data:/toolbox' "$COMPOSE_FILE"
+grep -q '^  toolbox_data:$' "$COMPOSE_FILE"
 if grep -q 'build:' "$COMPOSE_FILE"; then
   echo "runtime compose must not contain build directives" >&2
   exit 1

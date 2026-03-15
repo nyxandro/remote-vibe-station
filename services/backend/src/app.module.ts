@@ -19,6 +19,7 @@ import { OpenCodeController } from "./opencode-admin/opencode.controller";
 import { OpenCodeProjectSyncService } from "./opencode-admin/opencode-project-sync.service";
 import { OpenCodeSettingsService } from "./opencode-admin/opencode-settings.service";
 import { OpenCodeRuntimeService } from "./opencode-admin/opencode-runtime.service";
+import { RuntimeComposeSyncService } from "./opencode-admin/runtime-compose-sync.service";
 import { TelegramController } from "./telegram/telegram.controller";
 import { TelegramProviderController } from "./telegram/telegram-provider.controller";
 import { TelegramSessionController } from "./telegram/telegram-session.controller";
@@ -124,6 +125,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     OpenCodeProjectSyncService,
     OpenCodeSettingsService,
     OpenCodeRuntimeService,
+    RuntimeComposeSyncService,
     TelegramStreamStore,
     TelegramCommandCatalogService,
     TelegramPreferencesStore,
