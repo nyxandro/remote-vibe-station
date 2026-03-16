@@ -11,17 +11,10 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 
 import {
-  buildClaudeAccountQuota,
-  buildCodexAccountQuota,
-  CLAUDE_PROFILE_URL,
-  CLAUDE_REQUEST_HEADERS,
-  CLAUDE_USAGE_URL,
   CliproxyAccountQuota,
-  CODEX_REQUEST_HEADERS,
-  CODEX_USAGE_URL,
-  resolveCodexChatgptAccountId
 } from "./cliproxy-account-quota";
 import { CliproxyAuthRuntimeService } from "./cliproxy-auth-runtime.service";
+import { CliproxyLiveQuotaLoader, loadCliproxyLiveQuota } from "./cliproxy-live-quota";
 import { CliproxyAuthFile, CliproxyManagementClient, CliproxyProviderId, CliproxyUsageDetail } from "./cliproxy-management.client";
 
 const PROVIDER_DEFINITIONS: Array<{ id: CliproxyProviderId; label: string }> = [
@@ -112,7 +105,8 @@ export class CliproxyAccountService {
 
   public constructor(
     private readonly api: CliproxyManagementClient,
-    private readonly runtime: CliproxyAuthRuntimeService
+    private readonly runtime: CliproxyAuthRuntimeService,
+    private readonly liveQuotaLoader: CliproxyLiveQuotaLoader = loadCliproxyLiveQuota
   ) {}
 
   public async getState(): Promise<CliproxyAccountState> {
@@ -415,75 +409,15 @@ export class CliproxyAccountService {
     provider: CliproxyProviderId
   ): Promise<CliproxyAccountQuota | null> {
     /* Quota detail is UI-only metadata, so unsupported runtimes should degrade to availability-only cards. */
-    if (!entry?.authIndex) {
-      return null;
-    }
-
     try {
-      if (provider === "codex") {
-        return await this.loadCodexQuota(entry);
-      }
-      if (provider === "anthropic") {
-        return await this.loadClaudeQuota(entry);
-      }
+      return await this.liveQuotaLoader(entry, provider, { api: this.api });
     } catch (error) {
+      const accountId = entry?.id ?? "unknown";
       const details = error instanceof Error ? error.message : String(error);
-      this.logger.debug(`Live quota fetch skipped for account='${entry.id}' provider='${provider}': ${details}`);
+      this.logger.debug(`Live quota fetch skipped for account='${accountId}' provider='${provider}': ${details}`);
     }
 
     return null;
-  }
-
-  private async loadCodexQuota(entry: CliproxyAuthFile): Promise<CliproxyAccountQuota | null> {
-    /* Codex requires ChatGPT account id, so download the auth file as a fallback when summary metadata omits it. */
-    const downloaded = await this.api.downloadAuthFileJson(entry.name).catch(() => null);
-    const accountId = resolveCodexChatgptAccountId(entry, downloaded);
-    if (!accountId) {
-      return null;
-    }
-
-    const response = await this.api.apiCall({
-      authIndex: entry.authIndex,
-      method: "GET",
-      url: CODEX_USAGE_URL,
-      headers: {
-        ...CODEX_REQUEST_HEADERS,
-        "Chatgpt-Account-Id": accountId
-      }
-    });
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      return null;
-    }
-
-    return buildCodexAccountQuota(response.body);
-  }
-
-  private async loadClaudeQuota(entry: CliproxyAuthFile): Promise<CliproxyAccountQuota | null> {
-    /* Claude exposes quota windows directly, while the profile endpoint only enriches the plan label. */
-    const [usageResult, profileResult] = await Promise.all([
-      this.api.apiCall({
-        authIndex: entry.authIndex,
-        method: "GET",
-        url: CLAUDE_USAGE_URL,
-        headers: { ...CLAUDE_REQUEST_HEADERS }
-      }),
-      this.api.apiCall({
-        authIndex: entry.authIndex,
-        method: "GET",
-        url: CLAUDE_PROFILE_URL,
-        headers: { ...CLAUDE_REQUEST_HEADERS }
-      }).catch(() => null)
-    ]);
-
-    if (usageResult.statusCode < 200 || usageResult.statusCode >= 300) {
-      return null;
-    }
-
-    return buildClaudeAccountQuota(
-      usageResult.body,
-      profileResult && profileResult.statusCode >= 200 && profileResult.statusCode < 300 ? profileResult.body : null
-    );
   }
 
   private buildUsageSummary(

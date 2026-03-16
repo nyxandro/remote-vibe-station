@@ -75,28 +75,6 @@ describe("CliproxyAccountService", () => {
         }
       ]),
       apiCall: jest.fn().mockImplementation(async (input: { url: string }) => {
-        if (input.url === "https://chatgpt.com/backend-api/wham/usage") {
-          return {
-            statusCode: 200,
-            body: {
-              plan_type: "plus",
-              rate_limit: {
-                primary_window: {
-                  used_percent: 35,
-                  limit_window_seconds: 18_000,
-                  reset_after_seconds: 3_600
-                },
-                secondary_window: {
-                  used_percent: 20,
-                  limit_window_seconds: 604_800,
-                  reset_after_seconds: 172_800
-                }
-              }
-            },
-            bodyText: ""
-          };
-        }
-
         if (input.url === "https://api.anthropic.com/api/oauth/usage") {
           return {
             statusCode: 200,
@@ -146,8 +124,57 @@ describe("CliproxyAccountService", () => {
       setDisabled: jest.fn(),
       deleteFile: jest.fn()
     };
+    const liveQuotaLoader = jest.fn().mockImplementation(async (entry, provider) => {
+      if (provider === "anthropic") {
+        return {
+          mode: "live",
+          planType: "pro",
+          windows: [
+            {
+              id: "five-hour",
+              label: "5 часов",
+              remainingPercent: 75,
+              resetAt: "2026-03-06T15:00:00.000Z",
+              resetAfterSeconds: null
+            },
+            {
+              id: "seven-day",
+              label: "7 дней",
+              remainingPercent: 60,
+              resetAt: "2026-03-10T15:00:00.000Z",
+              resetAfterSeconds: null
+            }
+          ]
+        };
+      }
 
-    const service = new CliproxyAccountService(api as never, runtime as never);
+      if (provider === "codex") {
+        return {
+          mode: "live",
+          planType: "plus",
+          windows: [
+            {
+              id: "five-hour",
+              label: "5 часов",
+              remainingPercent: 65,
+              resetAt: null,
+              resetAfterSeconds: 3600
+            },
+            {
+              id: "weekly",
+              label: "7 дней",
+              remainingPercent: 80,
+              resetAt: null,
+              resetAfterSeconds: 172800
+            }
+          ]
+        };
+      }
+
+      return null;
+    });
+
+    const service = new CliproxyAccountService(api as never, runtime as never, liveQuotaLoader as never);
     const state = await service.getState();
 
     expect(state.providers.find((item: { id: string }) => item.id === "codex")?.connected).toBe(true);
