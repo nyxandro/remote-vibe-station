@@ -102,11 +102,11 @@ export type CliproxyOAuthCompleteInput = {
 @Injectable()
 export class CliproxyAccountService {
   private readonly logger = new Logger(CliproxyAccountService.name);
+  private readonly liveQuotaLoader: CliproxyLiveQuotaLoader = loadCliproxyLiveQuota;
 
   public constructor(
     private readonly api: CliproxyManagementClient,
-    private readonly runtime: CliproxyAuthRuntimeService,
-    private readonly liveQuotaLoader: CliproxyLiveQuotaLoader = loadCliproxyLiveQuota
+    private readonly runtime: CliproxyAuthRuntimeService
   ) {}
 
   public async getState(): Promise<CliproxyAccountState> {

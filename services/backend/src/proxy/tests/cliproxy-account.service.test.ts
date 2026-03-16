@@ -174,7 +174,8 @@ describe("CliproxyAccountService", () => {
       return null;
     });
 
-    const service = new CliproxyAccountService(api as never, runtime as never, liveQuotaLoader as never);
+    const service = new CliproxyAccountService(api as never, runtime as never);
+    (service as unknown as { liveQuotaLoader: unknown }).liveQuotaLoader = liveQuotaLoader;
     const state = await service.getState();
 
     expect(state.providers.find((item: { id: string }) => item.id === "codex")?.connected).toBe(true);
