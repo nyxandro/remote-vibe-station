@@ -480,8 +480,9 @@ function normalizePermissionRule(rule) {
 }
 
 function buildManagedPermissionConfig() {
-  /* Telegram uploads and agent share files live outside the project worktree, so OpenCode must not ask every time. */
+  /* Telegram file exchange and skill loading are trusted runtime capabilities for this managed OpenCode instance. */
   return {
+    skill: "allow",
     external_directory: {
       [TELEGRAM_ATTACHMENT_DIRECTORY]: "allow",
       [TELEGRAM_AGENT_SHARE_DIRECTORY]: "allow"

@@ -297,6 +297,7 @@ test("generateOpenCodeConfigFromEnv fetches /models and builds provider config",
     }
   });
   assert.deepEqual(config.permission, {
+    skill: "allow",
     external_directory: {
       "/root/.local/share/opencode/telegram-prompt-attachments/**": "allow",
       "/root/.local/share/opencode/agent-share/**": "allow"
@@ -414,6 +415,7 @@ test("writeOpenCodeConfigFromEnv preserves unrelated OpenCode config sections", 
     });
     assert.deepEqual(saved.permission, {
       "*": "allow",
+      skill: "allow",
       external_directory: {
         "*": "ask",
         "/tmp/manual/**": "allow",
