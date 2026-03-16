@@ -36,6 +36,26 @@ export const cliproxyAccountsFixture: CliproxyAccountState = {
       canManage: true,
       status: "ready",
       statusMessage: "ok",
+      quota: {
+        mode: "live",
+        planType: "plus",
+        windows: [
+          {
+            id: "five-hour",
+            label: "5 часов",
+            remainingPercent: 65,
+            resetAt: null,
+            resetAfterSeconds: 3600
+          },
+          {
+            id: "weekly",
+            label: "7 дней",
+            remainingPercent: 80,
+            resetAt: null,
+            resetAfterSeconds: 172800
+          }
+        ]
+      },
       usage: {
         requestCount: 3,
         tokenCount: 1450,

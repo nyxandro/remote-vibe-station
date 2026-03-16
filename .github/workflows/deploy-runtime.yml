@@ -1,0 +1,83 @@
+name: Deploy Runtime
+
+on:
+  workflow_run:
+    workflows:
+      - Build And Publish Images
+    types:
+      - completed
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-runtime-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'master'
+      ) ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Validate deploy secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" || { echo "Missing secret: DEPLOY_HOST" >&2; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "Missing secret: DEPLOY_USER" >&2; exit 1; }
+          test -n "$DEPLOY_SSH_KEY" || { echo "Missing secret: DEPLOY_SSH_KEY" >&2; exit 1; }
+
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known_hosts
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy latest runtime images
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_RUNTIME_DIR: ${{ secrets.DEPLOY_RUNTIME_DIR || '/opt/remote-vibe-station-runtime' }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "DEPLOY_RUNTIME_DIR='$DEPLOY_RUNTIME_DIR' GHCR_USERNAME='$GHCR_USERNAME' GHCR_TOKEN='$GHCR_TOKEN' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "$DEPLOY_RUNTIME_DIR"
+
+          if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          fi
+
+          docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml pull
+          docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
+
+          if [ -x ./runtime-maintenance.sh ]; then
+            ./runtime-maintenance.sh
+          fi
+          EOF

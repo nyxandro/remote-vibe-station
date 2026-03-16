@@ -138,9 +138,13 @@ describe("ProvidersTab", () => {
     expect(screen.getByText("Запросы: 3")).toBeTruthy();
     expect(screen.getByText("Токены: 1,450")).toBeTruthy();
     expect(screen.getByText("Ошибки: 1")).toBeTruthy();
-    expect(screen.getByText("Квота: Квота доступна")).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: /Quota state for codex-user@example.com/i })).toBeTruthy();
-    expect(screen.getByText("Квота доступна")).toBeTruthy();
+    expect(screen.getByText("Квота: live")).toBeTruthy();
+    expect(screen.getByText("Тариф: plus")).toBeTruthy();
+    expect(screen.getByText(/5 часов: 65% осталось/i)).toBeTruthy();
+    expect(screen.getByText(/7 дней: 80% осталось/i)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: /Quota 5 часов for codex-user@example.com/i })).toBeTruthy();
+    expect(screen.getByText("65% осталось")).toBeTruthy();
+    expect(screen.getByText("80% осталось")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
 
@@ -171,7 +175,7 @@ describe("ProvidersTab", () => {
     });
 
     expect(screen.getByText("Ошибка: usage_limit_reached")).toBeTruthy();
-    expect(screen.getByText("Тариф: plus")).toBeTruthy();
+    expect(screen.getAllByText("Тариф: plus").length).toBeGreaterThan(0);
     expect(screen.getByText(/Лимит сбросится:/i)).toBeTruthy();
     expect(screen.getByText(/Сброс через:/i)).toBeTruthy();
   });
@@ -296,6 +300,7 @@ describe("ProvidersTab", () => {
             canManage: true,
             status: "active",
             statusMessage: "za.nyxa@gmail.com",
+            quota: null,
             usage: {
               requestCount: 1,
               tokenCount: 10,
@@ -337,6 +342,7 @@ describe("ProvidersTab", () => {
             canManage: true,
             status: "ready",
             statusMessage: null,
+            quota: null,
             usage: {
               requestCount: 0,
               tokenCount: 0,

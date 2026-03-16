@@ -74,6 +74,71 @@ describe("CliproxyAccountService", () => {
           totalTokens: 200
         }
       ]),
+      apiCall: jest.fn().mockImplementation(async (input: { url: string }) => {
+        if (input.url === "https://chatgpt.com/backend-api/wham/usage") {
+          return {
+            statusCode: 200,
+            body: {
+              plan_type: "plus",
+              rate_limit: {
+                primary_window: {
+                  used_percent: 35,
+                  limit_window_seconds: 18_000,
+                  reset_after_seconds: 3_600
+                },
+                secondary_window: {
+                  used_percent: 20,
+                  limit_window_seconds: 604_800,
+                  reset_after_seconds: 172_800
+                }
+              }
+            },
+            bodyText: ""
+          };
+        }
+
+        if (input.url === "https://api.anthropic.com/api/oauth/usage") {
+          return {
+            statusCode: 200,
+            body: {
+              five_hour: {
+                utilization: 25,
+                resets_at: "2026-03-06T15:00:00.000Z"
+              },
+              seven_day: {
+                utilization: 40,
+                resets_at: "2026-03-10T15:00:00.000Z"
+              }
+            },
+            bodyText: ""
+          };
+        }
+
+        if (input.url === "https://api.anthropic.com/api/oauth/profile") {
+          return {
+            statusCode: 200,
+            body: {
+              account: {
+                has_claude_pro: true
+              }
+            },
+            bodyText: ""
+          };
+        }
+
+        throw new Error(`Unexpected apiCall URL: ${input.url}`);
+      }),
+      downloadAuthFileJson: jest.fn().mockImplementation(async (name: string) => {
+        if (name === "codex-user@example.com") {
+          return {
+            id_token: {
+              chatgpt_account_id: "chatgpt-account-1"
+            }
+          };
+        }
+
+        return {};
+      }),
       startOAuth: jest.fn(),
       completeOAuth: jest.fn()
     };
@@ -103,6 +168,26 @@ describe("CliproxyAccountService", () => {
         canManage: true,
         status: "ready",
         statusMessage: "ok",
+        quota: {
+          mode: "live",
+          planType: "pro",
+          windows: [
+            {
+              id: "five-hour",
+              label: "5 часов",
+              remainingPercent: 75,
+              resetAt: "2026-03-06T15:00:00.000Z",
+              resetAfterSeconds: null
+            },
+            {
+              id: "seven-day",
+              label: "7 дней",
+              remainingPercent: 60,
+              resetAt: "2026-03-10T15:00:00.000Z",
+              resetAfterSeconds: null
+            }
+          ]
+        },
         usage: {
           requestCount: 1,
           tokenCount: 300,
@@ -124,6 +209,26 @@ describe("CliproxyAccountService", () => {
         canManage: true,
         status: "ready",
         statusMessage: "ok",
+        quota: {
+          mode: "live",
+          planType: "plus",
+          windows: [
+            {
+              id: "five-hour",
+              label: "5 часов",
+              remainingPercent: 65,
+              resetAt: null,
+              resetAfterSeconds: 3600
+            },
+            {
+              id: "weekly",
+              label: "7 дней",
+              remainingPercent: 80,
+              resetAt: null,
+              resetAfterSeconds: 172800
+            }
+          ]
+        },
         usage: {
           requestCount: 2,
           tokenCount: 600,

@@ -286,6 +286,17 @@ export type CliproxyAccountState = {
     canManage: boolean;
     status: string | null;
     statusMessage: string | null;
+    quota: {
+      mode: "live";
+      planType: string | null;
+      windows: Array<{
+        id: string;
+        label: string;
+        remainingPercent: number;
+        resetAt: string | null;
+        resetAfterSeconds: number | null;
+      }>;
+    } | null;
     usage: {
       requestCount: number;
       tokenCount: number;

@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 
 import { CliproxyAccountState, CliproxyOAuthStartPayload } from "../types";
+import { CliproxyQuotaBlock } from "./CliproxyQuotaBlock";
 import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 type Props = {
@@ -189,7 +190,7 @@ export const CliproxyAccountsSection = (props: Props) => {
     label: string;
     value: number;
   } => {
-    /* CLIProxy exposes real availability/error state, but not an exact remaining-quota percentage. */
+    /* Availability fallback remains useful for providers that do not expose live quota windows. */
     const parsedStatus = normalizeCliproxyStatusMessage(account.statusMessage);
     if (parsedStatus.isQuotaExceeded || account.unavailable) {
       return {
@@ -218,7 +219,7 @@ export const CliproxyAccountsSection = (props: Props) => {
         Здесь отображаются аккаунты, уже подключенные внутри CLIProxy. Можно вручную сделать один аккаунт активным или удалить ненужный auth file.
       </div>
       <div className="project-create-note">
-        CLIProxy не отдает точный процент остатка квоты, поэтому UI показывает реальное состояние доступности, а не вычисленные по токенам псевдо-проценты.
+        Если CLIProxy runtime поддерживает live quota endpoints, карточки ниже показывают реальные окна лимитов. Для остальных провайдеров остается статус доступности.
       </div>
 
       {!props.accounts?.usageTrackingEnabled ? (
@@ -256,27 +257,13 @@ export const CliproxyAccountsSection = (props: Props) => {
               {account.usage.models.length > 0 ? (
                 <div className="project-create-note">Модели: {account.usage.models.join(", ")}</div>
               ) : null}
-               {props.accounts ? (
-                <div className="providers-usage-block">
-                  <div className="project-create-note">Квота: {quotaState.label}</div>
-                  <div
-                    className="providers-usage-meter"
-                    role="progressbar"
-                    aria-label={`Quota state for ${account.name}`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={quotaState.value}
-                    aria-valuetext={quotaState.label}
-                  >
-                    <div
-                      className="providers-usage-meter-fill"
-                      style={{ width: `${quotaState.value}%` }}
-                    />
-                    <span className="providers-usage-meter-text">
-                      {quotaState.label}
-                    </span>
-                  </div>
-                </div>
+              {props.accounts ? (
+                <CliproxyQuotaBlock
+                  account={account}
+                  fallbackLabel={quotaState.label}
+                  fallbackValue={quotaState.value}
+                  formatDuration={formatDuration}
+                />
               ) : null}
 
               {/* Account actions stay explicit because activation disables same-provider siblings on the backend. */}

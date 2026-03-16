@@ -108,6 +108,31 @@ sudo ./scripts/install-runtime.sh \
 
 - named volumes (`opencode_data`, `opencode_config`, `backend_data`, `cliproxy_auth` и т.д.).
 
+## Автодеплой после push
+
+В репозитории есть два workflow:
+
+- `Build And Publish Images` - собирает и публикует образы в GHCR на каждый push в `master`/`main`
+- `Deploy Runtime` - после успешной публикации подключается к серверу по SSH, делает `docker compose pull` и `docker compose up -d --remove-orphans`
+
+Для включения автодеплоя добавьте GitHub Secrets в репозиторий:
+
+- `DEPLOY_HOST` - IP или hostname сервера
+- `DEPLOY_USER` - SSH user
+- `DEPLOY_SSH_KEY` - приватный SSH-ключ для входа на сервер
+- `DEPLOY_PORT` - опционально, порт SSH, по умолчанию `22`
+- `DEPLOY_RUNTIME_DIR` - опционально, путь к runtime, по умолчанию `/opt/remote-vibe-station-runtime`
+- `GHCR_USERNAME` - опционально, username для `docker login ghcr.io`
+- `GHCR_TOKEN` - опционально, токен для `docker login ghcr.io`
+
+Ожидания от сервера:
+
+- runtime уже установлен через `scripts/install-runtime.sh`;
+- в runtime-каталоге есть `.env`, `docker-compose.yml`, `docker-compose.vless.yml`;
+- у SSH-пользователя есть право запускать `docker compose`.
+
+Если образы GHCR публичные, `GHCR_USERNAME` и `GHCR_TOKEN` можно не задавать.
+
 ## Общий toolbox runtime
 
 - Все агентные команды исполняются в общем `opencode` runtime-контейнере, а не в каждом проекте отдельно.

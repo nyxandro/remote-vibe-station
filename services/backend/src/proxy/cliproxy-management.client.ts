@@ -5,6 +5,7 @@
  * - CliproxyProviderId - Supported OAuth provider identifiers.
  * - CliproxyAuthFile - Structured auth-file record from management API.
  * - CliproxyUsageDetail - Flattened usage snapshot row for per-account aggregation.
+ * - CliproxyApiCallResult - Normalized management api-call response wrapper.
  * - CliproxyManagementClient - Calls management endpoints with secret header.
  */
 
@@ -43,6 +44,10 @@ type AuthFileListEntry = {
   status_message?: string;
   email?: string;
   account?: string;
+  metadata?: Record<string, unknown>;
+  attributes?: Record<string, unknown>;
+  id_token?: unknown;
+  plan_type?: string;
 };
 
 export type CliproxyAuthFile = {
@@ -60,6 +65,25 @@ export type CliproxyAuthFile = {
   statusMessage: string | null;
   email: string | null;
   account: string | null;
+  metadata: Record<string, unknown> | null;
+  attributes: Record<string, unknown> | null;
+  idToken: unknown;
+  planType: string | null;
+};
+
+type ApiCallResponse = {
+  status_code?: number;
+  statusCode?: number;
+  header?: Record<string, string[]>;
+  headers?: Record<string, string[]>;
+  body?: unknown;
+};
+
+export type CliproxyApiCallResult = {
+  statusCode: number;
+  headers: Record<string, string[]>;
+  bodyText: string;
+  body: unknown;
 };
 
 type UsageDetailEntry = {
@@ -177,6 +201,74 @@ export class CliproxyManagementClient {
     });
   }
 
+  public async apiCall(input: {
+    authIndex?: string | null;
+    method: string;
+    url: string;
+    headers?: Record<string, string>;
+    body?: string;
+  }): Promise<CliproxyApiCallResult> {
+    /* Management api-call proxies authenticated upstream requests needed for live quota inspection. */
+    const payload = await this.request<ApiCallResponse>("/v0/management/api-call", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        auth_index: input.authIndex ?? undefined,
+        method: input.method,
+        url: input.url,
+        header: input.headers,
+        data: input.body
+      })
+    });
+
+    const rawStatusCode = payload?.status_code ?? payload?.statusCode;
+    const statusCode = typeof rawStatusCode === "number"
+      ? rawStatusCode
+      : typeof rawStatusCode === "string"
+        ? Number(rawStatusCode)
+        : Number.NaN;
+    if (!Number.isFinite(statusCode)) {
+      throw new BadGatewayException(
+        `CLIProxy management api-call returned invalid status code: ${JSON.stringify(payload)}`
+      );
+    }
+    const headers = payload?.header ?? payload?.headers ?? {};
+    const normalizedBody = this.normalizeApiCallBody(payload?.body);
+
+    return {
+      statusCode,
+      headers,
+      bodyText: normalizedBody.bodyText,
+      body: normalizedBody.body
+    };
+  }
+
+  public async downloadAuthFileJson(name: string): Promise<Record<string, unknown>> {
+    /* Downloaded auth JSON provides provider-specific metadata missing from the summary list payload. */
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      throw new BadGatewayException("CLIProxy auth file name is required for download");
+    }
+
+    const body = await this.requestText(
+      `/v0/management/auth-files/download?name=${encodeURIComponent(normalizedName)}`,
+      { method: "GET" }
+    );
+
+    try {
+      const parsed = JSON.parse(body) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("auth file is not a JSON object");
+      }
+      return parsed as Record<string, unknown>;
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      throw new BadGatewayException(
+        `CLIProxy auth file download returned invalid JSON for '${normalizedName}': ${details}`
+      );
+    }
+  }
+
   public async startOAuth(provider: CliproxyProviderId): Promise<{ provider: CliproxyProviderId; state: string; url: string }> {
     /* Dedicated auth-url endpoints initialize provider OAuth/device flow in CLIProxy. */
     const endpoint = PROVIDER_ENDPOINTS[provider];
@@ -270,6 +362,34 @@ export class CliproxyManagementClient {
     }
   }
 
+  private async requestText(path: string, init: RequestInit): Promise<string> {
+    /* File download endpoints return raw text, so callers need a non-JSON variant with the same auth handling. */
+    const managementPassword = this.config.cliproxyManagementPassword;
+    if (!managementPassword) {
+      throw new BadGatewayException("CLIPROXY_MANAGEMENT_PASSWORD is not configured");
+    }
+
+    const baseUrl = this.config.cliproxyManagementUrl ?? DEFAULT_MANAGEMENT_URL;
+    const url = `${baseUrl}${path}`;
+    const headers = new Headers(init.headers);
+    headers.set(MANAGEMENT_KEY_HEADER, managementPassword);
+
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      signal: AbortSignal.timeout(MANAGEMENT_TIMEOUT_MS)
+    });
+
+    const body = await response.text();
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `CLIProxy management request failed (${response.status}) at '${path}': ${body || "empty response"}`
+      );
+    }
+
+    return body;
+  }
+
   private async requestPublic<T>(path: string, init: RequestInit): Promise<T> {
     /* Public OpenAI-compatible endpoints intentionally skip management header but still use shared timeout/parsing. */
     const baseUrl = this.config.cliproxyManagementUrl ?? DEFAULT_MANAGEMENT_URL;
@@ -320,11 +440,15 @@ export class CliproxyManagementClient {
         unavailable: false,
         label: null,
         status: null,
-        statusMessage: null,
-        email: null,
-        account: null
-      };
-    }
+      statusMessage: null,
+      email: null,
+      account: null,
+      metadata: null,
+      attributes: null,
+      idToken: null,
+      planType: null
+    };
+  }
 
     if (!item || typeof item !== "object") {
       return null;
@@ -351,7 +475,46 @@ export class CliproxyManagementClient {
       statusMessage:
         typeof item.status_message === "string" && item.status_message.trim() ? item.status_message.trim() : null,
       email: typeof item.email === "string" && item.email.trim() ? item.email.trim() : null,
-      account: typeof item.account === "string" && item.account.trim() ? item.account.trim() : null
+      account: typeof item.account === "string" && item.account.trim() ? item.account.trim() : null,
+      metadata: this.readObject((item as any).metadata),
+      attributes: this.readObject((item as any).attributes),
+      idToken: (item as any).id_token ?? null,
+      planType: typeof (item as any).plan_type === "string" && (item as any).plan_type.trim()
+        ? (item as any).plan_type.trim()
+        : null
     };
+  }
+
+  private normalizeApiCallBody(input: unknown): { bodyText: string; body: unknown } {
+    /* api-call may return raw strings or already-JSON payloads, so normalize both for quota parsers. */
+    if (input === undefined || input === null) {
+      return { bodyText: "", body: null };
+    }
+
+    if (typeof input === "string") {
+      const bodyText = input;
+      const normalized = bodyText.trim();
+      if (!normalized) {
+        return { bodyText, body: null };
+      }
+      try {
+        return { bodyText, body: JSON.parse(normalized) as unknown };
+      } catch {
+        return { bodyText, body: bodyText };
+      }
+    }
+
+    try {
+      return { bodyText: JSON.stringify(input), body: input };
+    } catch {
+      return { bodyText: String(input), body: input };
+    }
+  }
+
+  private readObject(value: unknown): Record<string, unknown> | null {
+    /* Structured metadata bags should stay available for provider-specific quota resolution. */
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
   }
 }

@@ -5,4 +5,6 @@ infra/traefik/acme.json
 node_modules/
 dist/
 services/**/dist/
+*.root-owned.backup/
+services/**/dist.root-owned.backup/
 *.tsbuildinfo
