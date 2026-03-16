@@ -70,6 +70,10 @@ grep -q '^\s*vless-proxy:' "$VLESS_COMPOSE_FILE"
 grep -q 'HTTP_PROXY=http://vless-proxy:8080' "$VLESS_ENV_FILE"
 grep -q 'CHANGE_ME_UUID' "$VLESS_XRAY_FILE"
 
+# Ensure installer deploy path always includes the optional VLESS override file.
+grep -q 'docker compose --env-file \.env -f docker-compose.yml -f docker-compose.vless.yml pull' "$INSTALL_SCRIPT"
+grep -q 'docker compose --env-file \.env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans' "$INSTALL_SCRIPT"
+
 # Ensure maintenance script prunes safe Docker garbage without touching named volumes.
 grep -q 'docker image prune -af --filter "until=168h"' "$MAINTENANCE_SCRIPT"
 grep -q 'docker builder prune --help' "$MAINTENANCE_SCRIPT"

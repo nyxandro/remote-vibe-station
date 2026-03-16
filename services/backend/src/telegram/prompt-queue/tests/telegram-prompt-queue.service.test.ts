@@ -227,6 +227,55 @@ describe("TelegramPromptQueueService", () => {
     );
   });
 
+  it("sends PDF documents as file prompt parts", async () => {
+    /* PDF uploads should preserve application/pdf MIME so OpenCode receives a real document attachment. */
+    const { service, promptService, attachments } = createService();
+    attachments.materializeAttachments.mockResolvedValue([
+      {
+        id: "att-pdf-1",
+        localPath: "/tmp/telegram/att-1.pdf",
+        promptUrl: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.pdf",
+        fileName: "att-1.pdf",
+        mimeType: "application/pdf",
+        fileSizeBytes: 4096
+      }
+    ]);
+
+    await service.enqueueIncomingPrompt({
+      adminId: 7,
+      chatId: 70,
+      messageId: 3,
+      text: "Вытащи требования из PDF",
+      attachments: [
+        {
+          kind: "document",
+          telegramFileId: "pdf-1",
+          fileName: "requirements.pdf",
+          mimeType: "application/pdf",
+          fileSizeBytes: 4096,
+          mediaGroupId: null
+        }
+      ]
+    });
+    jest.advanceTimersByTime(2_000);
+    await flushTimers();
+
+    expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptTextForTelemetry: "Вытащи требования из PDF",
+        parts: [
+          { type: "text", text: "Вытащи требования из PDF" },
+          {
+            type: "file",
+            mime: "application/pdf",
+            url: "file:///root/.local/share/opencode/telegram-prompt-attachments/att-1.pdf",
+            filename: "att-1.pdf"
+          }
+        ]
+      })
+    );
+  });
+
   it("merges album messages from one media group into one prompt with multiple files", async () => {
     /* Telegram media groups should stay together so the agent sees the whole album in one turn. */
     const { service, promptService, attachments } = createService();

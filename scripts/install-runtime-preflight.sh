@@ -73,9 +73,13 @@ check_ports_free() {
 }
 
 check_compose_valid() {
-  # Validate generated compose and env interpolation before deployment.
+  # Validate base runtime plus the generated VLESS override exactly like the real deploy path.
   local install_dir="$1"
-  docker compose --env-file "$install_dir/.env" -f "$install_dir/docker-compose.yml" config >/dev/null
+  docker compose \
+    --env-file "$install_dir/.env" \
+    -f "$install_dir/docker-compose.yml" \
+    -f "$install_dir/docker-compose.vless.yml" \
+    config >/dev/null
 }
 
 INSTALL_DIR=""

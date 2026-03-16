@@ -1,11 +1,11 @@
 /**
- * @fileoverview Helpers that normalize Telegram text and image updates into one backend payload shape.
+ * @fileoverview Helpers that normalize Telegram text and supported file updates into one backend payload shape.
  *
  * Exports:
  * - TelegramPromptAttachmentInput (L11) - Attachment metadata sent to backend enqueue endpoint.
  * - TelegramPromptEnqueueBody (L20) - Shared bot-to-backend payload for prompt chunks.
  * - extractTelegramPhotoInput (L26) - Normalizes photo messages with caption and largest image variant.
- * - extractTelegramImageDocumentInput (L57) - Normalizes image documents while rejecting non-image files.
+ * - extractTelegramImageDocumentInput (L57) - Normalizes image/PDF documents while rejecting unsupported files.
  * - buildTelegramPromptEnqueueBody (L88) - Builds stable JSON payload for backend enqueue route.
  */
 
@@ -65,7 +65,7 @@ export const extractTelegramPhotoInput = (message: unknown): TelegramPromptEnque
 };
 
 export const extractTelegramImageDocumentInput = (message: unknown): TelegramPromptEnqueueBody | null => {
-  /* Treat only image documents as agent-visible pictures; other files stay outside this flow. */
+  /* Allow image documents and PDFs so Telegram can forward both vision prompts and document-analysis requests. */
   const candidate = message as {
     message_id?: number;
     caption?: string;
@@ -76,7 +76,8 @@ export const extractTelegramImageDocumentInput = (message: unknown): TelegramPro
   const document = candidate?.document;
   const fileId = typeof document?.file_id === "string" ? document.file_id.trim() : "";
   const mimeType = typeof document?.mime_type === "string" ? document.mime_type.trim() : "";
-  if (!fileId || !mimeType.startsWith("image/")) {
+  const isSupportedDocument = mimeType.startsWith("image/") || mimeType === "application/pdf";
+  if (!fileId || !isSupportedDocument) {
     return null;
   }
 

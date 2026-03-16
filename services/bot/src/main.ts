@@ -521,7 +521,7 @@ const bootstrap = async (): Promise<void> => {
   });
 
   bot.on("document", async (ctx) => {
-    /* Support image documents while failing fast for unsupported generic file uploads. */
+    /* Support image and PDF documents while failing fast for unsupported generic file uploads. */
     if (!isAdmin(ctx.from?.id)) {
       await ctx.reply("Access denied");
       return;
@@ -529,7 +529,9 @@ const bootstrap = async (): Promise<void> => {
 
     const promptBody = extractTelegramImageDocumentInput(ctx.message);
     if (!promptBody) {
-      await ctx.reply("Сейчас в чат агента поддерживаются только изображения: photo или document(image/*).");
+      await ctx.reply(
+        "Сейчас в чат агента поддерживаются изображения и PDF: photo, document(image/*) или document(application/pdf)."
+      );
       return;
     }
 

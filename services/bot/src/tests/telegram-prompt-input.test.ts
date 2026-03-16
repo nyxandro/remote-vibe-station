@@ -102,6 +102,35 @@ describe("telegram-prompt-input", () => {
     expect(nonImage).toBeNull();
   });
 
+  it("extracts PDF documents for file-aware agent prompts", () => {
+    /* PDF uploads should keep filename and MIME metadata so the backend can pass them as file parts. */
+    const result = extractTelegramImageDocumentInput({
+      message_id: 13,
+      caption: "Посмотри приказ",
+      document: {
+        file_id: "pdf-1",
+        file_name: "prikaz.pdf",
+        mime_type: "application/pdf",
+        file_size: 2048
+      }
+    });
+
+    expect(result).toEqual({
+      messageId: 13,
+      text: "Посмотри приказ",
+      attachments: [
+        {
+          kind: "document",
+          telegramFileId: "pdf-1",
+          fileName: "prikaz.pdf",
+          mimeType: "application/pdf",
+          fileSizeBytes: 2048,
+          mediaGroupId: null
+        }
+      ]
+    });
+  });
+
   it("builds backend payload with text, attachment and message id", () => {
     /* Bot should send one normalized payload shape for text, photo and voice flows. */
     expect(

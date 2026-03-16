@@ -128,7 +128,7 @@ export class TelegramController {
     },
     @Req() req: Request
   ) {
-    /* Accept text chunks and image attachments for debounced Telegram-to-OpenCode queueing. */
+    /* Accept text chunks plus supported Telegram attachments for debounced Telegram-to-OpenCode queueing. */
     const adminId = (req as any).authAdminId as number | undefined;
     if (!adminId) {
       throw new BadRequestException("Admin identity missing");

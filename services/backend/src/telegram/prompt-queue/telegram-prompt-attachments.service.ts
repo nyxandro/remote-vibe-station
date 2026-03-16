@@ -145,7 +145,10 @@ export class TelegramPromptAttachmentsService {
   }
 
   private defaultExtensionForMime(mimeType: string | null): string {
-    /* Map common Telegram image MIME types to deterministic file extensions. */
+    /* Map supported Telegram MIME types to deterministic file extensions when filename is absent. */
+    if (mimeType === "application/pdf") {
+      return ".pdf";
+    }
     if (mimeType === "image/png") {
       return ".png";
     }
@@ -158,6 +161,9 @@ export class TelegramPromptAttachmentsService {
   private inferMimeTypeFromName(fileName: string): string {
     /* Use filename extension only when Telegram omitted MIME metadata. */
     const extension = path.extname(fileName).toLowerCase();
+    if (extension === ".pdf") {
+      return "application/pdf";
+    }
     if (extension === ".png") {
       return "image/png";
     }

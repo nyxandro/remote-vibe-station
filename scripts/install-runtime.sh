@@ -381,10 +381,10 @@ run_runtime_maintenance_now() {
 }
 
 start_stack() {
-  # Pull immutable runtime images and start services in detached mode.
+  # Always include the optional VLESS override so saved proxy routing survives every deploy.
   pushd "$INSTALL_DIR" >/dev/null
-docker compose --env-file .env pull
-  docker compose --env-file .env up -d --remove-orphans
+  docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml pull
+  docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
   popd >/dev/null
 }
 BOT_TOKEN=""
