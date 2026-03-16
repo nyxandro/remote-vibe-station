@@ -249,7 +249,13 @@ export const resolveCodexChatgptAccountId = (
 
   for (const candidate of candidates) {
     const payload = parseJsonObject(candidate);
-    const accountId = normalizeString(payload?.chatgpt_account_id ?? payload?.chatgptAccountId);
+    const nestedAuth = readObject(payload?.["https://api.openai.com/auth"]);
+    const accountId = normalizeString(
+      payload?.chatgpt_account_id ??
+      payload?.chatgptAccountId ??
+      nestedAuth?.chatgpt_account_id ??
+      nestedAuth?.chatgptAccountId
+    );
     if (accountId) {
       return accountId;
     }
