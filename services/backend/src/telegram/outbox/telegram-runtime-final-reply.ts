@@ -89,6 +89,17 @@ export class TelegramRuntimeFinalReply {
     return true;
   }
 
+  public touchSession(sessionID: string): void {
+    /* Active runtime deltas should keep fallback footer metadata alive for genuinely long-running turns. */
+    this.prune(Date.now());
+    const stored = this.metaBySession.get(sessionID);
+    if (!stored) {
+      return;
+    }
+
+    stored.updatedAtMs = Date.now();
+  }
+
   public clearSession(sessionID: string): void {
     /* Turn-scoped footer metadata should not leak into future unrelated sessions. */
     this.metaBySession.delete(sessionID);

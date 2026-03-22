@@ -75,6 +75,9 @@ export class OpenCodeSessionRoutingStore {
       return null;
     }
 
+    /* Active streaming sessions should keep their routing alive while progress continues to flow. */
+    route.updatedAtMs = Date.now();
+
     return {
       adminId: route.adminId,
       directory: route.directory

@@ -295,6 +295,9 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
+    /* Long text streams should keep fallback final-reply metadata fresh until the turn actually finishes. */
+    this.finalReply.touchSession(sessionID);
+
     const partKey = buildAssistantPartKey(route.adminId, sessionID, partID);
     const nextPartText = `${this.assistantTextByPart.get(partKey) ?? ""}${delta}`;
     const sessionText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;

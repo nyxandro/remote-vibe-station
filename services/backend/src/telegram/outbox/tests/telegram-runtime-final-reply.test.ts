@@ -168,4 +168,71 @@ describe("Telegram runtime final reply fallback", () => {
     expect(outbox.enqueueAssistantReply).not.toHaveBeenCalled();
     nowSpy.mockRestore();
   });
+
+  it("keeps footer metadata alive while long runtime text keeps streaming", () => {
+    /* Active multi-hour turns should still get a footer if transport falls back to runtime-only finalization. */
+    const { bridge, outbox } = makeBridge();
+    const nowSpy = jest.spyOn(Date, "now");
+
+    nowSpy.mockReturnValue(1_000);
+    (bridge as any).onEvent({
+      type: "opencode.turn.started",
+      ts: new Date().toISOString(),
+      data: {
+        sessionId: "session-keepalive",
+        providerID: "cliproxy",
+        modelID: "gpt-5.4",
+        thinking: "medium",
+        agent: "build"
+      }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-keepalive",
+        sessionID: "session-keepalive"
+      }
+    });
+
+    nowSpy.mockReturnValue(5 * 60 * 60 * 1000);
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-keepalive",
+            partID: "assistant-part-keepalive",
+            field: "text",
+            delta: "Очень длинная сессия всё ещё стримит ответ"
+          }
+        })
+      }
+    });
+
+    nowSpy.mockReturnValue(7 * 60 * 60 * 1000);
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "session.idle",
+          properties: {
+            sessionID: "session-keepalive"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantReply).toHaveBeenCalledWith({
+      adminId: 10,
+      delivery: expect.objectContaining({
+        sessionId: "session-keepalive",
+        providerID: "cliproxy",
+        modelID: "gpt-5.4"
+      })
+    });
+    nowSpy.mockRestore();
+  });
 });
