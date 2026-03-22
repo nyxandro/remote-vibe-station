@@ -10,11 +10,12 @@
  * - TelegramEventsOutboxBridge (L23) - Subscribes to EventsService on startup.
  */
 
-import { Inject, Injectable, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, OnModuleInit, Optional } from "@nestjs/common";
 
 import { AppConfig, ConfigToken } from "../../config/config.types";
 import { EventsService } from "../../events/events.service";
 import { EventEnvelope } from "../../events/events.types";
+import { OpenCodeSessionRoutingStore } from "../../open-code/opencode-session-routing.store";
 import { TelegramOpenCodeRuntimeBridge } from "./telegram-opencode-runtime-bridge.service";
 import { TelegramOutboxService } from "./telegram-outbox.service";
 
@@ -24,7 +25,8 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
     private readonly events: EventsService,
     private readonly outbox: TelegramOutboxService,
     private readonly runtimeBridge: TelegramOpenCodeRuntimeBridge,
-    @Inject(ConfigToken) private readonly config: AppConfig
+    @Inject(ConfigToken) private readonly config: AppConfig,
+    @Optional() private readonly sessionRouting?: OpenCodeSessionRoutingStore
   ) {}
 
   public onModuleInit(): void {
@@ -219,7 +221,17 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
      */
     const raw = (event.data as any)?.adminId;
     const id = typeof raw === "number" ? raw : raw === null || typeof raw === "undefined" ? null : Number(raw);
-    return id && Number.isFinite(id) ? id : null;
+    if (id && Number.isFinite(id)) {
+      return id;
+    }
+
+    /* Runner turns publish opencode.message without adminId, so fall back to the bound session owner when available. */
+    const sessionId = typeof (event.data as any)?.sessionId === "string" ? (event.data as any).sessionId.trim() : "";
+    if (!sessionId || !this.sessionRouting) {
+      return null;
+    }
+
+    return this.sessionRouting.resolve(sessionId)?.adminId ?? null;
   }
 
   private resolveFinalAssistantText(data: Record<string, unknown> | null | undefined): string {

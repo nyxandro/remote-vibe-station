@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { EventsService } from "../../../events/events.service";
+import { OpenCodeSessionRoutingStore } from "../../../open-code/opencode-session-routing.store";
 import { TelegramStreamStore } from "../../telegram-stream.store";
 import { TelegramOutboxStore } from "../telegram-outbox.store";
 import { TelegramOpenCodeRuntimeBridge } from "../telegram-opencode-runtime-bridge.service";
@@ -202,6 +203,74 @@ describe("TelegramEventsOutboxBridge", () => {
       });
       expect(Array.isArray((breadcrumb as any)?.data?.itemIds)).toBe(true);
       expect((breadcrumb as any)?.data?.itemIds).toHaveLength(1);
+    } finally {
+      process.chdir(prev);
+      try {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  });
+
+  test("routes runner final replies through session routing when adminId is omitted", () => {
+    /* Kanban runner final replies should still gain the standard footer because the session already belongs to a bound admin. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-bridge-runner-footer-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, true);
+
+      const outboxStore = new TelegramOutboxStore();
+      const outboxService = new TelegramOutboxService(streamStore, outboxStore);
+      const events = new EventsService(config as any);
+      const routes = new OpenCodeSessionRoutingStore();
+      routes.bind("runner-session-1", { adminId: 1, directory: tmp });
+      const runtimeBridge = new TelegramOpenCodeRuntimeBridge(
+        config as any,
+        events,
+        routes,
+        outboxService,
+        { create: jest.fn(() => ({ token: "diff-token" })) } as any
+      );
+      runtimeBridge.onModuleInit();
+
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, runtimeBridge, config as any, routes);
+      bridge.onModuleInit();
+
+      events.publish({
+        type: "opencode.message",
+        ts: new Date().toISOString(),
+        data: {
+          sessionId: "runner-session-1",
+          text: "Задача выполнена через kanban runner.",
+          finalText: "Задача выполнена через kanban runner.",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: "medium",
+          agent: "build",
+          tokens: { input: 10, output: 20, reasoning: 0, cache: { read: 5, write: 0 } }
+        }
+      });
+
+      const items = readOutboxItems();
+      const assistantItems = items.filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(String(assistantItems[0]?.text ?? "")).toContain("cliproxy/gpt-5.4");
+      expect(String(assistantItems[0]?.text ?? "")).toContain("build");
     } finally {
       process.chdir(prev);
       try {
