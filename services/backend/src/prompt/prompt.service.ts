@@ -6,19 +6,21 @@
  * - PromptService (L61) - Sends prompts, commands, recovery, and session actions.
  */
 
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 
 import { EventsService } from "../events/events.service";
+import { OpenCodeFinalMessageService } from "../open-code/opencode-final-message.service";
 import { OpenCodeCommand, OpenCodeExecutionModel, OpenCodePromptInputPart } from "../open-code/opencode.types";
 import { OpenCodeClient, SessionResolution } from "../open-code/opencode-client";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
-import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
 import { isOpenCodeFetchTransportFailure, logOpenCodeTransportFailure } from "../open-code/opencode-transport-errors";
-import { summarizeOpenCodeParts } from "../open-code/opencode-telemetry";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { ProjectsService } from "../projects/projects.service";
 import { TelegramPreferencesService } from "../telegram/preferences/telegram-preferences.service";
 import { publishPromptRuntimeTurnStarted } from "./prompt-runtime-turn-event";
+
+const COMMAND_RUNTIME_PROVIDER_ID = "command";
+const COMMAND_RUNTIME_MODEL_ID = "command";
 
 type PromptResult = {
   sessionId: string;
@@ -63,14 +65,20 @@ const RUNTIME_SETTLE_AFTER_FETCH_FAILURE_MS = 30_000;
 
 @Injectable()
 export class PromptService {
+  private readonly finalMessages: OpenCodeFinalMessageService;
+
   public constructor(
     private readonly opencode: OpenCodeClient,
     private readonly events: EventsService,
     private readonly projects: ProjectsService,
     private readonly preferences: TelegramPreferencesService,
     private readonly sessionRouting: OpenCodeSessionRoutingStore,
-    private readonly opencodeEvents: OpenCodeEventsService
-  ) {}
+    private readonly opencodeEvents: OpenCodeEventsService,
+    @Optional() finalMessages?: OpenCodeFinalMessageService
+  ) {
+    /* Tests still construct PromptService manually, so fall back to a local shared publisher when DI is absent. */
+    this.finalMessages = finalMessages ?? new OpenCodeFinalMessageService(this.opencode, this.events);
+  }
 
   public async sendPrompt(text: string, adminId?: number): Promise<PromptResult> {
     /* Require active project to avoid using OpenCode global workspace. */
@@ -131,7 +139,16 @@ export class PromptService {
         this.sessionRouting.bind(sessionID, { adminId: input.adminId, directory: input.directory });
         this.opencodeEvents.watchPermissionOnce({ directory: input.directory, sessionID });
       }
-      publishPromptRuntimeTurnStarted(this.events, { adminId: input.adminId, projectSlug: input.projectSlug, directory: input.directory, sessionID });
+      publishPromptRuntimeTurnStarted(this.events, {
+        adminId: input.adminId,
+        projectSlug: input.projectSlug,
+        directory: input.directory,
+        sessionID,
+        providerID: execution.model.providerID,
+        modelID: execution.model.modelID,
+        thinking: execution.model.variant ?? null,
+        agent: execution.agent ?? "build"
+      });
 
       /* Notify Telegram when OpenCode had to create a fresh session outside explicit /new flow. */
       this.publishAutoSessionStarted({
@@ -258,7 +275,16 @@ export class PromptService {
           this.sessionRouting.bind(sessionID, { adminId, directory: active.rootPath });
           this.opencodeEvents.watchPermissionOnce({ directory: active.rootPath, sessionID });
         }
-        publishPromptRuntimeTurnStarted(this.events, { adminId, projectSlug: active.slug, directory: active.rootPath, sessionID });
+        publishPromptRuntimeTurnStarted(this.events, {
+          adminId,
+          projectSlug: active.slug,
+          directory: active.rootPath,
+          sessionID,
+          providerID: COMMAND_RUNTIME_PROVIDER_ID,
+          modelID: COMMAND_RUNTIME_MODEL_ID,
+          thinking: null,
+          agent: "build"
+        });
 
         /* Command execution must surface the same session reset warning as plain prompts. */
         this.publishAutoSessionStarted({
@@ -422,42 +448,15 @@ export class PromptService {
     /* Reuse one path for telemetry enrichment and outbound events. */
     const active = context.activeProject;
 
-    /* Resolve model limit/display names for token footer (best-effort). */
-    const contextLimit = await this.opencode
-      .getModelContextLimit({ providerID: result.info.providerID, modelID: result.info.modelID })
-      .then((v) => v?.context ?? undefined)
-      .catch(() => undefined);
-
-    const names = await this.opencode
-      .getModelDisplayName({ providerID: result.info.providerID, modelID: result.info.modelID })
-      .catch(() => null);
-
-    /* Summarize parts into a compact telemetry payload for Telegram. */
-    const telemetry = summarizeOpenCodeParts(result.parts);
-    const finalText = extractFinalOpenCodeText(result.parts) || result.responseText;
-
-    /* Emit message event for downstream consumers. */
-    this.events.publish({
-      type: "opencode.message",
-      ts: new Date().toISOString(),
-      data: {
-        text: result.responseText,
-        sessionId: result.sessionId,
-        projectSlug: active.slug,
-        directory: active.rootPath,
-        adminId: context.adminId ?? null,
-        finalText,
-        providerID: result.info.providerID,
-        modelID: result.info.modelID,
-        providerName: names?.providerName ?? null,
-        modelName: names?.modelName ?? null,
-        contextLimit: contextLimit ?? null,
-        thinking: context.thinking,
-        mode: result.info.mode,
-        agent: result.info.agent,
-        tokens: result.info.tokens,
-        telemetry
-      }
+    /* Shared final publisher keeps prompt and runner flows semantically identical for Telegram consumers. */
+    const published = await this.finalMessages.publish({
+      sessionId: result.sessionId,
+      responseText: result.responseText,
+      parts: result.parts,
+      info: result.info,
+      activeProject: active,
+      adminId: context.adminId,
+      thinking: context.thinking
     });
 
     return {
@@ -466,17 +465,13 @@ export class PromptService {
       model: {
         providerID: result.info.providerID,
         modelID: result.info.modelID,
-        providerName: names?.providerName,
-        modelName: names?.modelName,
-        contextLimit
+        providerName: published.providerName,
+        modelName: published.modelName,
+        contextLimit: published.contextLimit
       },
       mode: result.info.mode,
       agent: result.info.agent,
-      tokens: {
-        input: result.info.tokens?.input ?? 0,
-        output: result.info.tokens?.output ?? 0,
-        reasoning: result.info.tokens?.reasoning ?? 0
-      }
+      tokens: published.tokens
     };
   }
 

@@ -20,6 +20,7 @@ import {
   OUTBOX_MAX_ATTEMPTS,
   OutboxPullItem,
   OutboxReportResult,
+  TelegramOutboxDeliveryReceipt,
   TelegramOutboxMediaDescriptor,
   TelegramOutboxItem
 } from "./telegram-outbox.types";
@@ -89,6 +90,7 @@ export class TelegramOutboxStore {
     nowMs?: number;
     mode?: "send" | "replace";
     progressKey?: string;
+    deliveryGroupId?: string;
     media?: TelegramOutboxMediaDescriptor;
     control?: {
       kind: "thinking";
@@ -175,6 +177,7 @@ export class TelegramOutboxStore {
       disableNotification: input.disableNotification,
       mode: input.mode,
       progressKey: input.progressKey,
+      deliveryGroupId: input.deliveryGroupId,
       media: input.media,
       control: input.control,
       replyMarkup: input.replyMarkup,
@@ -253,12 +256,13 @@ export class TelegramOutboxStore {
     return this.readAll().items;
   }
 
-  public report(input: { adminId: number; workerId: string; results: OutboxReportResult[]; nowMs?: number }): void {
+  public report(input: { adminId: number; workerId: string; results: OutboxReportResult[]; nowMs?: number }): TelegramOutboxDeliveryReceipt[] {
     /* Update delivery state based on bot reports. */
     const nowMs = input.nowMs ?? Date.now();
     const nowIsoFromNowMs = new Date(nowMs).toISOString();
     const file = this.readAll();
     const byId = new Map(file.items.map((item) => [item.id, item] as const));
+    const delivered: TelegramOutboxDeliveryReceipt[] = [];
 
     for (const result of input.results) {
       const item = byId.get(result.id);
@@ -286,6 +290,13 @@ export class TelegramOutboxStore {
         }
         item.inFlightBy = undefined;
         item.inFlightUntil = undefined;
+        delivered.push({
+          id: item.id,
+          adminId: item.adminId,
+          deliveryGroupId: item.deliveryGroupId,
+          deliveredAt: item.deliveredAt,
+          telegramMessageId: item.telegramMessageId
+        });
         continue;
       }
 
@@ -312,6 +323,7 @@ export class TelegramOutboxStore {
     }
 
     this.writeAll(file);
+    return delivered;
   }
 
   public pruneDelivered(input?: { maxDeliveredToKeep?: number }): void {

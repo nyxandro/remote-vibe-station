@@ -14,6 +14,7 @@ import { EventsGateway } from "./events/events.gateway";
 import { EventsService } from "./events/events.service";
 import { OpenCodeClient } from "./open-code/opencode-client";
 import { OpenCodeEventsService } from "./open-code/opencode-events.service";
+import { OpenCodeFinalMessageService } from "./open-code/opencode-final-message.service";
 import { OpenCodeProviderAuthClient } from "./open-code/opencode-provider-auth.client";
 import { OpenCodeSessionRoutingStore } from "./open-code/opencode-session-routing.store";
 import { OpenCodeWebLinkService } from "./open-code/opencode-web-link.service";
@@ -81,6 +82,8 @@ import { CliproxyAuthRuntimeService } from "./proxy/cliproxy-auth-runtime.servic
 import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
 import { KanbanController } from "./kanban/kanban.controller";
 import { KanbanAgentController } from "./kanban/kanban-agent.controller";
+import { KanbanRunnerHandoffService } from "./kanban/kanban-runner-handoff.service";
+import { KanbanRunnerHandoffStore } from "./kanban/kanban-runner-handoff.store";
 import { KanbanRunnerService } from "./kanban/kanban-runner.service";
 import { KanbanRunnerSessionService } from "./kanban/kanban-runner-session.service";
 import { KanbanService } from "./kanban/kanban.service";
@@ -116,6 +119,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     EventStreamAuthService,
     EventsGateway,
     OpenCodeClient,
+    OpenCodeFinalMessageService,
     OpenCodeProviderAuthClient,
     OpenCodeSessionRoutingStore,
     OpenCodeEventsService,
@@ -168,6 +172,8 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     CliproxyAccountService,
     KanbanStore,
     KanbanService,
+    KanbanRunnerHandoffStore,
+    KanbanRunnerHandoffService,
     KanbanRunnerSessionService,
     KanbanRunnerService,
     KanbanAgentGuard

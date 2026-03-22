@@ -8,6 +8,7 @@
  * - OUTBOX_LEASE_MS - Lease time for pulled messages.
  * - TelegramOutboxMediaDescriptor - Media payload for photo/document/album delivery.
  * - TelegramOutboxItem - Persistent outbox record.
+ * - TelegramOutboxDeliveryReceipt - Delivery metadata emitted after successful bot reports.
  * - OutboxPullItem - DTO returned to bot.
  * - OutboxReportResult - Delivery report from bot.
  */
@@ -64,6 +65,7 @@ export type TelegramOutboxItem = {
   disableNotification?: boolean;
   mode?: "send" | "replace";
   progressKey?: string;
+  deliveryGroupId?: string;
    media?: TelegramOutboxMediaDescriptor;
   control?: {
     kind: "thinking";
@@ -112,6 +114,14 @@ export type OutboxPullItem = {
   replyMarkup?: {
     inlineKeyboard: Array<Array<{ text: string; callback_data: string }>>;
   };
+};
+
+export type TelegramOutboxDeliveryReceipt = {
+  id: string;
+  adminId: number;
+  deliveryGroupId?: string;
+  deliveredAt: string;
+  telegramMessageId?: number;
 };
 
 export type OutboxReportResult = {

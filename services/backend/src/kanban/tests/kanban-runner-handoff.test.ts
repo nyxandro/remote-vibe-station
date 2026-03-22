@@ -134,9 +134,8 @@ describe("Kanban runner handoff", () => {
     expect(opencode.sendPromptToSession).not.toHaveBeenCalled();
   });
 
-  test("agent-side blocked event wakes runner to start the next queued task after a short handoff delay", async () => {
-    /* A short delay keeps the previous final Telegram message from racing ahead of the next task-start notification. */
-    jest.useFakeTimers();
+  test("delivery-backed handoff release wakes runner to start the next queued task", async () => {
+    /* Next queued work should start only after the final Telegram reply was confirmed delivered. */
     const blockedTask = buildTask({
       id: "task-blocked",
       status: "blocked",
@@ -237,14 +236,23 @@ describe("Kanban runner handoff", () => {
         status: "blocked",
         claimedBy: null,
         executionSource: null,
-        source: "agent"
+        source: "runner"
       }
     });
 
-    await jest.advanceTimersByTimeAsync(9_999);
-    expect(opencode.sendPromptToSession).toHaveBeenCalledTimes(0);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(opencode.sendPromptToSession).not.toHaveBeenCalled();
 
-    await jest.advanceTimersByTimeAsync(1);
+    events.publish({
+      type: "kanban.runner.handoff.released",
+      ts: new Date().toISOString(),
+      data: {
+        taskId: "task-blocked",
+        taskTitle: "Blocked task",
+        projectSlug: "alpha",
+        sessionId: "session-blocked"
+      }
+    });
 
     await waitFor(() => {
       expect(opencode.sendPromptToSession).toHaveBeenCalledTimes(1);

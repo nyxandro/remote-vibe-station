@@ -12,7 +12,9 @@ import { AppConfig, ConfigToken } from "../config/config.types";
 import { EventEnvelope } from "../events/events.types";
 import { EventsService } from "../events/events.service";
 import { OpenCodeClient } from "../open-code/opencode-client";
+import { OpenCodeAssistantTokens, OpenCodePart } from "../open-code/opencode.types";
 import { OpenCodeEventsService } from "../open-code/opencode-events.service";
+import { OpenCodeFinalMessageService } from "../open-code/opencode-final-message.service";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { extractFinalOpenCodeText } from "../open-code/opencode-text-parts";
 import {
@@ -20,7 +22,7 @@ import {
   logOpenCodeTransportFailure,
   normalizeOpenCodeTransportErrorMessage
 } from "../open-code/opencode-transport-errors";
-import { OpenCodePart } from "../open-code/opencode.types";
+import { publishPromptRuntimeTurnStarted } from "../prompt/prompt-runtime-turn-event";
 import { ProjectsService } from "../projects/projects.service";
 import { buildKanbanRunnerPrompt } from "./kanban-runner-prompt";
 import { KanbanRunnerSessionService } from "./kanban-runner-session.service";
@@ -29,15 +31,28 @@ import { KanbanService } from "./kanban.service";
 import { KanbanTaskView } from "./kanban.types";
 
 const MIN_RUNNER_CLAIM_LEASE_MS = 30 * 60 * 1000;
+const DEFAULT_RUNNER_AGENT = "build";
+const DEFAULT_RUNNER_MODE = "primary";
+const RUNNER_BUSY_RETRY_MS = 10_000;
 const RUNNER_EVENT_CONNECT_TIMEOUT_MS = 60_000;
 const RUNNER_FETCH_SETTLE_TIMEOUT_MS = 30_000;
-const RUNNER_NEXT_TASK_DELAY_MS = 10_000;
-
 type KanbanRunnerReason = "startup" | "task-event" | "runner-finished";
 type KanbanRunnerAction = "started" | "continued";
 type KanbanRunnerSession = {
   sessionId: string;
   startedNewSession: boolean;
+};
+type KanbanRunnerPromptResult = {
+  sessionId: string;
+  responseText: string;
+  parts: OpenCodePart[];
+  info: {
+    providerID: string;
+    modelID: string;
+    mode: string;
+    agent: string;
+    tokens: OpenCodeAssistantTokens;
+  };
 };
 
 export const KANBAN_RUNNER_AGENT_ID = "kanban-runner";
@@ -46,7 +61,8 @@ export const KANBAN_RUNNER_AGENT_ID = "kanban-runner";
 export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
   private readonly runningProjects = new Set<string>();
   private readonly pendingProjects = new Set<string>();
-  private readonly delayedProjectRuns = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly retryProjectRuns = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly finalMessages: OpenCodeFinalMessageService;
   private unsubscribe?: () => void;
 
   public constructor(
@@ -57,8 +73,12 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly opencode: OpenCodeClient,
     private readonly opencodeEvents: OpenCodeEventsService,
     private readonly events: EventsService,
-    @Optional() private readonly sessionRouting?: OpenCodeSessionRoutingStore
-  ) {}
+    @Optional() private readonly sessionRouting?: OpenCodeSessionRoutingStore,
+    @Optional() finalMessages?: OpenCodeFinalMessageService
+  ) {
+    /* Tests may instantiate the runner without full Nest DI, so build the shared final publisher lazily when omitted. */
+    this.finalMessages = finalMessages ?? new OpenCodeFinalMessageService(this.opencode, this.events);
+  }
 
   public onModuleInit(): void {
     /* Keep automation fully opt-in and wire one event subscription for the process lifetime. */
@@ -74,10 +94,10 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     /* Remove event subscription cleanly during shutdown and tests. */
     this.unsubscribe?.();
     this.unsubscribe = undefined;
-    for (const timeoutId of this.delayedProjectRuns.values()) {
+    for (const timeoutId of this.retryProjectRuns.values()) {
       clearTimeout(timeoutId);
     }
-    this.delayedProjectRuns.clear();
+    this.retryProjectRuns.clear();
   }
 
   public async runOnce(reason: KanbanRunnerReason): Promise<void> {
@@ -135,7 +155,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
           sessionID: task.executionSessionId
         });
         if (busy) {
-          this.scheduleDelayedProjectRun(input.projectSlug, "startup");
+          this.scheduleProjectRunRetry(input.projectSlug, "startup");
           return;
         }
       }
@@ -180,6 +200,13 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
 
       const prompt = buildKanbanRunnerPrompt(task);
 
+      /* Every runner turn must reopen Telegram runtime gating even when the same detached session is reused. */
+      publishPromptRuntimeTurnStarted(this.events, {
+        projectSlug: input.projectSlug,
+        directory,
+        sessionID: sessionId
+      });
+
       this.events.publish({
         type: "kanban.runner.started",
         ts: new Date().toISOString(),
@@ -195,6 +222,14 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       });
 
       const promptResult = await this.sendPromptWithSettle({ directory, sessionId, prompt });
+      await this.finalMessages.publish({
+        sessionId: promptResult.sessionId,
+        responseText: promptResult.responseText,
+        parts: promptResult.parts,
+        info: promptResult.info,
+        activeProject: { slug: input.projectSlug, rootPath: directory },
+        thinking: null
+      });
       const refreshedTask = await this.loadTask(taskId, input.projectSlug);
       latestTaskStatus = refreshedTask?.status ?? null;
       latestClaimedBy = refreshedTask?.claimedBy ?? null;
@@ -254,7 +289,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         );
 
         if (shouldDelayNextTask) {
-          this.scheduleDelayedProjectRun(input.projectSlug, "runner-finished");
+          this.scheduleProjectRun(input.projectSlug, "runner-finished");
         } else {
           void this.runProject({ projectSlug: input.projectSlug, reason: "runner-finished" });
         }
@@ -334,23 +369,17 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
 
       const isCandidate =
         (status === "queued" && executionSource !== "session" && source !== "agent") ||
-        (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner") ||
-        status === "blocked" ||
-        status === "done";
+        (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner");
       if (isCandidate) {
-        if (status === "blocked" || status === "done") {
-          this.scheduleProjectRunAfterHandoff(projectSlug, "task-event");
-        } else {
-          this.scheduleProjectRun(projectSlug, "task-event");
-        }
+        this.scheduleProjectRun(projectSlug, "task-event");
       }
       return;
     }
 
-    if (event.type === "opencode.message") {
+    if (event.type === "kanban.runner.handoff.released") {
       const projectSlug = String((event.data as any)?.projectSlug ?? "").trim();
       if (projectSlug) {
-        this.scheduleProjectRun(projectSlug, "task-event");
+        this.scheduleProjectRun(projectSlug, "runner-finished");
       }
       return;
     }
@@ -380,7 +409,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    if (this.delayedProjectRuns.has(projectSlug)) {
+    if (this.retryProjectRuns.has(projectSlug)) {
       this.pendingProjects.add(projectSlug);
       return;
     }
@@ -388,39 +417,25 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     void this.runProject({ projectSlug, reason });
   }
 
-  private scheduleProjectRunAfterHandoff(projectSlug: string, reason: KanbanRunnerReason): void {
-    /* Finished/blocked handoffs should pause briefly so Telegram can finish the previous task narrative first. */
-    if (this.runningProjects.has(projectSlug)) {
-      this.pendingProjects.add(projectSlug);
-      return;
-    }
-
-    if (this.delayedProjectRuns.has(projectSlug)) {
-      this.pendingProjects.add(projectSlug);
-      return;
-    }
-
-    this.scheduleDelayedProjectRun(projectSlug, reason);
-  }
-
-  private scheduleDelayedProjectRun(projectSlug: string, reason: KanbanRunnerReason): void {
-    /* Give Telegram enough room to deliver the previous final answer before the next task-start notification appears. */
-    const existingTimeout = this.delayedProjectRuns.get(projectSlug);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
+  private scheduleProjectRunRetry(projectSlug: string, reason: KanbanRunnerReason): void {
+    /* Startup busy-session retries remain time-based, but task handoff no longer depends on this timer. */
+    const existing = this.retryProjectRuns.get(projectSlug);
+    if (existing) {
+      clearTimeout(existing);
     }
 
     const timeoutId = setTimeout(() => {
-      this.delayedProjectRuns.delete(projectSlug);
+      this.retryProjectRuns.delete(projectSlug);
       if (this.runningProjects.has(projectSlug)) {
         this.pendingProjects.add(projectSlug);
         return;
       }
 
       void this.runProject({ projectSlug, reason });
-    }, RUNNER_NEXT_TASK_DELAY_MS);
+    }, RUNNER_BUSY_RETRY_MS);
+    timeoutId.unref?.();
 
-    this.delayedProjectRuns.set(projectSlug, timeoutId);
+    this.retryProjectRuns.set(projectSlug, timeoutId);
   }
 
   private async ensureTaskSession(input: {
@@ -457,7 +472,7 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     directory: string;
     sessionId: string;
     prompt: string;
-  }): Promise<{ sessionId: string; responseText: string; parts: OpenCodePart[] }> {
+  }): Promise<KanbanRunnerPromptResult> {
     /* Detached runner turns may finish successfully even if the synchronous HTTP request drops after handing work to OpenCode. */
     try {
       const result = await this.opencode.sendPromptToSession(input.prompt, {
@@ -467,7 +482,8 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       return {
         sessionId: result.sessionId,
         responseText: result.responseText,
-        parts: (result.parts ?? []) as OpenCodePart[]
+        parts: (result.parts ?? []) as OpenCodePart[],
+        info: result.info
       };
     } catch (error) {
       if (!isOpenCodeFetchTransportFailure(error)) {
@@ -491,10 +507,33 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
         throw error;
       }
 
+      /* Fallback metadata keeps Telegram footer/path consistent even when the final text arrived only over SSE. */
+      let defaultModel: { providerID: string; modelID: string } = { providerID: "unknown", modelID: "unknown" };
+      try {
+        defaultModel = await this.opencode.getDefaultModel();
+      } catch (defaultModelError) {
+        /* Fallback metadata must never hide the original transport failure that triggered settle-mode recovery. */
+        console.error(
+          JSON.stringify({
+            type: "kanban_runner_default_model_lookup_failed",
+            directory: input.directory,
+            sessionID: input.sessionId,
+            error: defaultModelError instanceof Error ? defaultModelError.message : String(defaultModelError)
+          })
+        );
+      }
+
       return {
         sessionId: input.sessionId,
         responseText: "",
-        parts: []
+        parts: [],
+        info: {
+          providerID: defaultModel.providerID,
+          modelID: defaultModel.modelID,
+          mode: DEFAULT_RUNNER_MODE,
+          agent: DEFAULT_RUNNER_AGENT,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        }
       };
     }
   }

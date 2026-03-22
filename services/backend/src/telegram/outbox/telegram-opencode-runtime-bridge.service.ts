@@ -14,6 +14,8 @@ import { TelegramAssistantPartState } from "./telegram-assistant-part-state";
 import { TelegramOpenCodeRuntimeFileOperations } from "./telegram-opencode-runtime-file-operations";
 import { TelegramOpenCodeRuntimeInteractions } from "./telegram-opencode-runtime-interactions";
 import { TelegramOutboxService } from "./telegram-outbox.service";
+import { buildAssistantPartKey, extractPatternMatches } from "./telegram-runtime-bridge-utils";
+import { TelegramRuntimeFinalReply } from "./telegram-runtime-final-reply";
 import { TelegramRuntimePartReplayGuard } from "./telegram-runtime-part-replay-guard";
 import { TelegramRuntimeTurnState } from "./telegram-runtime-turn-state";
 import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
@@ -45,6 +47,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly partTypeById = new Map<string, string>();
   private readonly partIdsBySession = new Map<string, Set<string>>();
   private readonly assistantPartState = new TelegramAssistantPartState();
+  private readonly finalReply: TelegramRuntimeFinalReply;
   private readonly finalizedRuntimePartReplayGuard = new TelegramRuntimePartReplayGuard();
   private readonly runtimeTurnState = new TelegramRuntimeTurnState();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
@@ -59,6 +62,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     private readonly diffPreviews: TelegramDiffPreviewStore
   ) {
     this.fileOperations = new TelegramOpenCodeRuntimeFileOperations(this.config, this.diffPreviews, this.outbox);
+    this.finalReply = new TelegramRuntimeFinalReply(this.outbox);
     this.interactions = new TelegramOpenCodeRuntimeInteractions(this.routes, this.outbox, {
       setThinking: (adminId, sessionID, active) => this.setThinking(adminId, sessionID, active),
       closeAssistantStreamSegment: (sessionID) => this.closeAssistantStreamSegment(sessionID)
@@ -71,7 +75,10 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private onEvent(event: EventEnvelope): void {
     if (event.type === "opencode.turn.started") {
       const sessionID = String((event.data as any)?.sessionId ?? "").trim();
-      if (sessionID) this.runtimeTurnState.openTurn(sessionID);
+      if (sessionID) {
+        this.runtimeTurnState.openTurn(sessionID);
+        this.finalReply.rememberTurnStart({ sessionID, meta: event.data as Record<string, unknown> });
+      }
       return;
     }
     /* Accept only raw OpenCode SSE events published by OpenCodeEventsService. */
@@ -288,7 +295,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
-    const partKey = this.buildAssistantPartKey(route.adminId, sessionID, partID);
+    const partKey = buildAssistantPartKey(route.adminId, sessionID, partID);
     const nextPartText = `${this.assistantTextByPart.get(partKey) ?? ""}${delta}`;
     const sessionText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
     /* Forward important runtime/system notices even when stream mode is disabled. */
@@ -347,9 +354,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
     const statusType = String((properties.status as any)?.type ?? "");
     if (statusType === "idle") {
-      this.setThinking(route.adminId, sessionID, false);
-      this.runtimeTurnState.closeTurn(sessionID);
-      this.clearSessionRuntimeState(sessionID);
+      this.handleIdleSession(sessionID, route.adminId);
     }
   }
 
@@ -364,7 +369,13 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (!route) {
       return;
     }
-    this.setThinking(route.adminId, sessionID, false);
+    this.handleIdleSession(sessionID, route.adminId);
+  }
+
+  private handleIdleSession(sessionID: string, adminId: number): void {
+    /* Idle closes the current turn and, when needed, upgrades the last runtime-only text into a final reply. */
+    this.setThinking(adminId, sessionID, false);
+    this.finalReply.enqueueBufferedFinalReply({ sessionID, adminId, text: String(this.assistantTextBySession.get(sessionID) ?? "") });
     this.runtimeTurnState.closeTurn(sessionID);
     this.clearSessionRuntimeState(sessionID);
   }
@@ -374,6 +385,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     this.assistantPartState.closeOpenTextParts(sessionID);
     this.outbox.closeAssistantProgress({ sessionId: sessionID });
     this.assistantTextBySession.delete(sessionID);
+    this.finalReply.clearSession(sessionID);
     this.emittedSystemNotificationsBySession.delete(sessionID);
     const sessionPartIds = this.partIdsBySession.get(sessionID);
     if (sessionPartIds) {
@@ -429,11 +441,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     this.clearSessionRuntimeState(sessionID);
   }
 
-  private buildAssistantPartKey(adminId: number, sessionID: string, partID: string): string {
-    /* Keep part-local buffers stable even when session contains several assistant text blocks. */
-    return `assistant-part:${adminId}:${sessionID}:${partID || "part"}`;
-  }
-
   private setThinking(adminId: number, sessionID: string, active: boolean): void {
     /* Emit thinking start/stop only on state transitions. */
     const previous = this.thinkingActiveBySession.get(sessionID) ?? false;
@@ -452,8 +459,8 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     /* Surface provider cooldowns and OpenCode system reminders in Telegram as operational notices. */
     const alreadyEmitted = this.emittedSystemNotificationsBySession.get(input.sessionID) ?? new Set<string>();
     const matches = [
-      ...this.extractPatternMatches(input.text, COOLDOWN_MESSAGE_PATTERN),
-      ...this.extractPatternMatches(input.text, SYSTEM_REMINDER_PATTERN)
+      ...extractPatternMatches(input.text, COOLDOWN_MESSAGE_PATTERN),
+      ...extractPatternMatches(input.text, SYSTEM_REMINDER_PATTERN)
     ];
 
     for (const match of matches) {
@@ -472,12 +479,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (alreadyEmitted.size > 0) {
       this.emittedSystemNotificationsBySession.set(input.sessionID, alreadyEmitted);
     }
-  }
-
-  private extractPatternMatches(text: string, pattern: RegExp): string[] {
-    /* Reset global regex state on every scan so repeated calls stay deterministic. */
-    pattern.lastIndex = 0;
-    return Array.from(text.matchAll(pattern)).map((entry) => String(entry[0] ?? ""));
   }
 
   private handleQuestionAsked(properties: Record<string, unknown>): void {

@@ -41,7 +41,7 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       }
 
       const data = event.data as any;
-      this.outbox.enqueueAssistantReply({
+      const enqueueResult = this.outbox.enqueueAssistantReply({
         adminId,
         delivery: {
           /* Empty finalText is not useful; fall back to the full final message body instead. */
@@ -57,8 +57,24 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
         }
       });
 
-      /* Drop stale runtime buffers so late SSE replays cannot duplicate the just-delivered final answer. */
       const sessionId = typeof data?.sessionId === "string" ? data.sessionId.trim() : "";
+      const enqueuedItemIds = Array.isArray(enqueueResult.itemIds) ? enqueueResult.itemIds : [];
+      if (sessionId.length > 0 && enqueueResult.deliveryGroupId && enqueuedItemIds.length > 0) {
+        /* Final reply enqueue creates the delivery barrier input used by kanban runner handoff serialization. */
+        this.events.publish({
+          type: "telegram.assistant.reply.enqueued",
+          ts: new Date().toISOString(),
+          data: {
+            adminId,
+            projectSlug: String(data?.projectSlug ?? "").trim(),
+            sessionId,
+            deliveryGroupId: enqueueResult.deliveryGroupId,
+            itemIds: enqueuedItemIds
+          }
+        });
+      }
+
+      /* Drop stale runtime buffers so late SSE replays cannot duplicate the just-delivered final answer. */
       if (sessionId.length > 0) {
         this.runtimeBridge.finalizeAssistantReply(sessionId);
       }

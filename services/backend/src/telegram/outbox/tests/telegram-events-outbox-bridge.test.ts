@@ -145,6 +145,73 @@ describe("TelegramEventsOutboxBridge", () => {
     }
   });
 
+  test("publishes telegram.assistant.reply.enqueued breadcrumb for final assistant replies", () => {
+    /* Delivery-backed handoff and long-session diagnostics need a stable event with delivery group metadata. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-bridge-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, false);
+
+      const outboxStore = new TelegramOutboxStore();
+      const outboxService = new TelegramOutboxService(streamStore, outboxStore);
+      const events = new EventsService(config as any);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any, config as any);
+      bridge.onModuleInit();
+
+      events.publish({
+        type: "opencode.message",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: 1,
+          sessionId: "session-breadcrumb",
+          projectSlug: "alpha",
+          text: "Финальный ответ",
+          finalText: "Финальный ответ",
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          agent: "build",
+          tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } }
+        }
+      });
+
+      const breadcrumb = events.replay().find((event) => event.type === "telegram.assistant.reply.enqueued");
+      expect(breadcrumb).toMatchObject({
+        data: {
+          adminId: 1,
+          projectSlug: "alpha",
+          sessionId: "session-breadcrumb",
+          deliveryGroupId: expect.any(String),
+          itemIds: expect.any(Array)
+        }
+      });
+      expect(Array.isArray((breadcrumb as any)?.data?.itemIds)).toBe(true);
+      expect((breadcrumb as any)?.data?.itemIds).toHaveLength(1);
+    } finally {
+      process.chdir(prev);
+      try {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  });
+
   test("starts a fresh streamed message for the next reply in the same session", () => {
     /* Reusing the same progress key across prompts would rewrite the previous answer in chat history. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-bridge-"));

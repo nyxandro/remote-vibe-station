@@ -8,6 +8,7 @@
 import { BadRequestException, Body, Controller, Get, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
+import { EventsService } from "../../events/events.service";
 import { AdminHeaderGuard } from "../../security/admin-header.guard";
 import { TelegramOutboxStore } from "./telegram-outbox.store";
 import { OutboxReportResult } from "./telegram-outbox.types";
@@ -18,7 +19,10 @@ const WORKER_HEADER = "x-bot-worker-id";
 
 @Controller("api/telegram/outbox")
 export class TelegramOutboxController {
-  public constructor(private readonly store: TelegramOutboxStore) {}
+  public constructor(
+    private readonly store: TelegramOutboxStore,
+    private readonly events: EventsService
+  ) {}
 
   @UseGuards(AdminHeaderGuard)
   @Get("pull")
@@ -61,7 +65,25 @@ export class TelegramOutboxController {
       throw new BadRequestException("results are required");
     }
 
-    this.store.report({ adminId, workerId, results });
+    const delivered = this.store.report({ adminId, workerId, results });
+    for (const item of delivered) {
+      if (!item.deliveryGroupId) {
+        continue;
+      }
+
+      /* Delivery confirmations advance kanban runner handoff barriers for final assistant replies. */
+      this.events.publish({
+        type: "telegram.outbox.delivered",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: item.adminId,
+          itemId: item.id,
+          deliveryGroupId: item.deliveryGroupId,
+          deliveredAt: item.deliveredAt,
+          telegramMessageId: item.telegramMessageId ?? null
+        }
+      });
+    }
     this.store.pruneDelivered();
     return { ok: true };
   }

@@ -10,6 +10,8 @@
  * - TelegramOutboxService - Enqueue helpers for event producers.
  */
 
+import * as crypto from "node:crypto";
+
 import { Injectable } from "@nestjs/common";
 
 import { TelegramStreamStore } from "../telegram-stream.store";
@@ -41,6 +43,11 @@ type AssistantDelivery = {
     commands?: Array<{ command: string; output: string }>;
     subtasks?: Array<{ description: string; agent: string; command?: string; model?: { providerID: string; modelID: string } }>;
   };
+};
+
+export type TelegramAssistantReplyEnqueueResult = {
+  deliveryGroupId: string | null;
+  itemIds: string[];
 };
 
 const buildTrace = (telemetry?: AssistantDelivery["telemetry"]): string => {
@@ -140,14 +147,14 @@ export class TelegramOutboxService {
     private readonly outbox: TelegramOutboxStore
   ) {}
 
-  public enqueueAssistantReply(input: { adminId: number; delivery: AssistantDelivery }): void {
+  public enqueueAssistantReply(input: { adminId: number; delivery: AssistantDelivery }): TelegramAssistantReplyEnqueueResult {
     /*
      * Assistant replies should be delivered even when stream is toggled off.
      * This preserves current UX: /end disables streaming noise, not answers.
      */
     const binding = this.streamStore.get(input.adminId);
     if (!binding) {
-      return;
+      return { deliveryGroupId: null, itemIds: [] };
     }
 
     const contextUsed =
@@ -177,6 +184,8 @@ export class TelegramOutboxService {
     this.enqueueThinkingControl({ adminId: input.adminId, action: "stop" });
 
     const chunks = splitTelegramTextWithFooter(body, footer);
+    const deliveryGroupId = crypto.randomUUID();
+    const itemIds: string[] = [];
     const streamProgressKey = input.delivery.sessionId
       ? this.resolveFinalAssistantProgressKey({
           adminId: input.adminId,
@@ -192,15 +201,17 @@ export class TelegramOutboxService {
           isFinalChunk: chunks.length === 1,
           footerHtml
         });
-        this.outbox.enqueue({
+        const item = this.outbox.enqueue({
           adminId: input.adminId,
           chatId: binding.chatId,
           text: renderedChunk,
           parseMode: "HTML",
           disableNotification: chunks.length > 1,
           mode: "replace",
-        progressKey: streamProgressKey
-      });
+          progressKey: streamProgressKey,
+          deliveryGroupId
+        });
+        itemIds.push(item.id);
 
       chunks.slice(1).forEach((chunk, index) => {
         const isFinalChunk = index === chunks.length - 2;
@@ -209,17 +220,19 @@ export class TelegramOutboxService {
           isFinalChunk,
           footerHtml
         });
-        this.outbox.enqueue({
+        const item = this.outbox.enqueue({
           adminId: input.adminId,
           chatId: binding.chatId,
           text: renderedChunk,
           parseMode: "HTML",
-          disableNotification: !isFinalChunk
+          disableNotification: !isFinalChunk,
+          deliveryGroupId
         });
+        itemIds.push(item.id);
       });
       this.recentAssistantCommentaryBySession.delete(input.delivery.sessionId ?? "");
       this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
-      return;
+      return { deliveryGroupId, itemIds };
     }
 
     chunks.forEach((chunk, index) => {
@@ -230,16 +243,19 @@ export class TelegramOutboxService {
         isFinalChunk,
         footerHtml
       });
-      this.outbox.enqueue({
+      const item = this.outbox.enqueue({
         adminId: input.adminId,
         chatId: binding.chatId,
         text: html,
         parseMode: "HTML",
-        disableNotification: !isFinalChunk
+        disableNotification: !isFinalChunk,
+        deliveryGroupId
       });
+      itemIds.push(item.id);
     });
     this.recentAssistantCommentaryBySession.delete(input.delivery.sessionId ?? "");
     this.clearAssistantProgressKey(input.delivery.sessionId ?? null);
+    return { deliveryGroupId, itemIds };
   }
 
   private ensureRenderedFooter(input: { html: string; isFinalChunk: boolean; footerHtml: string }): string {
