@@ -26,6 +26,7 @@ import {
   KanbanExecutionActor
 } from "./kanban-execution-ownership";
 import { applyKanbanCriterionPatch, applyKanbanTaskPatch } from "./kanban-task-mutations";
+import { buildInitialKanbanStatusTimeline, recordKanbanTaskStatusTransition } from "./kanban-task-timeline";
 import { KanbanStore } from "./kanban.store";
 import {
   compareKanbanTasks,
@@ -152,7 +153,8 @@ export class KanbanService {
         leaseUntil: null,
         executionSource: null,
         executionSessionId: null,
-        blockedResumeStatus: null
+        blockedResumeStatus: null,
+        statusTimeline: buildInitialKanbanStatusTimeline({ status, changedAt: nowIso })
       };
 
       draft.tasks.push(task);
@@ -328,12 +330,14 @@ export class KanbanService {
 
       assertKanbanTaskCanStartExecution({ task, actor });
 
+      const previousStatus = task.status;
       task.status = "in_progress";
       task.claimedBy = agentId;
       task.leaseUntil = leaseUntil;
       task.executionSource = input.executionSource;
       task.executionSessionId = normalizeNullableKanbanText(input.executionSessionId) ?? task.executionSessionId ?? null;
       task.updatedAt = nowIso;
+      recordKanbanTaskStatusTransition({ task, previousStatus, changedAt: nowIso });
       return task;
     });
 
@@ -381,12 +385,14 @@ export class KanbanService {
         return null;
       }
 
+      const previousStatus = next.status;
       next.status = "in_progress";
       next.claimedBy = agentId;
       next.leaseUntil = leaseUntil;
       next.executionSource = agentId === RUNNER_AGENT_ID ? "runner" : "session";
       next.executionSessionId = normalizeNullableKanbanText(input.executionSessionId);
       next.updatedAt = nowIso;
+      recordKanbanTaskStatusTransition({ task: next, previousStatus, changedAt: nowIso });
       return next;
     });
 

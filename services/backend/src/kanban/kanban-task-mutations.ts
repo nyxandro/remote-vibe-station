@@ -12,6 +12,7 @@ import { normalizeCriterionInputs } from "./kanban-criteria";
 import { KanbanValidationError } from "./kanban.errors";
 import { assertKanbanStatusTransition } from "./kanban-status-transitions";
 import { resolveKanbanTaskStatus } from "./kanban-task-state";
+import { recordKanbanTaskStatusTransition } from "./kanban-task-timeline";
 import { KanbanBlockedResumeStatus, KanbanCriterionStatus, KanbanTaskRecord, UpdateKanbanTaskInput } from "./kanban.types";
 import {
   normalizeKanbanText,
@@ -83,7 +84,9 @@ export const applyKanbanTaskPatch = (task: KanbanTaskRecord, patch: UpdateKanban
         ? normalizeNullableKanbanText(patch.blockedReason)
         : task.blockedReason
       : null;
-  task.updatedAt = new Date().toISOString();
+  const nowIso = new Date().toISOString();
+  task.updatedAt = nowIso;
+  recordKanbanTaskStatusTransition({ task, previousStatus, changedAt: nowIso });
 };
 
 export const applyKanbanCriterionPatch = (
@@ -96,6 +99,7 @@ export const applyKanbanCriterionPatch = (
   }
 ): void => {
   /* Criterion updates share one mutation path so blocked-state side effects stay deterministic. */
+  const previousStatus = task.status;
   const criterion = task.acceptanceCriteria.find((item) => item.id === requireKanbanCriterionId(input.criterionId));
   if (!criterion) {
     throw new KanbanValidationError(`Kanban criterion not found: ${input.criterionId}`);
@@ -139,7 +143,9 @@ export const applyKanbanCriterionPatch = (
     }
   }
 
-  task.updatedAt = new Date().toISOString();
+  const nowIso = new Date().toISOString();
+  task.updatedAt = nowIso;
+  recordKanbanTaskStatusTransition({ task, previousStatus, changedAt: nowIso });
 };
 
 const resolveBlockedResumeStatus = (input: {

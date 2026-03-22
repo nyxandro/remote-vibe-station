@@ -58,6 +58,11 @@ export type KanbanCriterion = {
   status: KanbanCriterionStatus;
 };
 
+export type KanbanTaskStatusTimelineEntry = {
+  status: KanbanStatus;
+  changedAt: string;
+};
+
 export type KanbanTask = {
   id: string;
   projectSlug: string;
@@ -75,6 +80,7 @@ export type KanbanTask = {
   leaseUntil: string | null;
   executionSource?: "session" | "runner" | null;
   executionSessionId?: string | null;
+  statusTimeline?: KanbanTaskStatusTimelineEntry[];
 };
 
 export type ProjectStatus = {

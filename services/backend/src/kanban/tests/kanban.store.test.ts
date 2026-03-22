@@ -35,7 +35,8 @@ describe("KanbanStore", () => {
           claimedBy: null,
           leaseUntil: null,
           executionSource: null,
-          executionSessionId: null
+          executionSessionId: null,
+          statusTimeline: [{ status: "backlog", changedAt: "2026-03-10T09:00:00.000Z" }]
         });
       });
 
@@ -87,6 +88,7 @@ describe("KanbanStore", () => {
         expect.objectContaining({ text: "Docs updated", status: "pending" }),
         expect.objectContaining({ text: "Tests pass", status: "pending" })
       ]);
+      expect(saved.tasks[0]?.statusTimeline).toEqual([{ status: "backlog", changedAt: "2026-03-10T09:00:00.000Z" }]);
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -116,7 +118,8 @@ describe("KanbanStore", () => {
           claimedBy: null,
           leaseUntil: null,
           executionSource: null,
-          executionSessionId: null
+          executionSessionId: null,
+          statusTimeline: [{ status: "done", changedAt: "2026-03-10T09:00:00.000Z" }]
         });
       });
 

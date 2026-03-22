@@ -5,6 +5,7 @@
  * - BROWSER_SESSION_EXPIRED_EVENT - Window event emitted when browser bearer auth expires.
  * - readStoredWebTokenMetadata - Reads browser-token payload timestamps for refresh scheduling.
  * - clearStoredWebToken - Removes the current browser bearer token from session storage.
+ * - bootstrapWebTokenFromTelegram - Exchanges Telegram initData into a sliding browser bearer token.
  * - refreshWebToken - Renews the current browser bearer token.
  * - apiGet - Authenticated GET helper that parses JSON responses.
  * - apiPost - Authenticated JSON POST helper.
@@ -17,6 +18,7 @@ const INIT_DATA_HEADER = "x-telegram-init-data";
 const STORAGE_KEY_WEB_TOKEN = "tvoc.miniapp.webToken";
 const AUTHORIZATION_HEADER = "Authorization";
 const JSON_CONTENT_TYPE = "application/json";
+const BROWSER_WEB_TOKEN_BOOTSTRAP_PATH = "/api/auth/web-token/bootstrap";
 const BROWSER_WEB_TOKEN_REFRESH_PATH = "/api/auth/web-token/refresh";
 const BROWSER_SESSION_EXPIRY_CODES = new Set(["APP_AUTH_HEADER_INVALID", "APP_AUTH_REQUIRED", "APP_WEB_TOKEN_INVALID"]);
 
@@ -163,12 +165,13 @@ const buildAuthHeaders = (): Record<string, string> => {
   const webToken = getWebToken();
   const headers: Record<string, string> = {};
 
-  if (initData) {
-    headers[INIT_DATA_HEADER] = initData;
-  }
-
   if (webToken) {
     headers[AUTHORIZATION_HEADER] = `Bearer ${webToken}`;
+    return headers;
+  }
+
+  if (initData) {
+    headers[INIT_DATA_HEADER] = initData;
   }
 
   return headers;
@@ -322,6 +325,37 @@ export const refreshWebToken = async (): Promise<WebTokenRefreshResponse> => {
 
   storeWebToken(response.token);
   return response;
+};
+
+export const bootstrapWebTokenFromTelegram = async (): Promise<WebTokenRefreshResponse> => {
+  /* Telegram Mini App sessions bootstrap bearer auth once so later requests no longer depend on expiring initData. */
+  const initData = getInitData();
+  if (typeof initData !== "string" || initData.trim().length === 0) {
+    throw new Error(
+      "APP_WEB_TOKEN_BOOTSTRAP_INIT_DATA_REQUIRED: Telegram initData is required to start a Mini App session token. Reopen the Mini App from Telegram and retry."
+    );
+  }
+
+  const response = await assertOk(
+    await fetch(BROWSER_WEB_TOKEN_BOOTSTRAP_PATH, {
+      method: "POST",
+      headers: {
+        [INIT_DATA_HEADER]: initData,
+        "Content-Type": JSON_CONTENT_TYPE
+      },
+      body: JSON.stringify({})
+    })
+  );
+
+  const parsed = await parseJsonResponse<WebTokenRefreshResponse>(response);
+  if (!parsed || typeof parsed.token !== "string" || parsed.token.trim().length === 0) {
+    throw new Error(
+      "APP_WEB_TOKEN_BOOTSTRAP_INVALID: Backend did not return a Mini App session token. Keep the tab open and retry, or reopen the Mini App."
+    );
+  }
+
+  storeWebToken(parsed.token);
+  return parsed;
 };
 
 export const getEventStreamUrl = async (input: {

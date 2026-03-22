@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   apiGet,
+  bootstrapWebTokenFromTelegram,
   BROWSER_SESSION_EXPIRED_EVENT,
   readStoredWebTokenMetadata,
   refreshWebToken
@@ -92,6 +93,66 @@ describe("api client error formatting", () => {
       issuedAtMs: 2_000,
       expiresAtMs: 20_000
     });
+  });
+
+  it("bootstraps a browser token from Telegram initData and stores it for later requests", async () => {
+    /* Mini App sessions inside Telegram should exchange short-lived initData into the longer sliding bearer token immediately. */
+    const nextToken = buildToken({ adminId: 42, iat: 2_000, exp: 20_000, nonce: "new" });
+    (window as any).Telegram = {
+      WebApp: {
+        initData: "signed-init-data"
+      }
+    };
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          token: nextToken,
+          expiresAt: new Date(20_000).toISOString()
+        }),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await bootstrapWebTokenFromTelegram();
+
+    expect(result.token).toBe(nextToken);
+    expect(sessionStorage.getItem(STORAGE_KEY_WEB_TOKEN)).toBe(nextToken);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/web-token/bootstrap",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-telegram-init-data": "signed-init-data"
+        })
+      })
+    );
+  });
+
+  it("prefers stored browser token over Telegram initData once bootstrap completed", async () => {
+    /* After bootstrap the app must stop relying on expiring initData for ordinary backend requests. */
+    const currentToken = buildToken({ adminId: 42, iat: 1_000, exp: 10_000, nonce: "old" });
+    sessionStorage.setItem(STORAGE_KEY_WEB_TOKEN, currentToken);
+    (window as any).Telegram = {
+      WebApp: {
+        initData: "signed-init-data"
+      }
+    };
+
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiGet("/api/projects");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects",
+      expect.objectContaining({
+        headers: {
+          Authorization: `Bearer ${currentToken}`
+        }
+      })
+    );
   });
 
   it("emits browser-session-expired event and clears the stored token on auth expiry", async () => {

@@ -14,10 +14,12 @@ import { MiniAppRoot } from "../MiniAppRoot";
 import { BROWSER_SESSION_EXPIRED_EVENT } from "../api/client";
 
 const apiGetMock = vi.fn();
+const bootstrapWebTokenFromTelegramMock = vi.fn();
 const readStoredWebTokenMetadataMock = vi.fn();
 const refreshWebTokenMock = vi.fn();
 
 vi.mock("../api/client", () => ({
+  bootstrapWebTokenFromTelegram: (...args: unknown[]) => bootstrapWebTokenFromTelegramMock(...args),
   BROWSER_SESSION_EXPIRED_EVENT: "tvoc:browser-session-expired",
   apiGet: (...args: unknown[]) => apiGetMock(...args),
   clearStoredWebToken: vi.fn(),
@@ -40,8 +42,13 @@ vi.mock("../utils/start-param", () => ({
 describe("MiniAppRoot readiness overlay", () => {
   beforeEach(() => {
     apiGetMock.mockReset();
+    bootstrapWebTokenFromTelegramMock.mockReset().mockResolvedValue({
+      token: "browser-token",
+      expiresAt: new Date("2026-03-22T12:00:00.000Z").toISOString()
+    });
     readStoredWebTokenMetadataMock.mockReset().mockReturnValue(null);
     refreshWebTokenMock.mockReset();
+    delete (window as any).Telegram;
   });
 
   afterEach(() => {
@@ -82,6 +89,26 @@ describe("MiniAppRoot readiness overlay", () => {
         )
       ).toBeTruthy();
     });
+  });
+
+  it("treats expired Telegram initData as session restart hint instead of backend outage", async () => {
+    /* Once Telegram launch auth ages out, the overlay should ask for reopen rather than blaming backend connectivity. */
+    apiGetMock.mockRejectedValueOnce(
+      new Error(
+        "Request failed: 401 - Telegram initData signature is invalid. Reopen the Mini App from Telegram and retry. [req-telegram]"
+      )
+    );
+
+    render(<MiniAppRoot />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Mini App требует свежий запуск из Telegram/i)).toBeTruthy();
+    });
+    expect(
+      screen.getByText(
+        /Request failed: 401 - Telegram initData signature is invalid\. Reopen the Mini App from Telegram and retry\./i
+      )
+    ).toBeTruthy();
   });
 
   it("shows session-ended overlay after browser auth expiry", async () => {

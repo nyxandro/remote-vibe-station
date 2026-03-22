@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  bootstrapWebTokenFromTelegram,
   BROWSER_SESSION_EXPIRED_EVENT,
   clearStoredWebToken,
   readStoredWebTokenMetadata,
@@ -54,6 +55,7 @@ export const useBrowserSession = (): BrowserSessionState => {
   const [isSessionExpired, setIsSessionExpired] = useState<boolean>(false);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null);
   const lastActivityAtRef = useRef<number | null>(readStoredLastActivityAt());
+  const isBootstrappingRef = useRef<boolean>(false);
   const isRefreshingRef = useRef<boolean>(false);
   const tokenMetaRef = useRef(readStoredWebTokenMetadata());
   const lastRefreshAtRef = useRef<number>(tokenMetaRef.current?.issuedAtMs ?? 0);
@@ -72,6 +74,48 @@ export const useBrowserSession = (): BrowserSessionState => {
     setIsSessionExpired(true);
     setSessionExpiredMessage(message?.trim().length ? message.trim() : DEFAULT_SESSION_EXPIRED_MESSAGE);
   }, []);
+
+  const syncTokenRefs = useCallback((tokenMeta: { issuedAtMs: number } | null) => {
+    /* Token bootstrap/refresh must realign idle and refresh timers to the currently active bearer token. */
+    if (!tokenMeta) {
+      lastActivityAtRef.current = null;
+      lastRefreshAtRef.current = 0;
+      clearStoredLastActivityAt();
+      return;
+    }
+
+    lastActivityAtRef.current = readStoredLastActivityAt() ?? tokenMeta.issuedAtMs;
+    lastRefreshAtRef.current = tokenMeta.issuedAtMs;
+  }, []);
+
+  const maybeBootstrapFromTelegram = useCallback(async () => {
+    /* Telegram-hosted Mini App should exchange initData into bearer auth before the initData freshness window closes. */
+    if (isSessionExpired || isBootstrappingRef.current || syncTokenMetadata()) {
+      return;
+    }
+
+    const initData = (window as any)?.Telegram?.WebApp?.initData as string | undefined;
+    if (typeof initData !== "string" || initData.trim().length === 0) {
+      return;
+    }
+
+    isBootstrappingRef.current = true;
+    try {
+      await bootstrapWebTokenFromTelegram();
+      syncTokenRefs(syncTokenMetadata());
+    } catch (error) {
+      /* Auth-specific bootstrap failures should block the UI with a session-ended message, while transient errors may retry later. */
+      if (
+        error instanceof Error &&
+        (error.message.includes("Telegram initData signature is invalid") ||
+          error.message.includes("APP_WEB_TOKEN_BOOTSTRAP_INIT_DATA_REQUIRED"))
+      ) {
+        expireSession(error.message);
+      }
+    } finally {
+      isBootstrappingRef.current = false;
+    }
+  }, [expireSession, isSessionExpired, syncTokenMetadata, syncTokenRefs]);
 
   const maybeRefresh = useCallback(async () => {
     /* User activity renews the bearer token directly, so idle tabs cannot extend access on their own. */
@@ -95,10 +139,7 @@ export const useBrowserSession = (): BrowserSessionState => {
     isRefreshingRef.current = true;
     try {
       await refreshWebToken();
-      const nextTokenMeta = syncTokenMetadata();
-      if (nextTokenMeta) {
-        lastRefreshAtRef.current = nextTokenMeta.issuedAtMs;
-      }
+      syncTokenRefs(syncTokenMetadata());
     } catch {
       /* Only auth-expiry should end the session; transient refresh failures can retry on the next timer/user action. */
       if (!readStoredWebTokenMetadata()) {
@@ -107,12 +148,19 @@ export const useBrowserSession = (): BrowserSessionState => {
     } finally {
       isRefreshingRef.current = false;
     }
-  }, [expireSession, isSessionExpired, syncTokenMetadata]);
+  }, [expireSession, isSessionExpired, syncTokenMetadata, syncTokenRefs]);
 
   const recordActivity = useCallback(() => {
     /* User input extends the idle window, but throttling avoids spamming sessionStorage on rapid scroll/typing bursts. */
     const tokenMeta = syncTokenMetadata();
-    if (!tokenMeta || isSessionExpired) {
+    if (!tokenMeta) {
+      if (!isSessionExpired) {
+        void maybeBootstrapFromTelegram();
+      }
+      return;
+    }
+
+    if (isSessionExpired) {
       return;
     }
 
@@ -126,20 +174,17 @@ export const useBrowserSession = (): BrowserSessionState => {
     lastActivityAtRef.current = nowMs;
     persistLastActivityAt(nowMs);
     void maybeRefresh();
-  }, [isSessionExpired, maybeRefresh, syncTokenMetadata]);
+  }, [isSessionExpired, maybeBootstrapFromTelegram, maybeRefresh, syncTokenMetadata]);
 
   useEffect(() => {
     /* Existing browser tokens reuse the last recorded interaction time; brand-new tokens start with zero post-issue activity. */
-    const tokenMeta = syncTokenMetadata();
-    if (!tokenMeta) {
-      lastActivityAtRef.current = null;
-      clearStoredLastActivityAt();
-      return;
-    }
+    syncTokenRefs(syncTokenMetadata());
+  }, [syncTokenMetadata, syncTokenRefs]);
 
-    lastActivityAtRef.current = readStoredLastActivityAt() ?? tokenMeta.issuedAtMs;
-    lastRefreshAtRef.current = tokenMeta.issuedAtMs;
-  }, [syncTokenMetadata]);
+  useEffect(() => {
+    /* Bootstrap once on mount so Telegram Mini App sessions stop relying on expiring initData during normal work. */
+    void maybeBootstrapFromTelegram();
+  }, [maybeBootstrapFromTelegram]);
 
   useEffect(() => {
     /* Browser-session expiry can be announced by any failing API call, so the hook subscribes once at the root. */

@@ -50,6 +50,14 @@ const buildTask = (overrides?: Partial<KanbanTask>): KanbanTask => ({
   updatedAt: "2026-03-10T09:00:00.000Z",
   claimedBy: null,
   leaseUntil: null,
+  statusTimeline: [
+    { status: "queued", changedAt: "2026-03-10T09:00:00.000Z" },
+    { status: "in_progress", changedAt: "2026-03-10T09:10:00.000Z" },
+    { status: "blocked", changedAt: "2026-03-10T09:40:00.000Z" },
+    { status: "queued", changedAt: "2026-03-10T10:00:00.000Z" },
+    { status: "in_progress", changedAt: "2026-03-10T10:05:00.000Z" },
+    { status: "done", changedAt: "2026-03-10T10:20:00.000Z" }
+  ],
   ...overrides
 });
 
@@ -181,5 +189,27 @@ describe("KanbanTaskEditorModal", () => {
       resultSummary: null,
       blockedReason: null
     });
+  });
+
+  it("shows a collapsible execution timeline with summed active time for edit mode", () => {
+    /* Task editing should reveal compact execution timing without inflating the JSON payload beyond status changes. */
+    render(
+      <KanbanTaskEditorModal
+        mode="edit"
+        scope="project"
+        activeProjectSlug="alpha"
+        projects={[buildProject()]}
+        task={buildTask()}
+        isSaving={false}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Execution timeline/i)).toBeTruthy();
+    expect(screen.getByText("45m")).toBeTruthy();
+    expect(screen.getAllByText(/In progress/i)).toHaveLength(2);
+    expect(screen.getByText(/Blocked/i)).toBeTruthy();
+    expect(screen.getByText(/20m paused/i)).toBeTruthy();
   });
 });

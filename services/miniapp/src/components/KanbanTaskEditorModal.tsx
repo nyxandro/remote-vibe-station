@@ -29,6 +29,8 @@ import {
   writeStoredKanbanTaskEditorDraft
 } from "./kanban-task-editor-draft";
 import { KanbanCriteriaEditor } from "./KanbanCriteriaEditor";
+import { KanbanTaskOutcomeFields } from "./KanbanTaskOutcomeFields";
+import { KanbanTaskTimelineAccordion } from "./KanbanTaskTimelineAccordion";
 import { ThemeMode } from "../utils/theme";
 
 const VisualMarkdownEditor = lazy(async () => ({
@@ -414,36 +416,17 @@ export const KanbanTaskEditorModal = (props: Props) => {
             />
           </section>
 
-          {/* Outcome fields appear only for terminal/problem states, without an extra section title. */}
-          {(status === "done" || status === "blocked") && (
-            <section className="kanban-form-section">
-              {status === "done" ? (
-                <label className="kanban-field">
-                  <span className="kanban-field-label">Result summary</span>
-                  <textarea
-                    className="input kanban-textarea"
-                    aria-label="Result summary"
-                    placeholder="Summarize what was achieved..."
-                    value={resultSummary}
-                    onChange={(event) => setResultSummary(event.target.value)}
-                  />
-                </label>
-              ) : null}
+          {/* Edit mode reveals execution timing while keeping the editor file within the 500-line limit. */}
+          {props.task ? <KanbanTaskTimelineAccordion task={props.task} /> : null}
 
-              {status === "blocked" ? (
-                <label className="kanban-field">
-                  <span className="kanban-field-label">Blocked reason</span>
-                  <textarea
-                    className="input kanban-textarea"
-                    aria-label="Blocked reason"
-                    placeholder="Why is this task blocked?"
-                    value={blockedReason}
-                    onChange={(event) => setBlockedReason(event.target.value)}
-                  />
-                </label>
-              ) : null}
-            </section>
-          )}
+          {/* Status-specific outcome fields stay isolated in a dedicated component to keep the modal maintainable. */}
+          <KanbanTaskOutcomeFields
+            status={status}
+            resultSummary={resultSummary}
+            blockedReason={blockedReason}
+            onResultSummaryChange={setResultSummary}
+            onBlockedReasonChange={setBlockedReason}
+          />
         </div>
 
         <div className="kanban-modal-actions">

@@ -10,6 +10,7 @@
 import { areAllCriteriaDone, hasBlockedCriteria } from "./kanban-criteria";
 import { KanbanCriterionRecord, KanbanPriority, KanbanStatus, KanbanTaskRecord } from "./kanban.types";
 import { KanbanValidationError } from "./kanban.errors";
+import { recordKanbanTaskStatusTransition } from "./kanban-task-timeline";
 
 const PRIORITY_WEIGHT: Record<KanbanPriority, number> = {
   low: 1,
@@ -55,12 +56,14 @@ export const releaseExpiredKanbanLeases = (tasks: KanbanTaskRecord[], nowMs: num
       continue;
     }
 
+    const previousStatus = task.status;
     task.status = "queued";
     task.claimedBy = null;
     task.leaseUntil = null;
     task.executionSource = null;
     task.executionSessionId = null;
     task.updatedAt = new Date(nowMs).toISOString();
+    recordKanbanTaskStatusTransition({ task, previousStatus, changedAt: task.updatedAt });
   }
 };
 

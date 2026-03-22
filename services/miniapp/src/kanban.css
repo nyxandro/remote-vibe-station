@@ -716,6 +716,141 @@ html[data-theme="dark"] .kanban-project-badge {
   animation: kanbanLabelFadeIn 0.3s ease-out;
 }
 
+.kanban-timeline-accordion {
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background: rgba(10, 16, 30, 0.32);
+  overflow: hidden;
+}
+
+.kanban-timeline-summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.kanban-timeline-summary::-webkit-details-marker {
+  display: none;
+}
+
+.kanban-timeline-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kanban-timeline-icon-wrap {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(27, 108, 255, 0.16);
+  color: var(--accent);
+}
+
+.kanban-timeline-summary-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kanban-timeline-summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--kanban-title);
+}
+
+.kanban-timeline-summary-total {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.kanban-timeline-summary-chevron {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.kanban-timeline-accordion[open] .kanban-timeline-summary-chevron {
+  transform: rotate(180deg);
+}
+
+.kanban-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px 16px;
+}
+
+.kanban-timeline-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.kanban-timeline-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04);
+}
+
+.kanban-timeline-item.is-active .kanban-timeline-dot {
+  background: var(--accent);
+}
+
+.kanban-timeline-item.is-paused .kanban-timeline-dot {
+  background: #f59e0b;
+}
+
+.kanban-timeline-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.kanban-timeline-item:last-child .kanban-timeline-item-body {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.kanban-timeline-item-header,
+.kanban-timeline-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kanban-timeline-item-title,
+.kanban-timeline-item-duration {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kanban-timeline-item-title {
+  color: var(--text-normal);
+}
+
+.kanban-timeline-item-duration,
+.kanban-timeline-item-meta {
+  color: var(--text-muted);
+}
+
+.kanban-timeline-item-meta {
+  font-size: 12px;
+}
+
 @keyframes kanbanLabelFadeIn {
   from { opacity: 0; transform: translateX(-4px); }
   to { opacity: 1; transform: translateX(0); }

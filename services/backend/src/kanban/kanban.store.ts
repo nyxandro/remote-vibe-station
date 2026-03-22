@@ -15,6 +15,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { z } from "zod";
 
 import { normalizeStoredCriteria } from "./kanban-criteria";
+import { normalizeStoredKanbanStatusTimeline } from "./kanban-task-timeline";
 import { KANBAN_PRIORITIES, KANBAN_STATUSES, KanbanTaskRecord } from "./kanban.types";
 import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-file";
 
@@ -46,12 +47,19 @@ const taskSchema = z.object({
   executionSource: z.enum(["session", "runner"]).nullable().optional(),
   executionSessionId: z.string().nullable().optional(),
   blockedResumeStatus: z.enum(["backlog", "refinement", "ready", "queued", "in_progress", "done"]).nullable().optional(),
+  statusTimeline: z.unknown().optional(),
   runnerSessionId: z.string().nullable().optional()
 }).transform((value) => ({
   ...value,
   executionSource: value.executionSource ?? (value.runnerSessionId ? "runner" : null),
   executionSessionId: value.executionSessionId ?? value.runnerSessionId ?? null,
-  blockedResumeStatus: value.blockedResumeStatus ?? null
+  blockedResumeStatus: value.blockedResumeStatus ?? null,
+  statusTimeline: normalizeStoredKanbanStatusTimeline({
+    storedTimeline: value.statusTimeline,
+    status: value.status,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt
+  })
 }));
 
 const storeSchema = z.object({
