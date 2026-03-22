@@ -18,7 +18,12 @@ type ActiveFile = {
   exists: boolean;
 };
 
-export const useOpenCodeSettings = (setError: (value: string | null) => void) => {
+type OnSettingsChanged = (projectId: string | null) => Promise<void> | void;
+
+export const useOpenCodeSettings = (
+  setError: (value: string | null) => void,
+  onSettingsChanged?: OnSettingsChanged
+) => {
   const [overview, setOverview] = useState<OpenCodeSettingsOverview | null>(null);
   const [activeFile, setActiveFile] = useState<ActiveFile | null>(null);
 
@@ -58,6 +63,17 @@ export const useOpenCodeSettings = (setError: (value: string | null) => void) =>
     [setError]
   );
 
+  const refreshAfterSettingsMutation = useCallback(
+    async (projectId: string | null): Promise<void> => {
+      /* Settings mutations should refresh the accordion itself and any git/project metadata changed by file edits. */
+      await loadOverview(projectId);
+      if (onSettingsChanged) {
+        await onSettingsChanged(projectId);
+      }
+    },
+    [loadOverview, onSettingsChanged]
+  );
+
   const saveActiveFile = useCallback(
     async (projectId: string | null, content: string): Promise<void> => {
       /* Persist current editor content and keep local state synchronized. */
@@ -73,11 +89,12 @@ export const useOpenCodeSettings = (setError: (value: string | null) => void) =>
           content
         });
         setActiveFile((prev) => (prev ? { ...prev, content, exists: true } : prev));
+        await refreshAfterSettingsMutation(projectId);
       } catch (error) {
         setError(error instanceof Error ? error.message : "Failed to save settings file");
       }
     },
-    [activeFile, setError]
+    [activeFile, refreshAfterSettingsMutation, setError]
   );
 
   const createFile = useCallback(
@@ -91,12 +108,12 @@ export const useOpenCodeSettings = (setError: (value: string | null) => void) =>
         setError(null);
         await apiPost("/api/opencode/settings/create", { kind, projectId, name });
         await openFile(kind, projectId, name);
-        await loadOverview(projectId);
+        await refreshAfterSettingsMutation(projectId);
       } catch (error) {
         setError(error instanceof Error ? error.message : "Failed to create settings file");
       }
     },
-    [loadOverview, openFile, setError]
+    [openFile, refreshAfterSettingsMutation, setError]
   );
 
   return {

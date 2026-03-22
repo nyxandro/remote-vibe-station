@@ -46,6 +46,7 @@ describe("useOpenCodeAdminActions", () => {
     /* Restart action should expose deterministic success state so Settings UI can render operator feedback. */
     vi.mocked(apiPost).mockResolvedValueOnce({});
     const loadSettingsOverview = vi.fn().mockResolvedValue(undefined);
+    const refreshSettingsSurface = vi.fn().mockResolvedValue(undefined);
 
     const { result } = renderHook(() =>
       useOpenCodeAdminActions({
@@ -53,7 +54,8 @@ describe("useOpenCodeAdminActions", () => {
         activeId: "alpha",
         loadProjects: vi.fn(),
         loadSettingsOverview,
-        checkOpenCodeVersionStatus: vi.fn()
+        checkOpenCodeVersionStatus: vi.fn(),
+        refreshSettingsSurface
       })
     );
 
@@ -62,8 +64,31 @@ describe("useOpenCodeAdminActions", () => {
     });
 
     expect(apiPost).toHaveBeenCalledWith("/api/opencode/restart", {});
-    expect(loadSettingsOverview).toHaveBeenCalledWith("alpha");
+    expect(refreshSettingsSurface).toHaveBeenCalledWith("alpha");
+    expect(loadSettingsOverview).not.toHaveBeenCalled();
     expect(result.current.restartOpenCodeState.lastResult).toBe("success");
+  });
+
+  it("uses the full settings refresh helper for manual reload", async () => {
+    /* Manual reload should refresh the whole Settings screen, not just config overview and version status. */
+    const refreshSettingsSurface = vi.fn().mockResolvedValue(undefined);
+
+    const { result } = renderHook(() =>
+      useOpenCodeAdminActions({
+        setError: vi.fn(),
+        activeId: "alpha",
+        loadProjects: vi.fn(),
+        loadSettingsOverview: vi.fn(),
+        checkOpenCodeVersionStatus: vi.fn(),
+        refreshSettingsSurface
+      })
+    );
+
+    await act(async () => {
+      await result.current.reloadSettingsNow();
+    });
+
+    expect(refreshSettingsSurface).toHaveBeenCalledWith("alpha");
   });
 
   it("surfaces reload errors when settings refresh fails", async () => {
@@ -76,7 +101,8 @@ describe("useOpenCodeAdminActions", () => {
         activeId: "alpha",
         loadProjects: vi.fn(),
         loadSettingsOverview: vi.fn().mockRejectedValue(new Error("reload failed")),
-        checkOpenCodeVersionStatus: vi.fn().mockResolvedValue(undefined)
+        checkOpenCodeVersionStatus: vi.fn().mockResolvedValue(undefined),
+        refreshSettingsSurface: vi.fn().mockRejectedValue(new Error("reload failed"))
       })
     );
 

@@ -20,6 +20,8 @@ import {
 import { Request } from "express";
 
 import { OpenCodeProviderAuthClient } from "../open-code/opencode-provider-auth.client";
+import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { TelegramPreferencesService } from "./preferences/telegram-preferences.service";
 
@@ -27,7 +29,8 @@ import { TelegramPreferencesService } from "./preferences/telegram-preferences.s
 export class TelegramProviderController {
   public constructor(
     private readonly providerAuth: OpenCodeProviderAuthClient,
-    private readonly preferences: TelegramPreferencesService
+    private readonly preferences: TelegramPreferencesService,
+    private readonly events: EventsService
   ) {}
 
   @UseGuards(AppAuthGuard)
@@ -120,6 +123,7 @@ export class TelegramProviderController {
         method: body.method,
         code: typeof body.code === "string" ? body.code.trim() : undefined
       });
+      publishWorkspaceStateChangedEvent({ events: this.events, adminId, surfaces: ["providers"], reason: "providers.oauth.complete" });
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -151,6 +155,7 @@ export class TelegramProviderController {
 
     try {
       await this.providerAuth.setApiKey({ providerID, key });
+      publishWorkspaceStateChangedEvent({ events: this.events, adminId, surfaces: ["providers"], reason: "providers.api-key.save" });
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -178,6 +183,7 @@ export class TelegramProviderController {
 
     try {
       await this.providerAuth.disconnectProvider({ providerID });
+      publishWorkspaceStateChangedEvent({ events: this.events, adminId, surfaces: ["providers"], reason: "providers.disconnect" });
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";

@@ -55,12 +55,13 @@ export const useProxySettings = (setError: (value: string | null) => void) => {
       setIsApplying(true);
       const data = await apiPost<ProxyApplyResult>("/api/telegram/proxy/settings/apply", {});
       setApplyResult(data);
+      await loadSettings();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to apply proxy runtime");
     } finally {
       setIsApplying(false);
     }
-  }, [setError]);
+  }, [loadSettings, setError]);
 
   return {
     snapshot,

@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { ArrowUp, FolderOpen, Plus, RefreshCw } from "lucide-react";
+import { ArrowUp, FolderOpen, Plus } from "lucide-react";
 
 import { FileListResponse, FileReadResponse } from "../types";
 import { ThemeMode } from "../utils/theme";
@@ -21,7 +21,6 @@ type Props = {
   themeMode: ThemeMode;
   iconForEntry: (name: string, kind: "file" | "dir") => JSX.Element;
   onUp: () => void;
-  onRefresh: () => void;
   onOpenEntry: (nextPath: string, kind: "file" | "dir") => void;
   onClosePreview: () => void;
   onDownloadPreview: (relativePath: string) => Promise<void> | void;
@@ -101,17 +100,6 @@ export const FilesTab = (props: Props) => {
             type="button"
           >
             <Plus size={16} className="btn-icon" />
-          </button>
-
-          <button
-            aria-label="Refresh"
-            className="icon-tool-btn"
-            disabled={!props.activeId}
-            onClick={props.onRefresh}
-            title="Refresh current folder"
-            type="button"
-          >
-            <RefreshCw size={16} className="btn-icon" />
           </button>
 
           <button

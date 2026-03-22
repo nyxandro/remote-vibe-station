@@ -20,6 +20,8 @@ import {
 import { Request } from "express";
 
 import { AppAuthGuard } from "../security/app-auth.guard";
+import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { CliproxyAccountService } from "./cliproxy-account.service";
 import { CliproxyProviderId } from "./cliproxy-management.client";
 import {
@@ -32,7 +34,10 @@ import {
 
 @Controller("api/telegram/cliproxy")
 export class CliproxyAccountController {
-  public constructor(private readonly accounts: CliproxyAccountService) {}
+  public constructor(
+    private readonly accounts: CliproxyAccountService,
+    private readonly events: EventsService
+  ) {}
 
   @UseGuards(AppAuthGuard)
   @Get("state")
@@ -80,6 +85,12 @@ export class CliproxyAccountController {
       state: body.state,
       error: body.error
     });
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      adminId: (req as Request & { authAdminId?: number }).authAdminId,
+      surfaces: ["providers"],
+      reason: "cliproxy.oauth.complete"
+    });
     return { ok: true };
   }
 
@@ -90,6 +101,12 @@ export class CliproxyAccountController {
     /* Manual test triggers a lightweight live request so stale limit/error statuses refresh immediately. */
     requireProxyAdminId(req);
     await this.accounts.testAccount({ accountId: this.assertAccountId(accountId) });
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      adminId: (req as Request & { authAdminId?: number }).authAdminId,
+      surfaces: ["providers"],
+      reason: "cliproxy.account.test"
+    });
     return { ok: true };
   }
 
@@ -100,6 +117,12 @@ export class CliproxyAccountController {
     /* Manual switch pins one auth file so operators can steer traffic to a specific account. */
     requireProxyAdminId(req);
     await this.accounts.activateAccount({ accountId: this.assertAccountId(accountId) });
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      adminId: (req as Request & { authAdminId?: number }).authAdminId,
+      surfaces: ["providers"],
+      reason: "cliproxy.account.activate"
+    });
     return { ok: true };
   }
 
@@ -110,6 +133,12 @@ export class CliproxyAccountController {
     /* Deletion removes the stored auth file from CLIProxy management pool. */
     requireProxyAdminId(req);
     await this.accounts.deleteAccount({ accountId: this.assertAccountId(accountId) });
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      adminId: (req as Request & { authAdminId?: number }).authAdminId,
+      surfaces: ["providers"],
+      reason: "cliproxy.account.delete"
+    });
     return { ok: true };
   }
 

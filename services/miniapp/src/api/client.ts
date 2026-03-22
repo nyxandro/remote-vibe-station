@@ -24,7 +24,7 @@ const BROWSER_SESSION_EXPIRY_CODES = new Set(["APP_AUTH_HEADER_INVALID", "APP_AU
 
 export const BROWSER_SESSION_EXPIRED_EVENT = "tvoc:browser-session-expired";
 
-export type EventStreamTopic = "kanban" | "terminal";
+export type EventStreamTopic = "kanban" | "terminal" | "workspace";
 export type BrowserWebTokenMetadata = {
   token: string;
   issuedAtMs: number;

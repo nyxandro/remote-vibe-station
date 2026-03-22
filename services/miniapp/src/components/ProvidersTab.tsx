@@ -34,14 +34,14 @@ type Props = {
   isProxySaving: boolean;
   isProxyApplying: boolean;
   proxyApplyResult: ProxyApplyResult | null;
-  onRefresh: () => void;
+  onRefresh?: () => void;
   onStartConnect: (input: { providerID: string; methodIndex: number }) => void;
   onSubmitApiKey: (input: { providerID: string; key: string }) => void;
   onSubmitOAuthCode: () => void;
   onCompleteOAuthAuto: () => void;
   onDisconnect: (providerID: string) => void;
   onChangeOAuthCodeDraft?: (value: string) => void;
-  onReloadCliproxy: () => void;
+  onReloadCliproxy?: () => void;
   onStartCliproxyAuth: (provider: CliproxyAccountState["providers"][number]["id"]) => void;
   onCompleteCliproxyAuth: (input: {
     provider: CliproxyAccountState["providers"][number]["id"];
@@ -53,7 +53,7 @@ type Props = {
   onTestCliproxyAccount: (accountId: string) => void;
   onActivateCliproxyAccount: (accountId: string) => void;
   onDeleteCliproxyAccount: (accountId: string) => void;
-  onReloadProxy: () => void;
+  onReloadProxy?: () => void;
   onSaveProxy: (input: ProxySettingsInput) => void;
   onApplyProxy: () => void;
 };
@@ -122,9 +122,6 @@ export const ProvidersTab = (props: Props) => {
     <section className="providers-shell">
       <div className="settings-header-row">
         <h3 className="panel-title">Providers</h3>
-        <button className="btn outline" onClick={props.onRefresh} type="button" disabled={props.isLoading}>
-          {props.isLoading ? "Loading..." : "Reload"}
-        </button>
       </div>
 
       <div className="providers-selected-card">
@@ -229,9 +226,6 @@ export const ProvidersTab = (props: Props) => {
         {/* Proxy runtime controls stay available here after removing the dedicated CLIProxy tab. */}
         <div className="settings-header-row">
           <strong>CLIProxy runtime</strong>
-          <button className="btn outline" onClick={props.onReloadProxy} disabled={props.isProxyLoading} type="button">
-            {props.isProxyLoading ? "Loading..." : "Reload runtime"}
-          </button>
         </div>
 
         <label className="project-create-note" htmlFor={PROVIDERS_TAB_FIELD_IDS.proxyMode}>

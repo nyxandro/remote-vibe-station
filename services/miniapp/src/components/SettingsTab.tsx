@@ -43,7 +43,7 @@ type Props = {
   onRefreshProjects: () => void;
   onSyncProjects: () => void;
   onRestartOpenCode: () => void;
-  onLoadOverview: () => void;
+  onLoadOverview?: () => void;
   onOpenFile: (kind: OpenCodeSettingsKind, relativePath?: string) => void;
   onCreateFile: (kind: OpenCodeSettingsKind, name?: string) => void;
   onSaveActiveFile: (content: string) => Promise<void> | void;
@@ -255,9 +255,6 @@ export const SettingsTab = (props: Props) => {
     <section className="settings-shell">
       <div className="settings-header-row">
         <h3 className="panel-title">Settings</h3>
-        <button className="btn outline" onClick={props.onLoadOverview} type="button">
-          Reload
-        </button>
       </div>
 
       <details className="settings-accordion-item" open>

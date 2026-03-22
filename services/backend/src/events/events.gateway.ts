@@ -19,10 +19,11 @@ import { Server, WebSocket } from "ws";
 import { EventStreamAuthService } from "./event-stream-auth.service";
 import { EventsService } from "./events.service";
 import { EventEnvelope } from "./events.types";
+import { WorkspaceStateChangedEventData } from "./workspace-events";
 
 type ClientSubscription = {
   adminId: number;
-  topics: Array<"kanban" | "terminal">;
+  topics: Array<"kanban" | "terminal" | "workspace">;
   projectSlug: string | null;
 };
 
@@ -124,6 +125,10 @@ export class EventsGateway
 
   private matches(subscription: ClientSubscription, event: EventEnvelope, isReplay: boolean): boolean {
     /* Keep gateway filtering explicit so only approved topics can leave the backend over `/events`. */
+    if (!this.matchesAdminScope(subscription, event)) {
+      return false;
+    }
+
     if (event.type === "kanban.task.updated") {
       if (!subscription.topics.includes("kanban")) {
         return false;
@@ -144,6 +149,26 @@ export class EventsGateway
       return eventProjectSlug.length > 0 && eventProjectSlug === subscription.projectSlug.trim();
     }
 
+    if (event.type === "workspace.state.changed") {
+      if (isReplay || !subscription.topics.includes("workspace")) {
+        return false;
+      }
+
+      const eventData = (event.data ?? {}) as WorkspaceStateChangedEventData;
+      const eventProjectSlug = typeof eventData.projectSlug === "string" ? eventData.projectSlug.trim() : "";
+      if (!subscription.projectSlug || eventProjectSlug.length === 0) {
+        return true;
+      }
+
+      return eventProjectSlug === subscription.projectSlug.trim();
+    }
+
     return false;
+  }
+
+  private matchesAdminScope(subscription: ClientSubscription, event: EventEnvelope): boolean {
+    /* Admin-bound workspace events should not fan out to other authenticated operators. */
+    const adminId = (event.data as { adminId?: unknown } | null)?.adminId;
+    return typeof adminId !== "number" || adminId === subscription.adminId;
   }
 }

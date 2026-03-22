@@ -39,6 +39,7 @@ import {
 import { ProjectCreateRequest } from "./project.types";
 import { ProjectsService } from "./projects.service";
 import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { ProjectRuntimeSettingsPatch } from "./project-runtime.types";
 
 @Controller("api/projects")
@@ -428,6 +429,7 @@ export class ProjectsController {
 
     const rootPath = this.projects.getProjectRootPath(id);
     await this.gitOps.checkoutBranch(rootPath, body.branch);
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["files", "git", "projects"], reason: "git.checkout" });
     return this.gitOps.getOverview(rootPath);
   }
 
@@ -436,6 +438,7 @@ export class ProjectsController {
     /* Fetch remote refs and return updated overview. */
     const rootPath = this.projects.getProjectRootPath(id);
     await this.gitOps.fetchAll(rootPath);
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["git", "projects"], reason: "git.fetch" });
     return this.gitOps.getOverview(rootPath);
   }
 
@@ -444,6 +447,7 @@ export class ProjectsController {
     /* Pull updates and return updated overview. */
     const rootPath = this.projects.getProjectRootPath(id);
     await this.gitOps.pull(rootPath);
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["files", "git", "projects"], reason: "git.pull" });
     return this.gitOps.getOverview(rootPath);
   }
 
@@ -452,6 +456,7 @@ export class ProjectsController {
     /* Push branch and return updated overview. */
     const rootPath = this.projects.getProjectRootPath(id);
     await this.gitOps.push(rootPath);
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["git", "projects"], reason: "git.push" });
     return this.gitOps.getOverview(rootPath);
   }
 
@@ -464,6 +469,7 @@ export class ProjectsController {
 
     const rootPath = this.projects.getProjectRootPath(id);
     await this.gitOps.merge(rootPath, body.sourceBranch);
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["files", "git", "projects"], reason: "git.merge" });
     return this.gitOps.getOverview(rootPath);
   }
 
@@ -477,6 +483,7 @@ export class ProjectsController {
 
     const rootPath = this.projects.getProjectRootPath(id);
     await this.gitOps.commitAll(rootPath, message);
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["git", "projects"], reason: "git.commit" });
     return this.gitOps.getOverview(rootPath);
   }
 }

@@ -85,7 +85,6 @@ type Props = {
   onRunContainerAction: (service: string, action: ContainerAction) => void;
   onLoadLogs: () => void;
   onFilesUp: () => void;
-  onFilesRefresh: () => void;
   onOpenEntry: (nextPath: string, kind: "file" | "dir") => void;
   onCloseFilePreview: () => void;
   onDownloadFilePreview: (relativePath: string) => Promise<void> | void;
@@ -97,7 +96,7 @@ type Props = {
   onRefreshProjects: () => void;
   onSyncProjects: () => void;
   onRestartOpenCode: () => void;
-  onLoadSettingsOverview: () => void;
+  onLoadSettingsOverview?: () => void;
   onOpenSettingsFile: (kind: OpenCodeSettingsKind, relativePath?: string) => void;
   onCreateSettingsFile: (kind: OpenCodeSettingsKind, name?: string) => void;
   onSaveSettingsFile: (content: string) => Promise<void> | void;
@@ -148,7 +147,6 @@ type Props = {
   onReloadServerMetrics?: () => void;
   onUpdateOpenCodeVersion: () => void;
   iconForEntry: (name: string, kind: "file" | "dir") => JSX.Element;
-  onGitRefresh: () => void;
   onGitCheckout: (branch: string) => void;
   onGitCommit: (message: string) => void;
   onGitFetch: () => void;
@@ -166,7 +164,7 @@ type Props = {
       instructions: string;
       codeDraft: string;
     } | null;
-    onRefresh: () => void;
+     onRefresh?: () => void;
     onStartConnect: (input: { providerID: string; methodIndex: number }) => void;
     onSubmitApiKey: (input: { providerID: string; key: string }) => void;
     onSubmitOAuthCode: () => void;
@@ -184,10 +182,10 @@ type Props = {
     cliproxyOAuthStart: CliproxyOAuthStartPayload | null;
     isCliproxyLoading: boolean;
     isCliproxySubmitting: boolean;
-    onReload: () => void;
+     onReload?: () => void;
     onSave: (input: ProxySettingsInput) => void;
     onApply: () => void;
-    onReloadCliproxy: () => void;
+     onReloadCliproxy?: () => void;
     onStartCliproxyAuth: (provider: CliproxyProviderState["id"]) => void;
     onCompleteCliproxyAuth: (input: {
       provider: CliproxyProviderState["id"];
@@ -246,7 +244,6 @@ export const WorkspaceTabsContent = (props: Props) => {
         themeMode={props.themeMode}
         iconForEntry={props.iconForEntry}
         onUp={props.onFilesUp}
-        onRefresh={props.onFilesRefresh}
         onOpenEntry={props.onOpenEntry}
         onClosePreview={props.onCloseFilePreview}
         onDownloadPreview={props.onDownloadFilePreview}
@@ -277,7 +274,6 @@ export const WorkspaceTabsContent = (props: Props) => {
       <GitHubTab
         activeId={props.activeId}
         overview={props.gitOverview}
-        onRefresh={props.onGitRefresh}
         onCheckout={props.onGitCheckout}
         onCommit={props.onGitCommit}
         onFetch={props.onGitFetch}
@@ -297,7 +293,7 @@ export const WorkspaceTabsContent = (props: Props) => {
         isLoading={props.providersState.isLoading}
         isSubmitting={props.providersState.isSubmitting}
         oauthState={props.providersState.oauthState}
-        onRefresh={props.providersState.onRefresh}
+         onRefresh={props.providersState.onRefresh}
         onStartConnect={props.providersState.onStartConnect}
         onSubmitApiKey={props.providersState.onSubmitApiKey}
         onSubmitOAuthCode={props.providersState.onSubmitOAuthCode}
@@ -313,13 +309,13 @@ export const WorkspaceTabsContent = (props: Props) => {
         isProxySaving={props.proxyState.isSaving}
         isProxyApplying={props.proxyState.isApplying}
         proxyApplyResult={props.proxyState.applyResult}
-        onReloadCliproxy={props.proxyState.onReloadCliproxy}
+         onReloadCliproxy={props.proxyState.onReloadCliproxy}
         onStartCliproxyAuth={props.proxyState.onStartCliproxyAuth}
         onCompleteCliproxyAuth={props.proxyState.onCompleteCliproxyAuth}
         onTestCliproxyAccount={props.proxyState.onTestCliproxyAccount}
         onActivateCliproxyAccount={props.proxyState.onActivateCliproxyAccount}
         onDeleteCliproxyAccount={props.proxyState.onDeleteCliproxyAccount}
-        onReloadProxy={props.proxyState.onReload}
+         onReloadProxy={props.proxyState.onReload}
         onSaveProxy={props.proxyState.onSave}
         onApplyProxy={props.proxyState.onApply}
       />
@@ -336,7 +332,7 @@ export const WorkspaceTabsContent = (props: Props) => {
       onRefreshProjects={props.onRefreshProjects}
       onSyncProjects={props.onSyncProjects}
       onRestartOpenCode={props.onRestartOpenCode}
-      onLoadOverview={props.onLoadSettingsOverview}
+       onLoadOverview={props.onLoadSettingsOverview}
       onOpenFile={props.onOpenSettingsFile}
       onCreateFile={props.onCreateSettingsFile}
       onSaveActiveFile={props.onSaveSettingsFile}

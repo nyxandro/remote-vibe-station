@@ -21,8 +21,9 @@ describe("TelegramGithubController", () => {
       disconnect: jest.fn().mockReturnValue({ ok: true })
     };
 
-    const controller = new TelegramGithubController(github as never);
-    return { controller, github };
+    const events = { publish: jest.fn() };
+    const controller = new TelegramGithubController(github as never, events as never);
+    return { controller, github, events };
   };
 
   test("returns status for authenticated admin", () => {

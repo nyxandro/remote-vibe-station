@@ -62,6 +62,18 @@ describe("ProvidersTab", () => {
     expect(screen.queryByText("Anthropic")).toBeNull();
   });
 
+  it("hides manual reload buttons now that providers sync reactively", () => {
+    /* Providers screen should no longer require explicit reload controls for overview/runtime/account state. */
+    renderProvidersTab({
+      cliproxyAccounts: cliproxyAccountsFixture,
+      proxySnapshot: proxySnapshotFixture
+    });
+
+    expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reload accounts" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reload runtime" })).toBeNull();
+  });
+
   it("filters provider search in add-provider panel", () => {
     /* Search should quickly narrow huge provider catalogs by prefix or substring. */
     renderProvidersTab({

@@ -9,6 +9,7 @@ import { BadRequestException, Body, Controller, Get, Param, Post, Query, Req, Us
 import { Request } from "express";
 
 import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { OpenCodeClient } from "../open-code/opencode-client";
 import { OpenCodeSessionRoutingStore } from "../open-code/opencode-session-routing.store";
 import { OpenCodeRuntimeService } from "../opencode-admin/opencode-runtime.service";
@@ -208,7 +209,9 @@ export class TelegramController {
     const adminId = requireTelegramAdminId(req);
 
     try {
-      return await this.preferences.updateVoiceControlSettings(adminId, body ?? {});
+      const result = await this.preferences.updateVoiceControlSettings(adminId, body ?? {});
+      publishWorkspaceStateChangedEvent({ events: this.events, adminId, surfaces: ["settings"], reason: "voice-control.update" });
+      return result;
     } catch (error) {
       throw createTelegramControllerBadRequest({
         error,

@@ -28,6 +28,17 @@ const buildCleanOverview = (): GitOverview => ({
   files: []
 });
 
+const buildMultiStatusOverview = (): GitOverview => ({
+  currentBranch: "main",
+  branches: ["main", "feature/ui"],
+  ahead: 1,
+  behind: 0,
+  files: [
+    { path: "src/app.ts", status: "modified", additions: 12, deletions: 4 },
+    { path: "reference.html", status: "untracked", additions: 0, deletions: 0 }
+  ]
+});
+
 describe("GitHubTab", () => {
   afterEach(() => {
     /* Keep DOM isolated between tests. */
@@ -40,7 +51,6 @@ describe("GitHubTab", () => {
       <GitHubTab
         activeId="tvoc"
         overview={buildOverview()}
-        onRefresh={vi.fn()}
         onCheckout={vi.fn()}
         onCommit={vi.fn()}
         onFetch={vi.fn()}
@@ -50,9 +60,31 @@ describe("GitHubTab", () => {
       />
     );
 
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
     expect(screen.getByText("src/app.ts")).toBeTruthy();
     expect(screen.getByText("+12")).toBeTruthy();
     expect(screen.getByText("-4")).toBeTruthy();
+  });
+
+  it("renders one-letter status badges for changed files", () => {
+    /* Compact badges should keep git state scannable without verbose status labels. */
+    render(
+      <GitHubTab
+        activeId="tvoc"
+        overview={buildMultiStatusOverview()}
+        onCheckout={vi.fn()}
+        onCommit={vi.fn()}
+        onFetch={vi.fn()}
+        onPull={vi.fn()}
+        onPush={vi.fn()}
+        onMerge={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTitle("modified").textContent).toBe("M");
+    expect(screen.getByTitle("untracked").textContent).toBe("U");
+    expect(screen.queryByText("modified")).toBeNull();
+    expect(screen.queryByText("untracked")).toBeNull();
   });
 
   it("shows current branch in selector and enables switch only for another branch", () => {
@@ -62,7 +94,6 @@ describe("GitHubTab", () => {
       <GitHubTab
         activeId="tvoc"
         overview={buildOverview()}
-        onRefresh={vi.fn()}
         onCheckout={onCheckout}
         onCommit={vi.fn()}
         onFetch={vi.fn()}
@@ -94,7 +125,6 @@ describe("GitHubTab", () => {
       <GitHubTab
         activeId="tvoc"
         overview={buildOverview()}
-        onRefresh={vi.fn()}
         onCheckout={vi.fn()}
         onCommit={onCommit}
         onFetch={vi.fn()}
@@ -118,7 +148,6 @@ describe("GitHubTab", () => {
       <GitHubTab
         activeId="tvoc"
         overview={buildCleanOverview()}
-        onRefresh={vi.fn()}
         onCheckout={vi.fn()}
         onCommit={vi.fn()}
         onFetch={vi.fn()}

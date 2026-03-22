@@ -26,6 +26,8 @@ import { useThemeMode } from "./hooks/use-theme-mode";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useWorkspaceRuntimeActions } from "./hooks/use-workspace-runtime-actions";
 import { useProjectRuntime } from "./hooks/use-project-runtime";
+import { useReactiveWorkspaceSync } from "./hooks/use-reactive-workspace-sync";
+import { useWorkspaceEvents } from "./hooks/use-workspace-events";
 import { useWorkspaceSelection } from "./hooks/use-workspace-selection";
 import { useCliproxyAccounts } from "./hooks/use-cliproxy-accounts";
 import { useProxySettings } from "./hooks/use-proxy-settings";
@@ -47,7 +49,7 @@ export const App = () => {
   const [terminalInput, setTerminalInput] = useState<string>("");
   const { canControlTelegramStream } = useAuthControl();
   const { gitOverviewMap, loadGitOverview, runGitOperation, checkoutBranch, mergeBranch, commitAll } =
-    useProjectGit(setError);
+    useProjectGit(setError, invalidateProjectCatalog);
   const {
     projects,
     statusMap,
@@ -69,7 +71,7 @@ export const App = () => {
     downloadFile,
     uploadFileFromDevice,
     importFileFromUrl
-  } = useProjectFiles(setError);
+  } = useProjectFiles(setError, refreshGitAndProjectsAfterWorkspaceMutation);
   const {
     overview: settingsOverview,
     activeFile: settingsActiveFile,
@@ -78,7 +80,7 @@ export const App = () => {
     openFile: openSettingsFile,
     saveActiveFile: saveSettingsFile,
     createFile: createSettingsFile
-  } = useOpenCodeSettings(setError);
+  } = useOpenCodeSettings(setError, refreshGitAndProjectsAfterWorkspaceMutation);
   const {
     overview: providerOverview,
     isLoading: isProviderLoading,
@@ -171,7 +173,7 @@ export const App = () => {
     testAccount: testCliproxyAccount,
     activateAccount: activateCliproxyAccount,
     deleteAccount: deleteCliproxyAccount
-  } = useCliproxyAccounts(setError);
+  } = useCliproxyAccounts(setError, refreshProvidersSurface);
 
   const { createProjectFolder, cloneProjectRepository, deleteProjectFolder } = useProjectWorkspace(
     setError,
@@ -191,14 +193,14 @@ export const App = () => {
     restartOpenCodeState,
     syncOpenCodeAtStartup,
     syncOpenCodeNow,
-    restartOpenCodeNow,
-    reloadSettingsNow
+    restartOpenCodeNow
   } = useOpenCodeAdminActions({
     setError,
     activeId,
     loadProjects,
     loadSettingsOverview,
-    checkOpenCodeVersionStatus
+    checkOpenCodeVersionStatus,
+    refreshSettingsSurface
   });
   const { runContainerAction, sendTerminal, runAction } = useWorkspaceRuntimeActions({
     setError,
@@ -207,6 +209,42 @@ export const App = () => {
     loadProjects,
     loadStatus
   });
+
+  async function invalidateProjectCatalog(_projectId: string): Promise<void> {
+    /* Git mutations affect project cards too, so keep the catalog summary fresh after success. */
+    await loadProjects();
+  }
+
+  async function refreshGitAndProjectsAfterWorkspaceMutation(projectId: string | null): Promise<void> {
+    /* File/settings edits change the repo state and must invalidate both GitHub tab and Projects cards. */
+    if (!projectId) {
+      return;
+    }
+
+    await Promise.all([loadGitOverview(projectId), loadProjects()]);
+  }
+
+  async function refreshProvidersSurface(): Promise<void> {
+    /* CLIProxy account mutations can change both the account list and top-level provider badges. */
+    await Promise.all([loadProviderOverview(), loadProxySettings()]);
+  }
+
+  async function refreshSettingsSurface(projectId: string | null): Promise<void> {
+    /* Manual settings reload/restart should refresh every visible diagnostics slice as one batch. */
+    const requests: Array<Promise<void>> = [
+      loadSettingsOverview(projectId),
+      checkOpenCodeVersionStatus(),
+      loadRuntime(projectId),
+      loadGithubAuthStatus(),
+      loadServerMetrics()
+    ];
+
+    if (canControlTelegramStream) {
+      requests.push(loadVoiceControlSettings());
+    }
+
+    await Promise.all(requests);
+  }
 
   useEffect(() => {
     void (async () => {
@@ -237,6 +275,36 @@ export const App = () => {
     }
   });
 
+  useReactiveWorkspaceSync({
+    activeTab,
+    activeId,
+    filePath,
+    canControlTelegramStream,
+    loadProjects,
+    loadGitOverview,
+    loadFiles,
+    loadSettingsOverview,
+    loadOpenCodeVersionStatus,
+    loadRuntime,
+    loadVoiceControlSettings,
+    loadGithubAuthStatus,
+    loadServerMetrics,
+    loadProviderOverview,
+    loadProxySettings,
+    loadCliproxyAccounts
+  });
+
+  useWorkspaceEvents({
+    activeTab,
+    activeId,
+    filePath,
+    onProjectsChanged: loadProjects,
+    onGitChanged: loadGitOverview,
+    onFilesChanged: loadFiles,
+    onSettingsChanged: refreshSettingsSurface,
+    onProvidersChanged: refreshProvidersSurface
+  });
+
   useEffect(() => {
     persistTabSelection(activeTab);
   }, [activeTab]);
@@ -247,63 +315,6 @@ export const App = () => {
       setActiveTab("projects");
     }
   }, [activeTab, canUseProjectTabs]);
-
-  useEffect(() => {
-    if (activeTab === "github" && activeId) {
-      void loadGitOverview(activeId);
-    }
-  }, [activeId, activeTab, loadGitOverview]);
-
-  useEffect(() => {
-    /* Entering Files must always refresh the current folder so tree state never depends on stale cache. */
-    if (activeTab !== "files" || !activeId) {
-      return;
-    }
-    void loadFiles(activeId, filePath);
-  }, [activeId, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === "settings") {
-      void loadSettingsOverview(activeId);
-      void loadOpenCodeVersionStatus();
-      if (activeId) {
-        void loadRuntime(activeId);
-      } else {
-        void loadRuntime(null);
-      }
-      if (canControlTelegramStream) {
-        void loadVoiceControlSettings();
-      }
-      void loadGithubAuthStatus();
-    }
-  }, [
-    activeId,
-    activeTab,
-    canControlTelegramStream,
-    loadOpenCodeVersionStatus,
-    loadRuntime,
-    loadSettingsOverview,
-    loadGithubAuthStatus,
-    loadVoiceControlSettings
-  ]);
-
-  useEffect(() => {
-    /* Providers tab now aggregates direct provider auth plus CLIProxy account/runtime management. */
-    if (activeTab !== "providers") {
-      return;
-    }
-    void loadProviderOverview();
-    void loadProxySettings();
-    void loadCliproxyAccounts();
-  }, [activeTab, loadCliproxyAccounts, loadProviderOverview, loadProxySettings]);
-
-  useEffect(() => {
-    /* Refresh server diagnostics only when Settings screen is visible. */
-    if (activeTab !== "settings") {
-      return;
-    }
-    void loadServerMetrics();
-  }, [activeTab, loadServerMetrics]);
 
   const withActiveProject = (run: (projectId: string) => void): void => {
     if (activeId) {
@@ -377,7 +388,6 @@ export const App = () => {
             parts.pop();
             void loadFiles(activeId, parts.join("/"));
           }}
-          onFilesRefresh={() => withActiveProject((id) => void loadFiles(id, filePath))}
           onOpenEntry={(nextPath, kind) => {
             if (!activeId) {
               return;
@@ -398,7 +408,6 @@ export const App = () => {
           onRefreshProjects={() => void loadProjects()}
           onSyncProjects={() => void syncOpenCodeNow()}
           onRestartOpenCode={() => void restartOpenCodeNow()}
-          onLoadSettingsOverview={() => void reloadSettingsNow()}
           onOpenSettingsFile={(kind, relativePath) =>
             void openSettingsFile(kind, activeId, relativePath)
           }
@@ -446,7 +455,6 @@ export const App = () => {
           }}
           onReloadServerMetrics={() => void loadServerMetrics()}
           iconForEntry={(name, kind) => iconForFileEntry(name, kind)}
-          onGitRefresh={() => withActiveProject((id) => void loadGitOverview(id))}
           onGitCheckout={(branch) => withActiveProject((id) => void checkoutBranch(id, branch))}
           onGitCommit={(message) => withActiveProject((id) => void commitAll(id, message))}
           onGitFetch={() => withActiveProject((id) => void runGitOperation(id, "fetch"))}
@@ -457,7 +465,6 @@ export const App = () => {
             isLoading: isProviderLoading,
             isSubmitting: isProviderSubmitting,
             oauthState: providerOAuthState,
-            onRefresh: () => void loadProviderOverview(),
             onStartConnect: (input) => void startProviderConnect(input),
             onSubmitApiKey: (input) => void submitProviderApiKey(input),
             onSubmitOAuthCode: () => void submitProviderOAuthCode(),
@@ -476,10 +483,8 @@ export const App = () => {
             cliproxyOAuthStart,
             isCliproxyLoading: isCliproxyAccountsLoading,
             isCliproxySubmitting: isCliproxyAccountsSubmitting,
-            onReload: () => void loadProxySettings(),
             onSave: (input) => void saveProxySettings(input),
             onApply: () => void applyProxySettings(),
-            onReloadCliproxy: () => void loadCliproxyAccounts(),
             onStartCliproxyAuth: (provider) => void startCliproxyOAuth(provider),
             onCompleteCliproxyAuth: (input) => void completeCliproxyOAuth(input),
             onTestCliproxyAccount: (accountId) => void testCliproxyAccount(accountId),

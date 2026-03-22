@@ -13,7 +13,7 @@ import * as crypto from "node:crypto";
 
 const DOT = ".";
 const EVENT_STREAM_TOKEN_TTL_MS = 60 * 1000;
-const EVENT_STREAM_TOPICS = ["kanban", "terminal"] as const;
+const EVENT_STREAM_TOPICS = ["kanban", "terminal", "workspace"] as const;
 
 export type EventStreamTopic = (typeof EVENT_STREAM_TOPICS)[number];
 

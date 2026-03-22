@@ -30,6 +30,28 @@ describe("event-stream auth helpers", () => {
     });
   });
 
+  test("round-trips signed token payload for workspace subscription without project scope", () => {
+    /* Global workspace updates should be subscribable even when no concrete project is selected yet. */
+    const token = createEventStreamToken({
+      adminId: 99,
+      botToken: "bot-token",
+      topics: ["workspace"],
+      nowMs: 5_000
+    });
+
+    expect(
+      verifyEventStreamToken({
+        token,
+        botToken: "bot-token",
+        nowMs: 6_000
+      })
+    ).toEqual({
+      adminId: 99,
+      topics: ["workspace"],
+      projectSlug: null
+    });
+  });
+
   test("rejects malformed signature payloads instead of throwing", () => {
     /* Invalid signatures should fail closed with null, not bubble as 500-class crashes. */
     const token = createEventStreamToken({

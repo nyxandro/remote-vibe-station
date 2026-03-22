@@ -23,6 +23,8 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 
 import { AppAuthGuard } from "../security/app-auth.guard";
+import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { ProjectFilesService, PROJECT_FILE_UPLOAD_LIMIT_BYTES } from "./project-files.service";
 import { ProjectsService } from "./projects.service";
 
@@ -37,7 +39,8 @@ type UploadedProjectFile = {
 export class ProjectFilesController {
   public constructor(
     private readonly projects: ProjectsService,
-    private readonly files: ProjectFilesService
+    private readonly files: ProjectFilesService,
+    private readonly events: EventsService
   ) {}
 
   @Post("files/upload")
@@ -53,10 +56,12 @@ export class ProjectFilesController {
     }
 
     const projectRootPath = this.projects.getProjectRootPath(id);
-    return this.files.writeUploadedFile(projectRootPath, body?.path, {
+    const result = await this.files.writeUploadedFile(projectRootPath, body?.path, {
       fileName: file.originalname,
       content: file.buffer
     });
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["files", "git", "projects"], reason: "files.upload" });
+    return result;
   }
 
   @Post("files/import-url")
@@ -70,7 +75,9 @@ export class ProjectFilesController {
     }
 
     const projectRootPath = this.projects.getProjectRootPath(id);
-    return this.files.importFileFromUrl(projectRootPath, body?.path, body.url.trim());
+    const result = await this.files.importFileFromUrl(projectRootPath, body?.path, body.url.trim());
+    publishWorkspaceStateChangedEvent({ events: this.events, projectSlug: id, surfaces: ["files", "git", "projects"], reason: "files.import-url" });
+    return result;
   }
 
   @Get("files/download")

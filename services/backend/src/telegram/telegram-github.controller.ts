@@ -9,11 +9,16 @@ import { BadRequestException, Body, Controller, Get, Post, Req, UnauthorizedExce
 import { Request } from "express";
 
 import { GithubAppService } from "../github/github-app.service";
+import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { AppAuthGuard } from "../security/app-auth.guard";
 
 @Controller("api/telegram/github")
 export class TelegramGithubController {
-  public constructor(private readonly github: GithubAppService) {}
+  public constructor(
+    private readonly github: GithubAppService,
+    private readonly events: EventsService
+  ) {}
 
   @UseGuards(AppAuthGuard)
   @Get("status")
@@ -36,7 +41,9 @@ export class TelegramGithubController {
     }
 
     try {
-      return this.github.saveToken({ adminId, token: String(body?.token ?? "") });
+      const result = this.github.saveToken({ adminId, token: String(body?.token ?? "") });
+      publishWorkspaceStateChangedEvent({ events: this.events, adminId, surfaces: ["settings"], reason: "github.token.save" });
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       throw new BadRequestException(message);
@@ -51,6 +58,8 @@ export class TelegramGithubController {
     if (adminId == null) {
       throw new UnauthorizedException("Admin identity missing");
     }
-    return this.github.disconnect(adminId);
+    const result = this.github.disconnect(adminId);
+    publishWorkspaceStateChangedEvent({ events: this.events, adminId, surfaces: ["settings"], reason: "github.token.disconnect" });
+    return result;
   }
 }

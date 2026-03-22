@@ -16,7 +16,7 @@ type Props = {
   oauthStart: CliproxyOAuthStartPayload | null;
   isLoading: boolean;
   isSubmitting: boolean;
-  onReload: () => void;
+  onReload?: () => void;
   onStartAuth: (provider: CliproxyAccountState["providers"][number]["id"]) => void;
   onCompleteAuth: (input: {
     provider: CliproxyAccountState["providers"][number]["id"];
@@ -210,9 +210,6 @@ export const CliproxyAccountsSection = (props: Props) => {
       {/* CLIProxy onboarding and account steering stay together so operators manage one pool in one place. */}
       <div className="settings-header-row">
         <strong>CLIProxy accounts</strong>
-        <button className="btn outline" onClick={props.onReload} disabled={props.isLoading} type="button">
-          {props.isLoading ? "Loading..." : "Reload accounts"}
-        </button>
       </div>
 
       <div className="project-create-note">

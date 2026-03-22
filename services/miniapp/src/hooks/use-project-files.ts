@@ -15,10 +15,14 @@ type ProjectFileMutationResponse = {
   name: string;
   sizeBytes: number;
 };
+type OnFilesChanged = (projectId: string) => Promise<void> | void;
 
 const FALLBACK_DOWNLOAD_NAME = "download";
 
-export const useProjectFiles = (setError: (value: string | null) => void) => {
+export const useProjectFiles = (
+  setError: (value: string | null) => void,
+  onFilesChanged?: OnFilesChanged
+) => {
   const [filePath, setFilePath] = useState<string>("");
   const [fileList, setFileList] = useState<FileListResponse | null>(null);
   const [filePreview, setFilePreview] = useState<FileReadResponse | null>(null);
@@ -38,6 +42,13 @@ export const useProjectFiles = (setError: (value: string | null) => void) => {
       await loadFilesOrThrow(projectId, nextPath);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to load files");
+    }
+  };
+
+  const invalidateRelatedSurfaces = async (projectId: string): Promise<void> => {
+    /* File mutations affect both the explorer and any repo-level summaries shown in other tabs. */
+    if (onFilesChanged) {
+      await onFilesChanged(projectId);
     }
   };
 
@@ -94,6 +105,7 @@ export const useProjectFiles = (setError: (value: string | null) => void) => {
       formData.set("file", file);
       await apiPostFormData<ProjectFileMutationResponse>(`/api/projects/${projectId}/files/upload`, formData);
       await loadFilesOrThrow(projectId, currentPath);
+      await invalidateRelatedSurfaces(projectId);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to upload file");
       throw error;
@@ -109,6 +121,7 @@ export const useProjectFiles = (setError: (value: string | null) => void) => {
         url
       });
       await loadFilesOrThrow(projectId, currentPath);
+      await invalidateRelatedSurfaces(projectId);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to import file from URL");
       throw error;

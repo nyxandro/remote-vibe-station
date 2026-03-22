@@ -23,7 +23,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
     const result = await controller.getState({ authAdminId: 649624756 } as unknown as Request);
 
     expect(service.getState).toHaveBeenCalledTimes(1);
@@ -46,7 +46,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
     const result = await controller.startOAuth({ provider: "codex" }, { authAdminId: 649624756 } as unknown as Request);
 
     expect(service.startOAuth).toHaveBeenCalledWith({ provider: "codex" });
@@ -63,7 +63,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
 
     await expect(
       controller.startOAuth({}, { authAdminId: 649624756 } as unknown as Request)
@@ -92,7 +92,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
     const result = await controller.completeOAuth(
       {
         provider: "codex",
@@ -123,7 +123,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
 
     await expect(
       controller.completeOAuth(
@@ -148,7 +148,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
     const result = await controller.activateAccount(
       "codex-user@example.com",
       { authAdminId: 649624756 } as unknown as Request
@@ -169,7 +169,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn().mockResolvedValue(undefined)
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
     const result = await controller.deleteAccount(
       "codex-user@example.com",
       { authAdminId: 649624756 } as unknown as Request
@@ -190,7 +190,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
     const result = await controller.testAccount(
       "codex-user@example.com",
       { authAdminId: 649624756 } as unknown as Request
@@ -211,7 +211,7 @@ describe("CliproxyAccountController", () => {
       deleteAccount: jest.fn()
     };
 
-    const controller = new CliproxyAccountController(service as never);
+    const controller = new CliproxyAccountController(service as never, { publish: jest.fn() } as never);
 
     await expect(
       controller.activateAccount("../codex-user@example.com", { authAdminId: 649624756 } as unknown as Request)

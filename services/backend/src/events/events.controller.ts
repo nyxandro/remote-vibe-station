@@ -54,20 +54,20 @@ export class EventsController {
         createAppErrorBody({
           code: "APP_EVENT_STREAM_TOPICS_REQUIRED",
           message: "Event-stream topics must be a non-empty array.",
-          hint: "Send one or more supported topics such as 'kanban' or 'terminal'."
+          hint: "Send one or more supported topics such as 'kanban', 'terminal' or 'workspace'."
         })
       );
     }
 
     const topics = raw
       .map((value) => (typeof value === "string" ? value.trim() : ""))
-      .filter((value): value is EventStreamTopic => value === "kanban" || value === "terminal");
+      .filter((value): value is EventStreamTopic => value === "kanban" || value === "terminal" || value === "workspace");
     if (topics.length === 0) {
       throw new BadRequestException(
         createAppErrorBody({
           code: "APP_EVENT_STREAM_TOPICS_UNSUPPORTED",
           message: "Event-stream topics must include at least one supported topic.",
-          hint: "Use 'kanban' and/or 'terminal' when requesting an event token."
+          hint: "Use 'kanban', 'terminal' and/or 'workspace' when requesting an event token."
         })
       );
     }
@@ -99,7 +99,7 @@ export class EventsController {
       return createAppErrorBody({
         code: "APP_EVENT_STREAM_TOPICS_REQUIRED",
         message: "Event-stream topics must be a non-empty array.",
-        hint: "Send one or more supported topics such as 'kanban' or 'terminal'."
+        hint: "Send one or more supported topics such as 'kanban', 'terminal' or 'workspace'."
       });
     }
 

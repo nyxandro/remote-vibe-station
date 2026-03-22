@@ -8,20 +8,29 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 
-import { GitOverview as GitOverviewModel } from "../types";
+import { GitFileStatus, GitOverview as GitOverviewModel } from "../types";
 
 export type GitOverview = GitOverviewModel;
 
 type Props = {
   activeId: string | null;
   overview: GitOverview | null | undefined;
-  onRefresh: () => void;
   onCheckout: (branch: string) => void;
   onCommit: (message: string) => void;
   onFetch: () => void;
   onPull: () => void;
   onPush: () => void;
   onMerge: (sourceBranch: string) => void;
+};
+
+/* Keep git status badges compact while preserving the full status via tooltip/aria text. */
+const GIT_STATUS_BADGE_TEXT: Record<GitFileStatus, string> = {
+  added: "A",
+  conflict: "C",
+  deleted: "D",
+  modified: "M",
+  renamed: "R",
+  untracked: "U"
 };
 
 export const GitHubTab = (props: Props) => {
@@ -72,9 +81,6 @@ export const GitHubTab = (props: Props) => {
             </div>
 
             <div className="git-actions-row">
-              <button className="btn outline" onClick={props.onRefresh} type="button">
-                Refresh
-              </button>
               <button className="btn outline" onClick={props.onFetch} type="button">
                 Fetch
               </button>
@@ -175,7 +181,13 @@ export const GitHubTab = (props: Props) => {
                 props.overview.files.map((file) => (
                   <article key={`${file.status}:${file.path}`} className="git-file-row">
                     <div className="git-file-main">
-                      <span className={`git-file-status git-file-status-${file.status}`}>{file.status}</span>
+                      <span
+                        className={`git-file-status git-file-status-${file.status}`}
+                        title={file.status}
+                        aria-label={file.status}
+                      >
+                        {GIT_STATUS_BADGE_TEXT[file.status]}
+                      </span>
                       <span className="git-file-path">{file.path}</span>
                     </div>
                     <div className="git-file-delta">

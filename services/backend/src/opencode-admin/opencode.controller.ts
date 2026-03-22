@@ -5,8 +5,11 @@
  * - OpenCodeController - Routes for OpenCode-related actions.
  */
 
-import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Request } from "express";
 
+import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { createAppErrorBody, normalizeUnknownErrorToAppError } from "../logging/app-error";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { OpenCodeProjectSyncService } from "./opencode-project-sync.service";
@@ -19,14 +22,22 @@ export class OpenCodeController {
   public constructor(
     private readonly sync: OpenCodeProjectSyncService,
     private readonly settings: OpenCodeSettingsService,
-    private readonly runtime: OpenCodeRuntimeService
+    private readonly runtime: OpenCodeRuntimeService,
+    private readonly events: EventsService
   ) {}
 
   @Post("sync-projects")
-  public async syncProjects() {
+  public async syncProjects(@Req() req: Request) {
     /* Sync PROJECTS_ROOT folders into OpenCode storage (best-effort hack). */
     try {
-      return await this.sync.sync();
+      const result = await this.sync.sync();
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["projects"],
+        reason: "opencode.sync-projects"
+      });
+      return result;
     } catch (error) {
       throw new BadRequestException(
         normalizeUnknownErrorToAppError({
@@ -57,10 +68,17 @@ export class OpenCodeController {
   }
 
   @Post("restart")
-  public async restartOpenCode() {
+  public async restartOpenCode(@Req() req: Request) {
     /* Restart OpenCode containers so config/rules changes are reloaded. */
     try {
-      return await this.runtime.restartServiceContainers();
+      const result = await this.runtime.restartServiceContainers();
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["settings"],
+        reason: "opencode.restart"
+      });
+      return result;
     } catch (error) {
       throw new BadRequestException(
         normalizeUnknownErrorToAppError({
@@ -91,10 +109,17 @@ export class OpenCodeController {
   }
 
   @Post("version/check")
-  public async checkVersionStatus() {
+  public async checkVersionStatus(@Req() req: Request) {
     /* Force latest-version lookup from npm and update backend cache. */
     try {
-      return await this.runtime.checkVersionStatus();
+      const result = await this.runtime.checkVersionStatus();
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["settings"],
+        reason: "opencode.version.check"
+      });
+      return result;
     } catch (error) {
       throw new BadRequestException(
         normalizeUnknownErrorToAppError({
@@ -108,10 +133,17 @@ export class OpenCodeController {
   }
 
   @Post("version/update")
-  public async updateVersion() {
+  public async updateVersion(@Req() req: Request) {
     /* Install latest OpenCode version into running container and restart runtime. */
     try {
-      return await this.runtime.updateToLatestVersion();
+      const result = await this.runtime.updateToLatestVersion();
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["settings"],
+        reason: "opencode.version.update"
+      });
+      return result;
     } catch (error) {
       throw new BadRequestException(
         normalizeUnknownErrorToAppError({
@@ -172,7 +204,8 @@ export class OpenCodeController {
   @Post("settings/save")
   public saveSettingsFile(
     @Body()
-    body: { kind?: OpenCodeSettingsKind; projectId?: string; relativePath?: string; content?: string }
+    body: { kind?: OpenCodeSettingsKind; projectId?: string; relativePath?: string; content?: string },
+    @Req() req: Request
   ) {
     /* Save one settings file by section kind. */
     if (!body?.kind) {
@@ -194,7 +227,15 @@ export class OpenCodeController {
       );
     }
     try {
-      return this.settings.saveFile(body.kind, body.projectId ?? null, body.content, body.relativePath);
+      const result = this.settings.saveFile(body.kind, body.projectId ?? null, body.content, body.relativePath);
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["git", "projects", "settings"],
+        projectSlug: body.projectId ?? null,
+        reason: "opencode.settings.save"
+      });
+      return result;
     } catch (error) {
       throw new BadRequestException(
         normalizeUnknownErrorToAppError({
@@ -209,7 +250,8 @@ export class OpenCodeController {
 
   @Post("settings/create")
   public createSettingsFile(
-    @Body() body: { kind?: OpenCodeSettingsKind; projectId?: string; name?: string }
+    @Body() body: { kind?: OpenCodeSettingsKind; projectId?: string; name?: string },
+    @Req() req: Request
   ) {
     /* Create one settings file in the target section. */
     if (!body?.kind) {
@@ -222,7 +264,15 @@ export class OpenCodeController {
       );
     }
     try {
-      return this.settings.createFile(body.kind, body.projectId ?? null, body.name);
+      const result = this.settings.createFile(body.kind, body.projectId ?? null, body.name);
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["git", "projects", "settings"],
+        projectSlug: body.projectId ?? null,
+        reason: "opencode.settings.create"
+      });
+      return result;
     } catch (error) {
       throw new BadRequestException(
         normalizeUnknownErrorToAppError({

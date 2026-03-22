@@ -23,7 +23,7 @@ describe("ProjectWorkspaceService.createProjectFolder", () => {
 
   test("retries with suffix when mkdir hits EEXIST race", () => {
     /* Simulate TOCTOU: target appears after uniqueness check but before mkdir call. */
-    const service = new ProjectWorkspaceService({ projectsRoot: root } as any);
+    const service = new ProjectWorkspaceService({ projectsRoot: root } as any, { publish: jest.fn() } as any);
     const originalMkdirSync = fs.mkdirSync;
     let firstCall = true;
 
@@ -47,7 +47,7 @@ describe("ProjectWorkspaceService.createProjectFolder", () => {
 
   test("rethrows non-EEXIST mkdir errors", () => {
     /* Fail fast on unexpected filesystem failures instead of masking root cause. */
-    const service = new ProjectWorkspaceService({ projectsRoot: root } as any);
+    const service = new ProjectWorkspaceService({ projectsRoot: root } as any, { publish: jest.fn() } as any);
     const permissionError = new Error("EPERM") as NodeJS.ErrnoException;
     permissionError.code = "EPERM";
 

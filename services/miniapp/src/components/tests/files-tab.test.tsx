@@ -19,7 +19,6 @@ const renderFilesTab = (overrides?: Partial<ComponentProps<typeof FilesTab>>) =>
     themeMode: "dark",
     iconForEntry: () => <span />,
     onUp: vi.fn(),
-    onRefresh: vi.fn(),
     onOpenEntry: vi.fn(),
     onClosePreview: vi.fn(),
     onDownloadPreview: vi.fn(),
@@ -69,7 +68,7 @@ describe("FilesTab", () => {
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label"));
 
-    expect(labels).toEqual(["Add file", "Refresh", "Go up"]);
+    expect(labels).toEqual(["Add file", "Go up"]);
   });
 
   it("opens upload modal from the add-file button", () => {

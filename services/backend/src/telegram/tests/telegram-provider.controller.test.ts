@@ -37,8 +37,9 @@ describe("TelegramProviderController", () => {
       })
     };
 
-    const controller = new TelegramProviderController(opencode as never, preferences as never);
-    return { controller, opencode, preferences };
+    const events = { publish: jest.fn() };
+    const controller = new TelegramProviderController(opencode as never, preferences as never, events as never);
+    return { controller, opencode, preferences, events };
   };
 
   test("returns providers snapshot with selected mode details", async () => {

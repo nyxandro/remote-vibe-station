@@ -8,6 +8,8 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
+import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { ProxySettingsService } from "./proxy-settings.service";
 import { ProxySettingsInput } from "./proxy-settings.types";
@@ -20,7 +22,10 @@ import {
 
 @Controller("api/telegram/proxy")
 export class ProxySettingsController {
-  public constructor(private readonly proxySettings: ProxySettingsService) {}
+  public constructor(
+    private readonly proxySettings: ProxySettingsService,
+    private readonly events: EventsService
+  ) {}
 
   @UseGuards(AppAuthGuard)
   @Get("settings")
@@ -60,7 +65,14 @@ export class ProxySettingsController {
       noProxy: body.noProxy.trim()
     };
 
-    return this.proxySettings.updateSettings(payload);
+    const result = await this.proxySettings.updateSettings(payload);
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      adminId: (req as Request & { authAdminId?: number }).authAdminId,
+      surfaces: ["providers"],
+      reason: "proxy.settings.save"
+    });
+    return result;
   }
 
   @UseGuards(AppAuthGuard)
@@ -70,6 +82,13 @@ export class ProxySettingsController {
     /* Apply action is admin-only because it mutates running docker services. */
     requireProxyAdminId(req);
 
-    return this.proxySettings.applyRuntimeStack();
+    const result = await this.proxySettings.applyRuntimeStack();
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      adminId: (req as Request & { authAdminId?: number }).authAdminId,
+      surfaces: ["providers"],
+      reason: "proxy.settings.apply"
+    });
+    return result;
   }
 }

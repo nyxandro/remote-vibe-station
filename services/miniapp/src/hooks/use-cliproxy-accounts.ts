@@ -18,7 +18,12 @@ type OAuthCompletionInput = {
   error?: string;
 };
 
-export const useCliproxyAccounts = (setError: (value: string | null) => void) => {
+type OnAccountsChanged = () => Promise<void> | void;
+
+export const useCliproxyAccounts = (
+  setError: (value: string | null) => void,
+  onAccountsChanged?: OnAccountsChanged
+) => {
   const [state, setState] = useState<CliproxyAccountState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -37,6 +42,36 @@ export const useCliproxyAccounts = (setError: (value: string | null) => void) =>
       setIsLoading(false);
     }
   }, [setError]);
+
+  const refreshAfterAccountMutation = useCallback(
+    async (shouldInvalidateProviders: boolean): Promise<void> => {
+      /* Account mutations update the local list first and optionally fan out to provider summary badges. */
+      await loadState();
+      if (shouldInvalidateProviders && onAccountsChanged) {
+        await onAccountsChanged();
+      }
+    },
+    [loadState, onAccountsChanged]
+  );
+
+  const finalizeAccountMutation = useCallback(
+    async (shouldInvalidateProviders: boolean, initialErrorMessage: string | null): Promise<void> => {
+      /* Refresh failures should not clobber the original mutation error or leave the submit state stuck. */
+      try {
+        await refreshAfterAccountMutation(shouldInvalidateProviders);
+      } catch (error) {
+        if (!initialErrorMessage) {
+          setError(error instanceof Error ? error.message : "Failed to refresh CLIProxy account state");
+        }
+      } finally {
+        if (initialErrorMessage) {
+          setError(initialErrorMessage);
+        }
+        setIsSubmitting(false);
+      }
+    },
+    [refreshAfterAccountMutation, setError]
+  );
 
   const startOAuth = useCallback(
     async (provider: CliproxyProviderState["id"]): Promise<void> => {
@@ -60,70 +95,86 @@ export const useCliproxyAccounts = (setError: (value: string | null) => void) =>
   const completeOAuth = useCallback(
     async (input: OAuthCompletionInput): Promise<void> => {
       /* Complete flow from pasted callback URL or explicit code/state pair. */
+      let initialErrorMessage: string | null = null;
+      let shouldInvalidateProviders = false;
+
       try {
         setError(null);
         setIsSubmitting(true);
         await apiPost<{ ok: true }>("/api/telegram/cliproxy/oauth/complete", input);
         setOauthStart(null);
-        await loadState();
+        shouldInvalidateProviders = true;
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Failed to complete CLIProxy OAuth flow");
+        initialErrorMessage = error instanceof Error ? error.message : "Failed to complete CLIProxy OAuth flow";
+        setError(initialErrorMessage);
       } finally {
-        setIsSubmitting(false);
+        await finalizeAccountMutation(shouldInvalidateProviders, initialErrorMessage);
       }
     },
-    [loadState, setError]
+    [finalizeAccountMutation, setError]
   );
 
   const activateAccount = useCallback(
     async (accountId: string): Promise<void> => {
       /* Manual switch should persist in CLIProxy runtime and then refresh account state. */
+      let initialErrorMessage: string | null = null;
+      let shouldInvalidateProviders = false;
+
       try {
         setError(null);
         setIsSubmitting(true);
         await apiPost<{ ok: true }>(`/api/telegram/cliproxy/accounts/${encodeURIComponent(accountId)}/activate`, {});
-        await loadState();
+        shouldInvalidateProviders = true;
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Failed to activate CLIProxy account");
+        initialErrorMessage = error instanceof Error ? error.message : "Failed to activate CLIProxy account";
+        setError(initialErrorMessage);
       } finally {
-        setIsSubmitting(false);
+        await finalizeAccountMutation(shouldInvalidateProviders, initialErrorMessage);
       }
     },
-    [loadState, setError]
+    [finalizeAccountMutation, setError]
   );
 
   const testAccount = useCallback(
     async (accountId: string): Promise<void> => {
       /* Manual test should refresh stale error/limit badges even when CLIProxy status lags behind reality. */
+      let shouldInvalidateProviders = false;
+      let initialErrorMessage: string | null = null;
+
       try {
         setError(null);
         setIsSubmitting(true);
         await apiPost<{ ok: true }>(`/api/telegram/cliproxy/accounts/${encodeURIComponent(accountId)}/test`, {});
+        shouldInvalidateProviders = true;
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Failed to test CLIProxy account");
+        initialErrorMessage = error instanceof Error ? error.message : "Failed to test CLIProxy account";
+        setError(initialErrorMessage);
       } finally {
-        await loadState();
-        setIsSubmitting(false);
+        await finalizeAccountMutation(shouldInvalidateProviders, initialErrorMessage);
       }
     },
-    [loadState, setError]
+    [finalizeAccountMutation, setError]
   );
 
   const deleteAccount = useCallback(
     async (accountId: string): Promise<void> => {
       /* Removing stale auth files should also refresh the list immediately after success. */
+      let initialErrorMessage: string | null = null;
+      let shouldInvalidateProviders = false;
+
       try {
         setError(null);
         setIsSubmitting(true);
         await apiDelete<{ ok: true }>(`/api/telegram/cliproxy/accounts/${encodeURIComponent(accountId)}`);
-        await loadState();
+        shouldInvalidateProviders = true;
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Failed to delete CLIProxy account");
+        initialErrorMessage = error instanceof Error ? error.message : "Failed to delete CLIProxy account";
+        setError(initialErrorMessage);
       } finally {
-        setIsSubmitting(false);
+        await finalizeAccountMutation(shouldInvalidateProviders, initialErrorMessage);
       }
     },
-    [loadState, setError]
+    [finalizeAccountMutation, setError]
   );
 
   return {

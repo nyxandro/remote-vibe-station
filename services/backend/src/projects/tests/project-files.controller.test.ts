@@ -22,7 +22,7 @@ describe("ProjectFilesController", () => {
     };
 
     return {
-      controller: new ProjectFilesController(projects as never, files as never),
+      controller: new ProjectFilesController(projects as never, files as never, { publish: jest.fn() } as never),
       projects,
       files
     };

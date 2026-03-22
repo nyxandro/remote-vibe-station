@@ -25,7 +25,7 @@ describe("ProxySettingsController", () => {
       })
     };
 
-    const controller = new ProxySettingsController(service as never);
+    const controller = new ProxySettingsController(service as never, { publish: jest.fn() } as never);
     const result = await controller.getSettings({ authAdminId: 649624756 } as unknown as Request);
 
     expect(service.getSettings).toHaveBeenCalledTimes(1);
@@ -52,7 +52,7 @@ describe("ProxySettingsController", () => {
       })
     };
 
-    const controller = new ProxySettingsController(service as never);
+    const controller = new ProxySettingsController(service as never, { publish: jest.fn() } as never);
     const result = await controller.saveSettings(
       {
         mode: "vless",
@@ -83,7 +83,7 @@ describe("ProxySettingsController", () => {
       })
     };
 
-    const controller = new ProxySettingsController(service as never);
+    const controller = new ProxySettingsController(service as never, { publish: jest.fn() } as never);
     const result = await controller.applySettings({ authAdminId: 649624756 } as unknown as Request);
 
     expect(service.applyRuntimeStack).toHaveBeenCalledTimes(1);
@@ -98,7 +98,7 @@ describe("ProxySettingsController", () => {
       updateSettings: jest.fn()
     };
 
-    const controller = new ProxySettingsController(service as never);
+    const controller = new ProxySettingsController(service as never, { publish: jest.fn() } as never);
 
     await expect(
       controller.saveSettings(

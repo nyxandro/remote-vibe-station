@@ -13,6 +13,8 @@ import { promisify } from "node:util";
 import { Inject, Injectable } from "@nestjs/common";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import { EventsService } from "../events/events.service";
+import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { assertWithinRoot } from "./project-paths";
 import {
   deriveFolderNameFromRepositoryUrl,
@@ -27,7 +29,10 @@ const CREATE_FOLDER_RACE_RETRIES = 5;
 
 @Injectable()
 export class ProjectWorkspaceService {
-  public constructor(@Inject(ConfigToken) private readonly config: AppConfig) {}
+  public constructor(
+    @Inject(ConfigToken) private readonly config: AppConfig,
+    private readonly events: EventsService
+  ) {}
 
   public createProjectFolder(name: string): { slug: string; rootPath: string } {
     /* Create folder and retry on EEXIST race between slug check and mkdir. */
@@ -39,6 +44,12 @@ export class ProjectWorkspaceService {
 
       try {
         fs.mkdirSync(rootPath, { recursive: false });
+        publishWorkspaceStateChangedEvent({
+          events: this.events,
+          projectSlug: slug,
+          surfaces: ["projects"],
+          reason: "projects.create-folder"
+        });
         return { slug, rootPath };
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
@@ -77,6 +88,13 @@ export class ProjectWorkspaceService {
       );
     }
 
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      projectSlug: folderName,
+      surfaces: ["projects"],
+      reason: "projects.clone"
+    });
+
     return { slug: folderName, rootPath };
   }
 
@@ -96,6 +114,12 @@ export class ProjectWorkspaceService {
     }
 
     fs.rmSync(rootPath, { recursive: true, force: false });
+    publishWorkspaceStateChangedEvent({
+      events: this.events,
+      projectSlug: normalizedSlug,
+      surfaces: ["projects"],
+      reason: "projects.delete"
+    });
     return { deleted: true, rootPath };
   }
 
