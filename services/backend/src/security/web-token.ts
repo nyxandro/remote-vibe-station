@@ -7,17 +7,19 @@
  * - Tokens are signed using the Telegram bot token as a shared secret.
  *
  * Exports:
- * - createWebToken (L26) - Creates a short-lived signed token for an admin.
- * - verifyWebToken (L51) - Verifies token signature and expiry.
+ * - createWebToken - Creates a signed browser token for an admin.
+ * - verifyWebToken - Verifies token signature and expiry.
+ * - getWebTokenTtlMs - Exposes browser-token TTL for refresh issuers.
  */
 
 import * as crypto from "node:crypto";
 
 const DOT = ".";
-const TOKEN_TTL_MS = 60 * 60 * 1000;
+const TOKEN_TTL_MS = 3 * 60 * 60 * 1000;
 
 type WebTokenPayload = {
   adminId: number;
+  iat: number;
   exp: number;
   nonce: string;
 };
@@ -32,6 +34,7 @@ export const createWebToken = (input: {
 
   const payload: WebTokenPayload = {
     adminId: input.adminId,
+    iat: nowMs,
     exp: nowMs + TOKEN_TTL_MS,
     nonce: crypto.randomBytes(8).toString("hex")
   };
@@ -63,7 +66,7 @@ export const verifyWebToken = (input: {
 
   const expected = sign(payloadJson, input.botToken);
   const actual = base64UrlDecode(signatureB64);
-  if (!actual) {
+  if (!actual || actual.length !== expected.length) {
     return null;
   }
 
@@ -82,6 +85,8 @@ export const verifyWebToken = (input: {
 
   return { adminId: payload.adminId };
 };
+
+export const getWebTokenTtlMs = (): number => TOKEN_TTL_MS;
 
 const sign = (payloadJson: string, botToken: string): Buffer => {
   /* Sign payload using HMAC-SHA256(sha256(botToken), payload). */

@@ -10,9 +10,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MiniAppRoot } from "../MiniAppRoot";
 
 const apiGetMock = vi.fn();
+const readStoredWebTokenMetadataMock = vi.fn();
+const refreshWebTokenMock = vi.fn();
 
 vi.mock("../api/client", () => ({
-  apiGet: (...args: unknown[]) => apiGetMock(...args)
+  BROWSER_SESSION_EXPIRED_EVENT: "tvoc:browser-session-expired",
+  apiGet: (...args: unknown[]) => apiGetMock(...args),
+  clearStoredWebToken: vi.fn(),
+  readStoredWebTokenMetadata: (...args: unknown[]) => readStoredWebTokenMetadataMock(...args),
+  refreshWebToken: (...args: unknown[]) => refreshWebTokenMock(...args)
 }));
 
 vi.mock("../App", () => ({
@@ -35,6 +41,8 @@ describe("MiniAppRoot kanban route", () => {
   beforeEach(() => {
     apiGetMock.mockReset();
     apiGetMock.mockResolvedValue({ id: null });
+    readStoredWebTokenMetadataMock.mockReset().mockReturnValue(null);
+    refreshWebTokenMock.mockReset();
     window.history.replaceState({}, "", "/miniapp/?view=kanban");
   });
 

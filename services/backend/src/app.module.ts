@@ -2,12 +2,14 @@
  * @fileoverview Root NestJS module wiring controllers and services.
  *
  * Exports:
- * - AppModule (L56) - Application module definition.
+ * - AppModule - Application module definition.
  */
 
 import { Module } from "@nestjs/common";
 
 import { ConfigModule } from "./config/config.module";
+import { EventStreamAuthService } from "./events/event-stream-auth.service";
+import { EventsController } from "./events/events.controller";
 import { EventsGateway } from "./events/events.gateway";
 import { EventsService } from "./events/events.service";
 import { OpenCodeClient } from "./open-code/opencode-client";
@@ -60,6 +62,7 @@ import { AdminHeaderGuard } from "./security/admin-header.guard";
 import { BotBackendGuard } from "./security/bot-backend.guard";
 import { AppAuthGuard } from "./security/app-auth.guard";
 import { TelegramInitDataGuard } from "./security/telegram.guard";
+import { WebTokenController } from "./security/web-token.controller";
 import { TerminalController } from "./terminal/terminal.controller";
 import { TerminalService } from "./terminal/terminal.service";
 import { DataMaintenanceService } from "./maintenance/data-maintenance.service";
@@ -88,6 +91,8 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
   imports: [ConfigModule],
   controllers: [
     PromptController,
+    WebTokenController,
+    EventsController,
     ProjectsController,
     ProjectFilesController,
     ProjectsAdminController,
@@ -108,6 +113,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
   ],
   providers: [
     EventsService,
+    EventStreamAuthService,
     EventsGateway,
     OpenCodeClient,
     OpenCodeProviderAuthClient,

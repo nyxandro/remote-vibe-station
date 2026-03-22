@@ -11,13 +11,17 @@ import { App } from "./App";
 import { KanbanBoardScreen } from "./components/KanbanBoardScreen";
 import { MiniAppBlockingOverlay } from "./components/MiniAppBlockingOverlay";
 import { DiffPreviewScreen } from "./components/DiffPreviewScreen";
+import { useBrowserSession } from "./hooks/use-browser-session";
 import { useMiniAppReadiness } from "./hooks/use-miniapp-readiness";
 import { useTelegramWebApp } from "./hooks/use-telegram-webapp";
 import { readKanbanProjectFilter, readLaunchView } from "./utils/launch-view";
 import { readDiffPreviewToken } from "./utils/start-param";
 
+const NOOP = () => {};
+
 export const MiniAppRoot = () => {
   useTelegramWebApp();
+  const browserSession = useBrowserSession();
   const readiness = useMiniAppReadiness();
   const launchToken = useMemo(() => {
     /* Parse token only once from launch context. */
@@ -26,6 +30,19 @@ export const MiniAppRoot = () => {
   const launchView = useMemo(() => readLaunchView(), []);
   const kanbanProjectFilter = useMemo(() => readKanbanProjectFilter(), []);
   const [activeToken, setActiveToken] = useState<string | null>(launchToken);
+
+  if (browserSession.isSessionExpired) {
+    /* Expired browser bearer auth should block both workspace and standalone kanban until Telegram relaunches the app. */
+    return (
+      <MiniAppBlockingOverlay
+        isChecking={false}
+        blockReason={browserSession.sessionExpiredMessage}
+        onRetry={NOOP}
+        titleOverride="Сеанс завершен"
+        actionLabel={null}
+      />
+    );
+  }
 
   if (!readiness.isReady) {
     /* Keep UI fully blocked until backend connectivity is restored. */

@@ -11,11 +11,18 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MiniAppRoot } from "../MiniAppRoot";
+import { BROWSER_SESSION_EXPIRED_EVENT } from "../api/client";
 
 const apiGetMock = vi.fn();
+const readStoredWebTokenMetadataMock = vi.fn();
+const refreshWebTokenMock = vi.fn();
 
 vi.mock("../api/client", () => ({
-  apiGet: (...args: unknown[]) => apiGetMock(...args)
+  BROWSER_SESSION_EXPIRED_EVENT: "tvoc:browser-session-expired",
+  apiGet: (...args: unknown[]) => apiGetMock(...args),
+  clearStoredWebToken: vi.fn(),
+  readStoredWebTokenMetadata: (...args: unknown[]) => readStoredWebTokenMetadataMock(...args),
+  refreshWebToken: (...args: unknown[]) => refreshWebTokenMock(...args)
 }));
 
 vi.mock("../App", () => ({
@@ -33,6 +40,8 @@ vi.mock("../utils/start-param", () => ({
 describe("MiniAppRoot readiness overlay", () => {
   beforeEach(() => {
     apiGetMock.mockReset();
+    readStoredWebTokenMetadataMock.mockReset().mockReturnValue(null);
+    refreshWebTokenMock.mockReset();
   });
 
   afterEach(() => {
@@ -73,5 +82,30 @@ describe("MiniAppRoot readiness overlay", () => {
         )
       ).toBeTruthy();
     });
+  });
+
+  it("shows session-ended overlay after browser auth expiry", async () => {
+    /* Expired browser-only sessions should stop rendering the workspace and tell the user to reopen from Telegram. */
+    apiGetMock.mockResolvedValueOnce({ id: null });
+
+    render(<MiniAppRoot />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("miniapp-workspace")).toBeTruthy();
+    });
+
+    window.dispatchEvent(
+      new CustomEvent(BROWSER_SESSION_EXPIRED_EVENT, {
+        detail: {
+          message: "Сеанс завершен. Закрой Mini App и открой его заново из Telegram, чтобы получить новый токен."
+        }
+      })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Сеанс завершен")).toBeTruthy();
+    });
+    expect(screen.getByText(/Закрой Mini App и открой его заново из Telegram/i)).toBeTruthy();
+    expect(screen.queryByTestId("miniapp-workspace")).toBeNull();
   });
 });
