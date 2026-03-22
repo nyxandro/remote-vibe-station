@@ -22,4 +22,19 @@ describe("OpenCodeRuntimeService", () => {
     expect(version).toBe("1.2.10");
     expect(runDocker).toHaveBeenCalledTimes(2);
   });
+
+  it("rejects in-place runtime updates when immutable images are required", async () => {
+    /* Update action must fail fast with operator guidance instead of mutating the running container. */
+    const service = new OpenCodeRuntimeService();
+    jest.spyOn(service, "checkVersionStatus").mockResolvedValue({
+      currentVersion: "1.0.0",
+      latestVersion: "1.0.1",
+      latestCheckedAt: "2026-03-17T00:00:00.000Z",
+      updateAvailable: true
+    });
+
+    await expect(service.updateToLatestVersion()).rejects.toThrow(
+      "APP_OPENCODE_IMMUTABLE_UPDATE_REQUIRED"
+    );
+  });
 });

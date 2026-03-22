@@ -89,6 +89,7 @@ export class OutboxWorker {
     this.timer = setInterval(() => {
       void this.tick();
     }, POLL_INTERVAL_MS);
+    this.timer.unref?.();
 
     /* Run immediately on startup to reduce perceived latency. */
     void this.tick();

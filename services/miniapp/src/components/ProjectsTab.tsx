@@ -238,9 +238,12 @@ export const ProjectsTab = (props: Props) => {
                 {gitSummary ? (
                   <div
                     className="project-git-stats"
-                    aria-label="Uncommitted git changes"
+                    aria-label="Git branch and change summary"
                   >
                     <GitCommitHorizontal size={13} />
+                    {gitSummary.currentBranch ? (
+                      <span className="project-git-branch">{gitSummary.currentBranch}</span>
+                    ) : null}
                     <span className="project-git-plus">
                       +{gitSummary.additions}
                     </span>

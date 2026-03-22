@@ -9,7 +9,7 @@ import { indentWithTab } from "@codemirror/commands";
 import CodeMirror from "@uiw/react-codemirror";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
-import { keymap, EditorView } from "@codemirror/view";
+import { keymap, EditorView, placeholder as codePlaceholder } from "@codemirror/view";
 import { useMemo } from "react";
 
 import { ThemeMode } from "../utils/theme";
@@ -27,6 +27,7 @@ type Props = {
   themeMode?: ThemeMode;
   autoFocus?: boolean;
   readOnly?: boolean;
+  placeholder?: string;
   onSaveShortcut?: () => void;
   onChange: (value: string) => void;
 };
@@ -37,10 +38,10 @@ export const CodeEditor = forwardRef<CodeEditorRef, Props>((props, ref) => {
   useImperativeHandle(ref, () => ({
     view: editorRef.current?.view ?? null
   }));
+
   const extensions = useMemo(() => {
     /* Keep extension selection explicit to avoid incorrect parser setup. */
-    const languageExt =
-      props.language === "json" ? [json()] : props.language === "markdown" ? [markdown()] : [];
+    const languageExt = props.language === "json" ? [json()] : props.language === "markdown" ? [markdown()] : [];
 
     /* Register editor-like keyboard ergonomics and quick save shortcut. */
     const saveKeymap = keymap.of([
@@ -54,8 +55,13 @@ export const CodeEditor = forwardRef<CodeEditorRef, Props>((props, ref) => {
       }
     ]);
 
-    return [...languageExt, saveKeymap, EditorView.lineWrapping];
-  }, [props.language, props.onSaveShortcut]);
+    return [
+      ...languageExt,
+      saveKeymap,
+      EditorView.lineWrapping,
+      ...(props.placeholder ? [codePlaceholder(props.placeholder)] : [])
+    ];
+  }, [props.language, props.onSaveShortcut, props.placeholder]);
 
   return (
     <CodeMirror

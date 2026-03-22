@@ -681,6 +681,12 @@ html[data-theme="dark"] .project-git-plus {
   color: #9ff0ce;
 }
 
+html[data-theme="dark"] .project-git-branch {
+  border-color: rgba(125, 211, 252, 0.28);
+  background: rgba(14, 116, 144, 0.22);
+  color: #8fe7ff;
+}
+
 html[data-theme="dark"] .project-git-minus {
   color: #ffc4ce;
 }

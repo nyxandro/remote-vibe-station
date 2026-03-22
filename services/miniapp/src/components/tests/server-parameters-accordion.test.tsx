@@ -52,7 +52,7 @@ describe("ServerParametersAccordion", () => {
 
     fireEvent.click(screen.getByText("8. Параметры сервера"));
     expect(screen.getByText("8 cores")).toBeTruthy();
-    expect(screen.getByText("Свободно:")).toBeTruthy();
+    expect(screen.getAllByText("Свободно:").length).toBe(2);
     expect(screen.getByText("4.00 GB")).toBeTruthy();
     expect(screen.getByText("100.00 GB")).toBeTruthy();
     expect(screen.getByText("117.74 MB")).toBeTruthy();

@@ -9,7 +9,8 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from "@nestjs/common";
 import { Request, Response } from "express";
 
-const REQUEST_ID_HEADER = "x-request-id";
+import { resolveExceptionAppError } from "./app-error";
+import { REQUEST_ID_HEADER } from "./request-id.middleware";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -18,16 +19,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : 500;
+    const status = exception instanceof HttpException ? exception.getStatus() : 500;
     const requestId = request.headers[REQUEST_ID_HEADER];
+    const appError = resolveExceptionAppError({ exception, statusCode: status });
 
     const errorPayload = {
       level: "error",
       status,
       requestId,
+      code: appError.code,
+      message: appError.message,
+      hint: appError.hint,
       method: request.method,
-      path: request.url
+      path: request.url,
+      errorName: exception instanceof Error ? exception.name : null,
+      stack: exception instanceof Error ? exception.stack : null
     };
 
     console.error(JSON.stringify(errorPayload));
@@ -40,23 +46,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return;
     }
 
-    /* Prefer HttpException response body over generic message. */
-    const message =
-      exception instanceof HttpException
-        ? (() => {
-            const body = exception.getResponse() as any;
-            if (typeof body === "string") {
-              return body;
-            }
-            if (body && typeof body === "object" && typeof body.message === "string") {
-              return body.message;
-            }
-            return exception.message;
-          })()
-        : exception instanceof Error
-          ? exception.message
-          : "Internal Server Error";
-
-    response.status(status).json({ statusCode: status, message, requestId });
+    response.status(status).json({ statusCode: status, ...appError, requestId });
   }
 }

@@ -6,7 +6,6 @@
  */
 
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -16,7 +15,6 @@ import {
   Param,
   Post,
   Req,
-  UnauthorizedException,
   UseGuards
 } from "@nestjs/common";
 import { Request } from "express";
@@ -24,6 +22,13 @@ import { Request } from "express";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { CliproxyAccountService } from "./cliproxy-account.service";
 import { CliproxyProviderId } from "./cliproxy-management.client";
+import {
+  cliproxyAccountIdInvalidError,
+  cliproxyAccountIdRequiredError,
+  cliproxyCompletionInputRequiredError,
+  cliproxyProviderUnsupportedError,
+  requireProxyAdminId
+} from "./proxy-controller-errors";
 
 @Controller("api/telegram/cliproxy")
 export class CliproxyAccountController {
@@ -33,7 +38,7 @@ export class CliproxyAccountController {
   @Get("state")
   public async getState(@Req() req: Request) {
     /* Endpoint is admin-only to avoid exposing account metadata publicly. */
-    this.assertAdmin(req);
+    requireProxyAdminId(req);
     return this.accounts.getState();
   }
 
@@ -45,7 +50,7 @@ export class CliproxyAccountController {
     @Req() req: Request
   ) {
     /* Starts provider-specific OAuth/device flow and returns browser URL payload. */
-    this.assertAdmin(req);
+    requireProxyAdminId(req);
     return this.accounts.startOAuth({ provider: this.assertProvider(body.provider) });
   }
 
@@ -64,7 +69,7 @@ export class CliproxyAccountController {
     @Req() req: Request
   ) {
     /* Completes OAuth exchange using pasted callback URL or direct code/state fields. */
-    this.assertAdmin(req);
+    requireProxyAdminId(req);
     const provider = this.assertProvider(body.provider);
     this.assertCompletionInput(body);
 
@@ -83,7 +88,7 @@ export class CliproxyAccountController {
   @HttpCode(HttpStatus.OK)
   public async testAccount(@Param("accountId") accountId: string, @Req() req: Request) {
     /* Manual test triggers a lightweight live request so stale limit/error statuses refresh immediately. */
-    this.assertAdmin(req);
+    requireProxyAdminId(req);
     await this.accounts.testAccount({ accountId: this.assertAccountId(accountId) });
     return { ok: true };
   }
@@ -93,7 +98,7 @@ export class CliproxyAccountController {
   @HttpCode(HttpStatus.OK)
   public async activateAccount(@Param("accountId") accountId: string, @Req() req: Request) {
     /* Manual switch pins one auth file so operators can steer traffic to a specific account. */
-    this.assertAdmin(req);
+    requireProxyAdminId(req);
     await this.accounts.activateAccount({ accountId: this.assertAccountId(accountId) });
     return { ok: true };
   }
@@ -103,17 +108,9 @@ export class CliproxyAccountController {
   @HttpCode(HttpStatus.OK)
   public async deleteAccount(@Param("accountId") accountId: string, @Req() req: Request) {
     /* Deletion removes the stored auth file from CLIProxy management pool. */
-    this.assertAdmin(req);
+    requireProxyAdminId(req);
     await this.accounts.deleteAccount({ accountId: this.assertAccountId(accountId) });
     return { ok: true };
-  }
-
-  private assertAdmin(req: Request): void {
-    /* Keep auth identity check explicit for parity with Telegram endpoints. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (adminId == null) {
-      throw new UnauthorizedException("Admin identity missing");
-    }
   }
 
   private assertProvider(provider?: string): CliproxyProviderId {
@@ -121,7 +118,7 @@ export class CliproxyAccountController {
     const normalized = typeof provider === "string" ? provider.trim() : "";
     const supported: CliproxyProviderId[] = ["codex", "anthropic", "antigravity", "kimi", "qwen", "iflow"];
     if (!supported.includes(normalized as CliproxyProviderId)) {
-      throw new BadRequestException(`Unsupported provider: ${provider ?? "<empty>"}`);
+      throw cliproxyProviderUnsupportedError();
     }
     return normalized as CliproxyProviderId;
   }
@@ -143,7 +140,7 @@ export class CliproxyAccountController {
     }
 
     if (!state || (!code && !error)) {
-      throw new BadRequestException("Provide callbackUrl or state with code/error");
+      throw cliproxyCompletionInputRequiredError();
     }
   }
 
@@ -151,10 +148,10 @@ export class CliproxyAccountController {
     /* Account mutations require a concrete auth file identifier from management state payload. */
     const normalized = typeof accountId === "string" ? accountId.trim() : "";
     if (!normalized) {
-      throw new BadRequestException("accountId is required");
+      throw cliproxyAccountIdRequiredError();
     }
     if (normalized.includes("..") || /[\/\\\0]/.test(normalized)) {
-      throw new BadRequestException("accountId contains forbidden path characters");
+      throw cliproxyAccountIdInvalidError();
     }
     return normalized;
   }

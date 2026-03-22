@@ -5,12 +5,15 @@
  * - FilePreviewModal - Opens project file content in the shared fullscreen code modal.
  */
 
-import { useEffect, ReactNode } from "react";
-import { Download, X } from "lucide-react";
+import { lazy, Suspense, useEffect } from "react";
+import { Download } from "lucide-react";
 
 import { ThemeMode } from "../utils/theme";
 import { inferTextEditorLanguage } from "../utils/text-editor-language";
-import { FullscreenCodeModal } from "./FullscreenCodeModal";
+
+const FullscreenCodeModal = lazy(async () => ({
+  default: (await import("./FullscreenCodeModal")).FullscreenCodeModal
+}));
 
 type Props = {
   isOpen: boolean;
@@ -37,21 +40,27 @@ export const FilePreviewModal = (props: Props) => {
     };
   }, [props.isOpen]);
 
+  if (!props.isOpen) {
+    return null;
+  }
+
   return (
-    <FullscreenCodeModal
-      filePath={props.filePath}
-      headerActions={
-        <button className="btn outline btn-icon" onClick={props.onDownload} type="button" title="Download file">
-          <Download size={20} />
-        </button>
-      }
-      isOpen={props.isOpen}
-      language={inferTextEditorLanguage(props.filePath)}
-      onChange={NOOP}
-      onClose={props.onClose}
-      readOnly
-      themeMode={props.themeMode}
-      value={props.content}
-    />
+    <Suspense fallback={<div className="placeholder">Loading preview...</div>}>
+      <FullscreenCodeModal
+        filePath={props.filePath}
+        headerActions={
+          <button className="btn outline btn-icon" onClick={props.onDownload} type="button" title="Download file">
+            <Download size={20} />
+          </button>
+        }
+        isOpen
+        language={inferTextEditorLanguage(props.filePath)}
+        onChange={NOOP}
+        onClose={props.onClose}
+        readOnly
+        themeMode={props.themeMode}
+        value={props.content}
+      />
+    </Suspense>
   );
 };

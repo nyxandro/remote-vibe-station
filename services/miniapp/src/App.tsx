@@ -10,38 +10,29 @@ import { useEffect, useMemo, useState } from "react";
 import { TabKey, WorkspaceHeader } from "./components/WorkspaceHeader";
 import { WorkspaceTabsContent } from "./components/WorkspaceTabsContent";
 
-import { apiGet, apiPost } from "./api/client";
-import {
-  ContainerAction,
-  ProjectGitSummary,
-  ProjectRecord,
-  ProjectStatus
-} from "./types";
 import { useAuthControl } from "./hooks/use-auth-control";
 import { useContainerStatusPolling } from "./hooks/use-container-status-polling";
 import { useGithubAuth } from "./hooks/use-github-auth";
+import { useOpenCodeAdminActions } from "./hooks/use-open-code-admin-actions";
 import { useOpenCodeSettings } from "./hooks/use-opencode-settings";
 import { useOpenCodeVersion } from "./hooks/use-opencode-version";
+import { useProjectCatalogState } from "./hooks/use-project-catalog-state";
 import { useProjectFiles } from "./hooks/use-project-files";
 import { useProviderAuth } from "./hooks/use-provider-auth";
 import { useProjectGit } from "./hooks/use-project-git";
 import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
+import { useTelegramStreamControl } from "./hooks/use-telegram-stream-control";
 import { useThemeMode } from "./hooks/use-theme-mode";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
+import { useWorkspaceRuntimeActions } from "./hooks/use-workspace-runtime-actions";
 import { useProjectRuntime } from "./hooks/use-project-runtime";
+import { useWorkspaceSelection } from "./hooks/use-workspace-selection";
 import { useCliproxyAccounts } from "./hooks/use-cliproxy-accounts";
 import { useProxySettings } from "./hooks/use-proxy-settings";
 import { useServerMetrics } from "./hooks/use-server-metrics";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
 import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
-import { loadProjectMetadata } from "./utils/project-metadata";
-
-type ProjectStatusMap = Record<string, ProjectStatus[]>;
-type ProjectLogsMap = Record<string, string>;
-type ProjectGitSummaryMap = Record<string, ProjectGitSummary | null>;
-
-const STORAGE_KEY_ACTIVE_PROJECT = "tvoc.miniapp.activeProject";
 
 const isProjectScopedTab = (tab: TabKey): boolean => {
   /* Providers/settings stay useful without an active project, but kanban remains project-specific. */
@@ -50,21 +41,23 @@ const isProjectScopedTab = (tab: TabKey): boolean => {
 
 export const App = () => {
   const restoredTabState = readTabPersistenceState();
-  const [projects, setProjects] = useState<ProjectRecord[]>([]);
-  const [statusMap, setStatusMap] = useState<ProjectStatusMap>({});
-  const [logsMap, setLogsMap] = useState<ProjectLogsMap>({});
-  const [gitSummaryMap, setGitSummaryMap] = useState<ProjectGitSummaryMap>({});
-  const [activeId, setActiveId] = useState<string | null>(() => {
-    return localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT);
-  });
   const [activeTab, setActiveTab] = useState<TabKey>(() => restoredTabState.activeTab);
   const [query, setQuery] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [terminalInput, setTerminalInput] = useState<string>("");
   const { canControlTelegramStream } = useAuthControl();
-  const { terminalBuffer, clearTerminalBuffer } = useTerminalEvents(activeId);
   const { gitOverviewMap, loadGitOverview, runGitOperation, checkoutBranch, mergeBranch, commitAll } =
     useProjectGit(setError);
+  const {
+    projects,
+    statusMap,
+    logsMap,
+    gitSummaryMap,
+    loadProjects,
+    loadStatus,
+    loadLogs,
+    clearLogs
+  } = useProjectCatalogState(setError);
   const {
     filePath,
     fileList,
@@ -99,18 +92,37 @@ export const App = () => {
     submitOAuthCode: submitProviderOAuthCode,
     disconnect: disconnectProvider
   } = useProviderAuth(setError);
+  const {
+    activeId,
+    setActiveId,
+    activeProject,
+    restoreActiveProject,
+    selectProject
+  } = useWorkspaceSelection({
+    projects,
+    activeTab,
+    setActiveTab,
+    loadFiles,
+    loadStatus,
+    loadGitOverview,
+    closeFilePreview,
+    setSettingsActiveFile,
+    clearTerminalBuffer: () => clearTerminalBuffer(),
+    clearLogs,
+    setError
+  });
+  const { terminalBuffer, clearTerminalBuffer } = useTerminalEvents(activeId);
   const clearActiveSelection = (): void => {
     setActiveId(null);
     setActiveTab("projects");
     resetFiles();
     setSettingsActiveFile(null);
   };
-  const [telegramStreamEnabled, setTelegramStreamEnabled] = useState<boolean>(false);
+  const { telegramStreamEnabled, startTelegramChat, endTelegramChat } = useTelegramStreamControl(
+    setError,
+    canControlTelegramStream
+  );
   const { themeMode, setThemeMode } = useThemeMode();
-  const [restartOpenCodeState, setRestartOpenCodeState] = useState<{
-    isRestarting: boolean;
-    lastResult: "idle" | "success" | "error";
-  }>({ isRestarting: false, lastResult: "idle" });
   const {
     state: voiceControlState,
     setApiKey: setVoiceControlApiKey,
@@ -161,22 +173,6 @@ export const App = () => {
     deleteAccount: deleteCliproxyAccount
   } = useCliproxyAccounts(setError);
 
-  const loadProjects = async (): Promise<void> => {
-    try {
-      setError(null);
-      const data = await apiGet<ProjectRecord[]>("/api/projects");
-      setProjects(data);
-
-      void (async () => {
-        const metadata = await loadProjectMetadata(data, apiGet);
-        setStatusMap((prev) => ({ ...prev, ...metadata.statusMap }));
-        setGitSummaryMap((prev) => ({ ...prev, ...metadata.gitSummaryMap }));
-      })();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load projects");
-    }
-  };
-
   const { createProjectFolder, cloneProjectRepository, deleteProjectFolder } = useProjectWorkspace(
     setError,
     loadProjects,
@@ -191,189 +187,26 @@ export const App = () => {
     deployStart,
     deployStop
   } = useProjectRuntime(setError, loadProjects);
-
-  const restoreActiveProject = async (): Promise<void> => {
-    /* Reopen project context on the last workspace tab instead of forcing Files. */
-    const preferredWorkspaceTab = readTabPersistenceState().lastWorkspaceTab;
-
-    try {
-      const serverActive = await apiGet<ProjectRecord | null>("/api/projects/active");
-      const slug = serverActive?.id ?? null;
-      if (slug) {
-        setActiveId(slug);
-        localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, slug);
-        setActiveTab(preferredWorkspaceTab);
-        if (preferredWorkspaceTab === "files") {
-          void loadFiles(slug, "");
-        }
-        return;
-      }
-    } catch {
-      // If backend is unavailable, local fallback still works.
-    }
-
-    if (activeId) {
-      setActiveTab(preferredWorkspaceTab);
-      if (preferredWorkspaceTab === "files") {
-        void loadFiles(activeId, "");
-      }
-    }
-  };
-
-  const syncOpenCodeAtStartup = async (): Promise<void> => {
-    try {
-      await apiPost("/api/opencode/sync-projects", {});
-    } catch {
-      // Ignore startup sync errors.
-    }
-  };
-
-  const syncOpenCodeNow = async (): Promise<void> => {
-    try {
-      setError(null);
-      await apiPost("/api/opencode/sync-projects", {});
-      await loadProjects();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to sync OpenCode projects");
-    }
-  };
-
-  const restartOpenCodeNow = async (): Promise<void> => {
-    /* Restart OpenCode runtime so freshly edited rules/config are picked up. */
-    setRestartOpenCodeState({ isRestarting: true, lastResult: "idle" });
-    try {
-      setError(null);
-      await apiPost("/api/opencode/restart", {});
-      await loadSettingsOverview(activeId);
-      setRestartOpenCodeState({ isRestarting: false, lastResult: "success" });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to restart OpenCode");
-      setRestartOpenCodeState({ isRestarting: false, lastResult: "error" });
-    }
-  };
-
-  const reloadSettingsNow = async (): Promise<void> => {
-    /* Settings Reload also refreshes OpenCode latest-version availability. */
-    await Promise.all([loadSettingsOverview(activeId), checkOpenCodeVersionStatus()]);
-  };
-
-  const startTelegramChat = async (): Promise<void> => {
-    try {
-      setError(null);
-      await apiPost("/api/telegram/stream/start", {});
-      setTelegramStreamEnabled(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start Telegram stream");
-    }
-  };
-
-  const endTelegramChat = async (): Promise<void> => {
-    try {
-      setError(null);
-      await apiPost("/api/telegram/stream/stop", {});
-      setTelegramStreamEnabled(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to stop Telegram stream");
-    }
-  };
-
-  const loadStatus = async (projectId: string): Promise<void> => {
-    try {
-      setError(null);
-      const data = await apiGet<ProjectStatus[]>(`/api/projects/${projectId}/status`);
-      setStatusMap((prev) => ({ ...prev, [projectId]: data }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load status");
-    }
-  };
-
-  const loadLogs = async (projectId: string): Promise<void> => {
-    try {
-      setError(null);
-      const data = await apiGet<string>(`/api/projects/${projectId}/logs`);
-      setLogsMap((prev) => ({ ...prev, [projectId]: data }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load logs");
-    }
-  };
-
-  const runContainerAction = async (
-    projectId: string,
-    service: string,
-    action: ContainerAction
-  ): Promise<void> => {
-    try {
-      setError(null);
-      await apiPost(
-        `/api/projects/${projectId}/containers/${encodeURIComponent(service)}/${action}`,
-        {}
-      );
-      await loadStatus(projectId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to run container action: ${action}`);
-    }
-  };
-
-  const sendTerminal = async (projectId: string): Promise<void> => {
-    const input = terminalInput;
-    if (!input.trim()) {
-      return;
-    }
-
-    try {
-      setError(null);
-      setTerminalInput("");
-      await apiPost(`/api/projects/${projectId}/terminal/input`, { input: input + "\n" });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to send terminal input");
-    }
-  };
-
-  const runAction = async (projectId: string, action: string): Promise<void> => {
-    try {
-      setError(null);
-      await apiPost(`/api/projects/${projectId}/${action}`, {});
-      await loadProjects();
-      await loadStatus(projectId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to run action: ${action}`);
-    }
-  };
-
-  const selectProject = async (projectId: string): Promise<void> => {
-    /* After project selection, keep the current tab unless user is in Projects list. */
-    const preferredWorkspaceTab = readTabPersistenceState().lastWorkspaceTab;
-    const nextTab: TabKey = activeTab === "projects" ? preferredWorkspaceTab : activeTab;
-
-    try {
-      setError(null);
-      await apiPost(`/api/projects/${projectId}/select`, {});
-      setActiveId(projectId);
-      setActiveTab(nextTab);
-      const selected = projects.find((p) => p.id === projectId) ?? null;
-      if (selected?.runnable) {
-        void loadStatus(projectId);
-      }
-      void loadGitOverview(projectId);
-
-      if (nextTab === "files") {
-        void loadFiles(projectId, "");
-      }
-
-      closeFilePreview();
-      setSettingsActiveFile(null);
-      setLogsMap((prev) => {
-        const next = { ...prev };
-        delete next[projectId];
-        return next;
-      });
-      clearTerminalBuffer();
-
-      localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, projectId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to select project");
-    }
-  };
+  const {
+    restartOpenCodeState,
+    syncOpenCodeAtStartup,
+    syncOpenCodeNow,
+    restartOpenCodeNow,
+    reloadSettingsNow
+  } = useOpenCodeAdminActions({
+    setError,
+    activeId,
+    loadProjects,
+    loadSettingsOverview,
+    checkOpenCodeVersionStatus
+  });
+  const { runContainerAction, sendTerminal, runAction } = useWorkspaceRuntimeActions({
+    setError,
+    terminalInput,
+    setTerminalInput,
+    loadProjects,
+    loadStatus
+  });
 
   useEffect(() => {
     void (async () => {
@@ -382,29 +215,6 @@ export const App = () => {
       await restoreActiveProject();
     })();
   }, []);
-
-  useEffect(() => {
-    if (!canControlTelegramStream) {
-      setTelegramStreamEnabled(false);
-    }
-  }, [canControlTelegramStream]);
-
-  useEffect(() => {
-    if (!canControlTelegramStream) {
-      return;
-    }
-
-    void (async () => {
-      try {
-        const record = await apiGet<{ streamEnabled?: boolean } | null>(
-          "/api/telegram/stream/status"
-        );
-        setTelegramStreamEnabled(Boolean(record?.streamEnabled));
-      } catch {
-        // Keep best-effort state.
-      }
-    })();
-  }, [canControlTelegramStream]);
 
   const visibleProjects = useMemo(() => {
     return projects
@@ -416,13 +226,6 @@ export const App = () => {
         return p.slug.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
       });
   }, [projects, query]);
-
-  const activeProject = useMemo(() => {
-    if (!activeId) {
-      return null;
-    }
-    return projects.find((p) => p.id === activeId) ?? null;
-  }, [activeId, projects]);
 
   const canUseProjectTabs = Boolean(activeProject);
 
@@ -444,14 +247,6 @@ export const App = () => {
       setActiveTab("projects");
     }
   }, [activeTab, canUseProjectTabs]);
-
-  useEffect(() => {
-    if (activeId) {
-      localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT, activeId);
-      return;
-    }
-    localStorage.removeItem(STORAGE_KEY_ACTIVE_PROJECT);
-  }, [activeId]);
 
   useEffect(() => {
     if (activeTab === "github" && activeId) {

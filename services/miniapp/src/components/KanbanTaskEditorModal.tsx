@@ -6,7 +6,7 @@
  * - KanbanTaskEditorModal - Shared create/edit dialog for project and global boards.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   X,
   Layout,
@@ -29,8 +29,11 @@ import {
   writeStoredKanbanTaskEditorDraft
 } from "./kanban-task-editor-draft";
 import { KanbanCriteriaEditor } from "./KanbanCriteriaEditor";
-import { VisualMarkdownEditor } from "./VisualMarkdownEditor";
 import { ThemeMode } from "../utils/theme";
+
+const VisualMarkdownEditor = lazy(async () => ({
+  default: (await import("./VisualMarkdownEditor")).VisualMarkdownEditor
+}));
 
 const STATUS_OPTIONS: Array<{ value: KanbanStatus; label: string; icon: any }> = [
   { value: "backlog", label: "Backlog", icon: Inbox },
@@ -348,12 +351,14 @@ export const KanbanTaskEditorModal = (props: Props) => {
 
             <div className="kanban-field">
               <span className="kanban-field-label">Description</span>
-              <VisualMarkdownEditor
-                value={description}
-                themeMode={props.themeMode}
-                onChange={setDescription}
-                height="200px"
-              />
+              <Suspense fallback={<div className="placeholder">Loading editor...</div>}>
+                <VisualMarkdownEditor
+                  value={description}
+                  themeMode={props.themeMode}
+                  onChange={setDescription}
+                  height="200px"
+                />
+              </Suspense>
             </div>
           </section>
 

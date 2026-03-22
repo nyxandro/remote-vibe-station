@@ -6,36 +6,68 @@
  */
 
 import {
+  OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
   WebSocketGateway,
   WebSocketServer
 } from "@nestjs/websockets";
-import { OnModuleInit } from "@nestjs/common";
+import { IncomingMessage } from "node:http";
+import { OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Server, WebSocket } from "ws";
 
+import { EventStreamAuthService } from "./event-stream-auth.service";
 import { EventsService } from "./events.service";
 import { EventEnvelope } from "./events.types";
 
+type ClientSubscription = {
+  adminId: number;
+  topics: Array<"kanban" | "terminal">;
+  projectSlug: string | null;
+};
+
 @WebSocketGateway({ path: "/events" })
-export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit {
+export class EventsGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, OnModuleInit, OnModuleDestroy
+{
   @WebSocketServer()
   private server!: Server;
 
-  private readonly clients = new Set<WebSocket>();
+  private readonly clients = new Map<WebSocket, ClientSubscription>();
   private unsubscribe?: () => void;
 
-  public constructor(private readonly events: EventsService) {}
+  public constructor(
+    private readonly events: EventsService,
+    private readonly auth: EventStreamAuthService
+  ) {}
+
+  public afterInit(): void {
+    /* Native ws gateway does not attach auth metadata automatically, so setup stays request-driven in handleConnection. */
+  }
 
   public onModuleInit(): void {
     /* Subscribe to event stream and broadcast to clients. */
     this.unsubscribe = this.events.subscribe((event) => this.broadcast(event));
   }
 
-  public handleConnection(client: WebSocket): void {
-    /* Register client and replay buffered events. */
-    this.clients.add(client);
-    this.events.replay().forEach((event) => this.send(client, event));
+  public onModuleDestroy(): void {
+    /* Release event subscription on shutdown so tests and dev restarts do not leak listeners. */
+    this.unsubscribe?.();
+  }
+
+  public handleConnection(client: WebSocket, request: IncomingMessage): void {
+    /* Authenticate socket on handshake and only then register scoped replay/live delivery. */
+    const subscription = this.resolveSubscription(request);
+    if (!subscription) {
+      client.close(1008, "Unauthorized");
+      return;
+    }
+
+    this.clients.set(client, subscription);
+    this.events
+      .replay()
+      .filter((event) => this.matches(subscription, event, true))
+      .forEach((event) => this.send(client, event));
   }
 
   public handleDisconnect(client: WebSocket): void {
@@ -44,8 +76,12 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
   }
 
   private broadcast(event: EventEnvelope): void {
-    /* Broadcast event to all connected clients. */
-    this.clients.forEach((client) => this.send(client, event));
+    /* Broadcast only events that match each authenticated client subscription. */
+    this.clients.forEach((subscription, client) => {
+      if (this.matches(subscription, event, false)) {
+        this.send(client, event);
+      }
+    });
   }
 
   private send(client: WebSocket, event: EventEnvelope): void {
@@ -53,5 +89,61 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect, 
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(event));
     }
+  }
+
+  private resolveSubscription(request: IncomingMessage): ClientSubscription | null {
+    /* Token is transported via query string because browser WebSocket APIs cannot send custom auth headers. */
+    let token: string | null = null;
+    try {
+      const requestUrl = String(request.url ?? "").trim();
+      const parsed = new URL(requestUrl, "http://localhost");
+      token = parsed.searchParams.get("token")?.trim() ?? null;
+    } catch {
+      return null;
+    }
+
+    if (!token) {
+      return null;
+    }
+
+    let verified: ReturnType<EventStreamAuthService["verifyToken"]>;
+    try {
+      verified = this.auth.verifyToken({ token });
+    } catch {
+      return null;
+    }
+
+    return verified
+      ? {
+          adminId: verified.adminId,
+          topics: verified.topics,
+          projectSlug: verified.projectSlug
+        }
+      : null;
+  }
+
+  private matches(subscription: ClientSubscription, event: EventEnvelope, isReplay: boolean): boolean {
+    /* Keep gateway filtering explicit so only approved topics can leave the backend over `/events`. */
+    if (event.type === "kanban.task.updated") {
+      if (!subscription.topics.includes("kanban")) {
+        return false;
+      }
+
+      const eventData = (event.data ?? {}) as { projectSlug?: string };
+      const eventProjectSlug = typeof eventData.projectSlug === "string" ? eventData.projectSlug.trim() : "";
+      return !subscription.projectSlug || !eventProjectSlug || eventProjectSlug === subscription.projectSlug;
+    }
+
+    if (event.type === "terminal.output") {
+      if (isReplay || !subscription.topics.includes("terminal") || !subscription.projectSlug) {
+        return false;
+      }
+
+      const eventData = (event.data ?? {}) as { slug?: string };
+      const eventProjectSlug = typeof eventData.slug === "string" ? eventData.slug.trim() : "";
+      return eventProjectSlug.length > 0 && eventProjectSlug === subscription.projectSlug.trim();
+    }
+
+    return false;
   }
 }

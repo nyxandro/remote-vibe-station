@@ -9,15 +9,16 @@
 import { randomUUID } from "node:crypto";
 import { Request, Response, NextFunction } from "express";
 
-const REQUEST_ID_HEADER = "x-request-id";
+export const REQUEST_ID_HEADER = "x-request-id";
 
 export const requestIdMiddleware = (
   request: Request,
   response: Response,
   next: NextFunction
 ): void => {
-  /* Generate and attach request id for tracing. */
-  const requestId = randomUUID();
+  /* Preserve upstream correlation id when present, otherwise mint a new one locally. */
+  const existing = typeof request.headers[REQUEST_ID_HEADER] === "string" ? request.headers[REQUEST_ID_HEADER] : null;
+  const requestId = existing?.trim() || randomUUID();
   (request.headers as Record<string, string>)[REQUEST_ID_HEADER] = requestId;
   response.setHeader(REQUEST_ID_HEADER, requestId);
 

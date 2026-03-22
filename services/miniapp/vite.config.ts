@@ -14,6 +14,42 @@ const backendUrl = process.env.VITE_BACKEND_URL ?? FALLBACK_BACKEND_URL;
 export default defineConfig({
   plugins: [react()],
   base: "/miniapp/",
+  build: {
+    chunkSizeWarningLimit: 650,
+    rollupOptions: {
+      output: {
+        manualChunks: (id: string) => {
+          /* Split editor/highlighter/vendor dependencies so the app shell stops carrying all heavy tooling at startup. */
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+
+          if (
+            id.includes("@uiw/react-codemirror") ||
+            id.includes("@uiw/codemirror-") ||
+            id.includes("@codemirror/") ||
+            id.includes("@lezer/")
+          ) {
+            return "editor-vendor";
+          }
+
+          if (id.includes("shiki")) {
+            return "syntax-vendor";
+          }
+
+          if (id.includes("lucide-react")) {
+            return "icons-vendor";
+          }
+
+          if (id.includes("react") || id.includes("scheduler")) {
+            return "react-vendor";
+          }
+
+          return undefined;
+        }
+      }
+    }
+  },
   server: {
     host: true,
     port: 5173,

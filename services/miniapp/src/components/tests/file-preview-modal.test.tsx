@@ -15,7 +15,7 @@ describe("FilePreviewModal", () => {
     cleanup();
   });
 
-  it("renders fullscreen preview with download and close actions", () => {
+  it("renders fullscreen preview with download and close actions", async () => {
     /* Preview modal should expose the same fullscreen reading surface plus download action. */
     const onDownload = vi.fn();
     const onClose = vi.fn();
@@ -31,7 +31,7 @@ describe("FilePreviewModal", () => {
       />
     );
 
-    expect(screen.getByText("public/uploads/debug_images.js")).toBeTruthy();
+    expect(await screen.findByText("public/uploads/debug_images.js", {}, { timeout: 5000 })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Download file" }));
     fireEvent.click(screen.getByRole("button", { name: "Close" }));

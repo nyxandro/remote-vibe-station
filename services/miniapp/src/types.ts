@@ -4,8 +4,8 @@
  * Exports:
  * - ProjectRecord (L17) - Project data from backend.
  * - ProjectStatus (L30) - Container status response.
- * - ProjectGitSummary (L39) - Uncommitted git change counters.
- * - GitOverview (L59) - Branch and changed files overview for GitHub tab.
+ * - ProjectGitSummary - Compact active-branch and local change counters.
+ * - GitOverview - Branch and changed files overview for GitHub tab.
  * - OpenCodeSettingsOverview (L72) - Accordion metadata for settings files.
  * - GroqTranscriptionModel (L91) - Supported Groq speech-to-text models.
  * - VoiceControlSettings (L93) - Persisted Telegram voice-control settings.
@@ -107,6 +107,7 @@ export type ProjectRuntimeSettingsPatch = {
 };
 
 export type ProjectGitSummary = {
+  currentBranch?: string;
   filesChanged: number;
   additions: number;
   deletions: number;

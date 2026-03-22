@@ -41,6 +41,16 @@ describe("AppAuthGuard", () => {
 
     const req: any = { headers: {} };
     expect(() => guard.canActivate(makeContext(req))).toThrow(UnauthorizedException);
+
+    try {
+      guard.canActivate(makeContext(req));
+    } catch (error) {
+      expect((error as UnauthorizedException).getResponse()).toMatchObject({
+        code: "APP_AUTH_REQUIRED",
+        message: "Authentication is missing or invalid.",
+        hint: "Provide Telegram initData or a valid browser token and retry."
+      });
+    }
   });
 
   it("derives authAdminId on localhost only when unsafe bypass is explicitly enabled", () => {

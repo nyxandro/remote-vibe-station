@@ -31,7 +31,7 @@ export const loadProjectMetadata = async (
       })
   );
 
-  /* Fetch git deltas for every project; clean/non-git repositories return null. */
+  /* Fetch git card metadata for every project; clean repos keep their branch while non-git folders still return null. */
   const gitEntries = await Promise.all(
     projects.map(async (project) => {
       try {

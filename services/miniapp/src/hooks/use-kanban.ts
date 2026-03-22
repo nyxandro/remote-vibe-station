@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { apiGet, apiPost } from "../api/client";
+import { apiGet, apiPost, getEventStreamUrl } from "../api/client";
 import { KanbanCriterion, KanbanPriority, KanbanStatus, KanbanTask } from "../types";
 
 export type KanbanTaskFilter = {
@@ -105,7 +105,6 @@ export const useKanban = () => {
 
   useEffect(() => {
     /* Reuse the shared backend event stream so kanban columns react immediately to agent-side mutations. */
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
     let disposed = false;
     let reconnectDelayMs = INITIAL_WS_RECONNECT_DELAY_MS;
     let ws: WebSocket | null = null;
@@ -142,45 +141,64 @@ export const useKanban = () => {
 
     const connect = () => {
       /* Reconnect in-place so transient backend restarts do not leave the board permanently stale. */
-      ws = new WebSocket(`${proto}://${window.location.host}/events`);
-
-      ws.onopen = () => {
-        /* A healthy socket resets backoff so later disconnects recover quickly again. */
-        reconnectDelayMs = INITIAL_WS_RECONNECT_DELAY_MS;
-        clearReconnectTimer();
-      };
-
-      ws.onmessage = (event) => {
+      void (async () => {
         try {
-          const payload = JSON.parse(event.data) as { type?: string; data?: KanbanTaskUpdatedEvent };
-          if (payload?.type !== "kanban.task.updated") {
+          const url = await getEventStreamUrl({ topics: ["kanban"], projectSlug: filterRef.current.projectSlug });
+          if (disposed) {
             return;
           }
 
-          scheduleLiveReload(payload.data?.projectSlug);
+          ws = new WebSocket(url);
+
+          ws.onopen = () => {
+            /* A healthy socket resets backoff so later disconnects recover quickly again. */
+            reconnectDelayMs = INITIAL_WS_RECONNECT_DELAY_MS;
+            clearReconnectTimer();
+          };
+
+          ws.onmessage = (event) => {
+            try {
+              const payload = JSON.parse(event.data) as { type?: string; data?: KanbanTaskUpdatedEvent };
+              if (payload?.type !== "kanban.task.updated") {
+                return;
+              }
+
+              scheduleLiveReload(payload.data?.projectSlug);
+            } catch {
+              /* Malformed non-kanban events should never break the board subscription loop. */
+            }
+          };
+
+          ws.onerror = (event) => {
+            /* WebSocket transport issues are informational here because onclose handles the actual retry loop. */
+            console.error("Kanban live updates socket error", event);
+          };
+
+          ws.onclose = () => {
+            /* Retry with capped backoff unless the hook is already being disposed. */
+            ws = null;
+            if (disposed) {
+              return;
+            }
+
+            clearReconnectTimer();
+            liveReconnectTimerRef.current = window.setTimeout(() => {
+              connect();
+            }, reconnectDelayMs);
+            reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_WS_RECONNECT_DELAY_MS);
+          };
         } catch {
-          /* Malformed non-kanban events should never break the board subscription loop. */
+          if (disposed) {
+            return;
+          }
+
+          clearReconnectTimer();
+          liveReconnectTimerRef.current = window.setTimeout(() => {
+            connect();
+          }, reconnectDelayMs);
+          reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_WS_RECONNECT_DELAY_MS);
         }
-      };
-
-      ws.onerror = (event) => {
-        /* WebSocket transport issues are informational here because onclose handles the actual retry loop. */
-        console.error("Kanban live updates socket error", event);
-      };
-
-      ws.onclose = () => {
-        /* Retry with capped backoff unless the hook is already being disposed. */
-        ws = null;
-        if (disposed) {
-          return;
-        }
-
-        clearReconnectTimer();
-        liveReconnectTimerRef.current = window.setTimeout(() => {
-          connect();
-        }, reconnectDelayMs);
-        reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_WS_RECONNECT_DELAY_MS);
-      };
+      })();
     };
 
     connect();

@@ -138,6 +138,10 @@ export const ServerParametersAccordion = (props: Props) => {
                 <span className="metric-label">Всего:</span>
                 <span className="metric-value">{toFixedBytes(props.metrics.disk.totalBytes, "GB")}</span>
               </div>
+              <div className="metric-row">
+                <span className="metric-label">Свободно:</span>
+                <span className="metric-value">{toFixedBytes(props.metrics.disk.freeBytes, "GB")}</span>
+              </div>
             </div>
 
             {/* Network Activity Section - I/O counters */}

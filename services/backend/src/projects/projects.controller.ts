@@ -14,14 +14,28 @@
  * - gitSummary (L160) - Handler for GET /api/projects/:id/git-summary.
  */
 
-import { BadRequestException, Body, Controller, Get, Headers, Logger, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Logger, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { ProjectGitOpsService } from "./project-git-ops.service";
 import { ProjectDeploymentService } from "./project-deployment.service";
 import { ProjectGitService } from "./project-git.service";
+import { publishProjectLifecycleEvent } from "./project-lifecycle-events";
 import { ProjectWorkspaceService } from "./project-workspace.service";
+import {
+  branchRequiredError,
+  commitMessageRequiredError,
+  createProjectsControllerBadRequest,
+  deployPatchRequiredError,
+  filePathRequiredError,
+  projectNameRequiredError,
+  projectPayloadInvalidError,
+  repositoryUrlRequiredError,
+  sourceBranchRequiredError,
+  terminalInputRequiredError,
+  unsupportedContainerActionError
+} from "./project-controller-errors";
 import { ProjectCreateRequest } from "./project.types";
 import { ProjectsService } from "./projects.service";
 import { EventsService } from "../events/events.service";
@@ -52,7 +66,7 @@ export class ProjectsController {
     const hasPort = typeof body.servicePort === "number" && Number.isFinite(body.servicePort);
 
     if (!hasStrings || !hasPort) {
-      throw new BadRequestException("Invalid project payload");
+      throw projectPayloadInvalidError();
     }
   }
 
@@ -100,7 +114,7 @@ export class ProjectsController {
   public async register(@Body() body: ProjectCreateRequest) {
     /* Delegate to registry after basic validation. */
     if (!body) {
-      throw new BadRequestException("Invalid project payload");
+      throw projectPayloadInvalidError();
     }
 
     this.validatePayload(body);
@@ -112,13 +126,18 @@ export class ProjectsController {
     /* Create empty project folder under PROJECTS_ROOT. */
     const name = body?.name?.trim();
     if (!name) {
-      throw new BadRequestException("Project name is required");
+      throw projectNameRequiredError();
     }
 
     try {
       return this.workspace.createProjectFolder(name);
     } catch (error) {
-      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_FOLDER_CREATE_FAILED",
+        fallbackMessage: "Failed to create project folder.",
+        fallbackHint: "Check target path permissions and retry project folder creation."
+      });
     }
   }
 
@@ -127,13 +146,18 @@ export class ProjectsController {
     /* Clone repository into PROJECTS_ROOT with optional folder override. */
     const repositoryUrl = body?.repositoryUrl?.trim();
     if (!repositoryUrl) {
-      throw new BadRequestException("Repository URL is required");
+      throw repositoryUrlRequiredError();
     }
 
     try {
       return await this.workspace.cloneRepository({ repositoryUrl, folderName: body?.folderName });
     } catch (error) {
-      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_CLONE_FAILED",
+        fallbackMessage: "Failed to clone repository into projects workspace.",
+        fallbackHint: "Check repository URL, git credentials and target folder, then retry the clone."
+      });
     }
   }
 
@@ -142,7 +166,7 @@ export class ProjectsController {
     /* Start project containers. */
     const adminId = (req as any).authAdminId as number | undefined;
     const result = await this.projects.startProject(id);
-    void this.emitLifecycleEvent({ adminId, slug: id, action: "start" });
+    void publishProjectLifecycleEvent({ projects: this.projects, events: this.events, adminId, slug: id, action: "start" });
     return result;
   }
 
@@ -164,7 +188,12 @@ export class ProjectsController {
     try {
       return await this.workspace.deleteProjectFolder(id);
     } catch (error) {
-      throw new BadRequestException(error instanceof Error ? error.message : "Unknown error");
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_DELETE_FAILED",
+        fallbackMessage: "Failed to delete local project folder.",
+        fallbackHint: "Check delete policy, git status and filesystem permissions, then retry deletion."
+      });
     }
   }
 
@@ -173,7 +202,7 @@ export class ProjectsController {
     /* Stop project containers. */
     const adminId = (req as any).authAdminId as number | undefined;
     const result = await this.projects.stopProject(id);
-    void this.emitLifecycleEvent({ adminId, slug: id, action: "stop" });
+    void publishProjectLifecycleEvent({ projects: this.projects, events: this.events, adminId, slug: id, action: "stop" });
     return result;
   }
 
@@ -182,7 +211,7 @@ export class ProjectsController {
     /* Restart project containers. */
     const adminId = (req as any).authAdminId as number | undefined;
     const result = await this.projects.restartProject(id);
-    void this.emitLifecycleEvent({ adminId, slug: id, action: "restart" });
+    void publishProjectLifecycleEvent({ projects: this.projects, events: this.events, adminId, slug: id, action: "restart" });
     return result;
   }
 
@@ -192,8 +221,12 @@ export class ProjectsController {
     try {
       return await this.deployment.getRuntimeSnapshot(id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_DEPLOY_SETTINGS_READ_FAILED",
+        fallbackMessage: "Failed to read project deploy settings.",
+        fallbackHint: "Check deployment settings storage and retry loading project deploy settings."
+      });
     }
   }
 
@@ -205,14 +238,18 @@ export class ProjectsController {
       body !== null &&
       ("mode" in body || "serviceName" in body || "internalPort" in body || "staticRoot" in body || "routes" in body);
     if (!hasPatch) {
-      throw new BadRequestException("Deploy settings patch is required");
+      throw deployPatchRequiredError();
     }
 
     try {
       return await this.deployment.updateRuntimeSettings(id, body);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_DEPLOY_SETTINGS_UPDATE_FAILED",
+        fallbackMessage: "Failed to update project deploy settings.",
+        fallbackHint: "Check runtime mode fields/routes and retry saving deploy settings."
+      });
     }
   }
 
@@ -222,8 +259,12 @@ export class ProjectsController {
     try {
       return await this.deployment.startDeployment(id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_DEPLOY_START_FAILED",
+        fallbackMessage: "Failed to start project deployment.",
+        fallbackHint: "Check deploy settings and runtime availability, then retry deployment start."
+      });
     }
   }
 
@@ -233,8 +274,12 @@ export class ProjectsController {
     try {
       return await this.deployment.autoConfigureDeployment(id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_DEPLOY_AUTOCONFIG_FAILED",
+        fallbackMessage: "Failed to autoconfigure project deployment routes.",
+        fallbackHint: "Check compose/runtime metadata and retry deployment autoconfiguration."
+      });
     }
   }
 
@@ -244,8 +289,12 @@ export class ProjectsController {
     try {
       return await this.deployment.stopDeployment(id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_DEPLOY_STOP_FAILED",
+        fallbackMessage: "Failed to stop project deployment.",
+        fallbackHint: "Check runtime availability and retry deployment stop."
+      });
     }
   }
 
@@ -258,7 +307,7 @@ export class ProjectsController {
   ) {
     /* Execute lifecycle action for one compose service. */
     if (action !== "start" && action !== "stop" && action !== "restart") {
-      throw new BadRequestException(`Unsupported container action: ${action}`);
+      throw unsupportedContainerActionError(action);
     }
 
     const adminId = (req as any).authAdminId as number | undefined;
@@ -281,41 +330,6 @@ export class ProjectsController {
       }
     });
     return status;
-  }
-
-  private async emitLifecycleEvent(input: {
-    adminId: number | undefined;
-    slug: string;
-    action: "start" | "stop" | "restart";
-  }): Promise<void> {
-    /*
-     * Publish best-effort lifecycle status for Telegram notifications.
-     * If we cannot inspect containers (e.g. compose errors), we still keep action result.
-     */
-    try {
-      const status = await this.projects.statusProject(input.slug);
-      this.events.publish({
-        type: "project.lifecycle",
-        ts: new Date().toISOString(),
-        data: {
-          adminId: input.adminId ?? null,
-          slug: input.slug,
-          action: input.action,
-          containers: status
-        }
-      });
-    } catch {
-      this.events.publish({
-        type: "project.lifecycle",
-        ts: new Date().toISOString(),
-        data: {
-          adminId: input.adminId ?? null,
-          slug: input.slug,
-          action: input.action,
-          containers: []
-        }
-      });
-    }
   }
 
   @Get(":id/status")
@@ -342,7 +356,7 @@ export class ProjectsController {
   public async file(@Param("id") id: string, @Query("path") relativePath?: string) {
     /* Read text file content for previewing in Mini App. */
     if (!relativePath) {
-      throw new BadRequestException("File path is required");
+      throw filePathRequiredError();
     }
     return this.projects.readFile(id, relativePath);
   }
@@ -351,7 +365,7 @@ export class ProjectsController {
   public async terminal(@Param("id") id: string, @Body() body: { input?: string }) {
     /* Send input to a project-scoped terminal session. */
     if (!body || typeof body.input !== "string") {
-      throw new BadRequestException("Terminal input is required");
+      throw terminalInputRequiredError();
     }
 
     await this.projects.sendTerminalInput(id, body.input);
@@ -364,20 +378,28 @@ export class ProjectsController {
     try {
       return await this.projects.logsProject(id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_LOGS_READ_FAILED",
+        fallbackMessage: "Failed to read project logs.",
+        fallbackHint: "Check compose/runtime availability and retry loading project logs."
+      });
     }
   }
 
   @Get(":id/git-summary")
   public async gitSummary(@Param("id") id: string) {
-    /* Return uncommitted git summary for project card badges. */
+    /* Return active branch plus local git counters for project card badges. */
     try {
       const rootPath = this.projects.getProjectRootPath(id);
       return await this.gitSummaryService.summaryForProjectRoot(rootPath);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_GIT_SUMMARY_FAILED",
+        fallbackMessage: "Failed to read git summary for project.",
+        fallbackHint: "Check repository state and retry the git summary request."
+      });
     }
   }
 
@@ -388,8 +410,12 @@ export class ProjectsController {
       const rootPath = this.projects.getProjectRootPath(id);
       return await this.gitOps.getOverview(rootPath);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createProjectsControllerBadRequest({
+        error,
+        fallbackCode: "APP_PROJECT_GIT_OVERVIEW_FAILED",
+        fallbackMessage: "Failed to read git overview for project.",
+        fallbackHint: "Check repository state and retry the git overview request."
+      });
     }
   }
 
@@ -397,7 +423,7 @@ export class ProjectsController {
   public async gitCheckout(@Param("id") id: string, @Body() body: { branch?: string }) {
     /* Switch active branch for selected project repository. */
     if (!body?.branch || typeof body.branch !== "string") {
-      throw new BadRequestException("Branch is required");
+      throw branchRequiredError();
     }
 
     const rootPath = this.projects.getProjectRootPath(id);
@@ -433,7 +459,7 @@ export class ProjectsController {
   public async gitMerge(@Param("id") id: string, @Body() body: { sourceBranch?: string }) {
     /* Merge source branch into current branch and return overview. */
     if (!body?.sourceBranch || typeof body.sourceBranch !== "string") {
-      throw new BadRequestException("Source branch is required");
+      throw sourceBranchRequiredError();
     }
 
     const rootPath = this.projects.getProjectRootPath(id);
@@ -446,7 +472,7 @@ export class ProjectsController {
     /* Commit all pending changes with required commit message. */
     const message = body?.message?.trim();
     if (!message) {
-      throw new BadRequestException("Commit message is required");
+      throw commitMessageRequiredError();
     }
 
     const rootPath = this.projects.getProjectRootPath(id);

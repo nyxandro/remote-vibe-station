@@ -134,7 +134,7 @@ describe("ProjectsTab", () => {
   });
 
   it("renders git delta summary when backend provides it", () => {
-    /* Project cards should display uncommitted lines/files counters. */
+    /* Project cards should display the current branch together with uncommitted lines/files counters. */
     render(
       <ProjectsTab
         visibleProjects={[buildProject()]}
@@ -142,7 +142,7 @@ describe("ProjectsTab", () => {
         query=""
         telegramStreamEnabled={false}
         statusMap={{}}
-        gitSummaryMap={{ tvoc: { additions: 12, deletions: 5, filesChanged: 3 } }}
+        gitSummaryMap={{ tvoc: { additions: 12, deletions: 5, filesChanged: 3, currentBranch: "feature/ui-branch" } }}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
         onDeployProject={vi.fn()}
@@ -152,9 +152,35 @@ describe("ProjectsTab", () => {
       />
     );
 
+    expect(screen.getByText("feature/ui-branch")).toBeTruthy();
     expect(screen.getByText("+12")).toBeTruthy();
     expect(screen.getByText("-5")).toBeTruthy();
     expect(screen.getByText("3 files")).toBeTruthy();
+  });
+
+  it("renders current branch for clean repositories too", () => {
+    /* Even without local changes the compact git row should stay visible so operators can confirm the active branch at a glance. */
+    render(
+      <ProjectsTab
+        visibleProjects={[buildProject()]}
+        activeId={null}
+        query=""
+        telegramStreamEnabled={false}
+        statusMap={{}}
+        gitSummaryMap={{ tvoc: { additions: 0, deletions: 0, filesChanged: 0, currentBranch: "main" } }}
+        onQueryChange={vi.fn()}
+        onSelectProject={vi.fn()}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
+        onCreateProjectFolder={vi.fn()}
+        onCloneRepository={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("main")).toBeTruthy();
+    expect(screen.getByText("+0")).toBeTruthy();
+    expect(screen.getByText("-0")).toBeTruthy();
+    expect(screen.getByText("0 files")).toBeTruthy();
   });
 
   it("supports create/clone project actions from plus menu", () => {
@@ -245,6 +271,6 @@ describe("ProjectsTab", () => {
     const actionsBlock = expandedCard?.querySelector(".project-actions-footer");
     expect(linksBlock).toBeTruthy();
     expect(actionsBlock).toBeTruthy();
-    expect(linksBlock?.compareDocumentPosition(actionsBlock as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect((linksBlock as Node).compareDocumentPosition(actionsBlock as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

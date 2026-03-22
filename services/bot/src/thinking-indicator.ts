@@ -30,6 +30,7 @@ export class ThinkingIndicator {
     const timer = setInterval(() => {
       void this.sendTyping(chatId);
     }, TYPING_REFRESH_INTERVAL_MS);
+    timer.unref?.();
     this.timerByChatId.set(chatId, timer);
     await this.sendTyping(chatId);
   }

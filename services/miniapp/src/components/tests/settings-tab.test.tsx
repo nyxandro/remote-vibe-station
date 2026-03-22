@@ -353,7 +353,7 @@ describe("SettingsTab", () => {
     expect(onSaveProjectRuntimeSettings).not.toHaveBeenCalled();
   });
 
-  it("opens settings editor in fullscreen modal and allows closing", () => {
+  it("opens settings editor in fullscreen modal and allows closing", async () => {
     /* Modal should open on file selection updates, not on initial stale mount. */
     const onSaveActiveFile = vi.fn();
 
@@ -405,7 +405,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    expect(screen.getByText("/home/nyx/projects/demo/.env")).toBeTruthy();
+    expect(await screen.findByText("/home/nyx/projects/demo/.env", {}, { timeout: 5000 })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onSaveActiveFile).toHaveBeenCalledWith("HELLO=WORLD\n");
 

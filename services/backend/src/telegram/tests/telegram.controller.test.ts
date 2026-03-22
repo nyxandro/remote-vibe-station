@@ -115,6 +115,16 @@ describe("TelegramController.listCommands", () => {
 
     await expect(controller.listCommands(req)).rejects.toThrow(BadRequestException);
     expect(commandCatalog.listForAdmin).not.toHaveBeenCalled();
+
+    try {
+      await controller.listCommands(req);
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "APP_TELEGRAM_ADMIN_REQUIRED",
+        message: "Admin identity is required for Telegram endpoint.",
+        hint: "Authenticate as an allowed admin before calling this Telegram API route."
+      });
+    }
   });
 });
 
@@ -231,6 +241,16 @@ describe("TelegramController.enqueuePrompt", () => {
       controller.enqueuePrompt({ chatId: 77 }, { authAdminId: 649624756 } as unknown as Request)
     ).rejects.toThrow(BadRequestException);
     expect(promptQueue.enqueueIncomingPrompt).not.toHaveBeenCalled();
+
+    try {
+      await controller.enqueuePrompt({ chatId: 77 }, { authAdminId: 649624756 } as unknown as Request);
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "APP_TELEGRAM_PROMPT_CONTENT_REQUIRED",
+        message: "Prompt text or supported attachment is required.",
+        hint: "Send prompt text, photo or document attachment before retrying the request."
+      });
+    }
   });
 });
 
@@ -427,5 +447,15 @@ describe("TelegramController.checkOpenCodeVersion", () => {
 
     await expect(controller.checkOpenCodeVersion({} as Request)).rejects.toThrow(BadRequestException);
     expect(runtime.checkVersionStatus).not.toHaveBeenCalled();
+
+    try {
+      await controller.checkOpenCodeVersion({} as Request);
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "APP_TELEGRAM_ADMIN_REQUIRED",
+        message: "Admin identity is required for Telegram endpoint.",
+        hint: "Authenticate as an allowed admin before calling this Telegram API route."
+      });
+    }
   });
 });

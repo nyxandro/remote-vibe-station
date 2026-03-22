@@ -69,6 +69,16 @@ describe("CliproxyAccountController", () => {
       controller.startOAuth({}, { authAdminId: 649624756 } as unknown as Request)
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(service.startOAuth).not.toHaveBeenCalled();
+
+    try {
+      await controller.startOAuth({}, { authAdminId: 649624756 } as unknown as Request);
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "APP_CLIPROXY_PROVIDER_UNSUPPORTED",
+        message: "CLIProxy provider is unsupported.",
+        hint: "Choose one of the supported CLIProxy providers and retry OAuth start."
+      });
+    }
   });
 
   test("forwards validated oauth completion payload", async () => {
@@ -207,5 +217,15 @@ describe("CliproxyAccountController", () => {
       controller.activateAccount("../codex-user@example.com", { authAdminId: 649624756 } as unknown as Request)
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(service.activateAccount).not.toHaveBeenCalled();
+
+    try {
+      await controller.activateAccount("../codex-user@example.com", { authAdminId: 649624756 } as unknown as Request);
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "APP_CLIPROXY_ACCOUNT_ID_INVALID",
+        message: "CLIProxy account id contains forbidden path characters.",
+        hint: "Use the exact account id from CLIProxy state and retry the action."
+      });
+    }
   });
 });

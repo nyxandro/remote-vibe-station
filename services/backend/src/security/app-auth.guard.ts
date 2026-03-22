@@ -13,6 +13,7 @@ import { CanActivate, ExecutionContext, Inject, UnauthorizedException } from "@n
 import { Request } from "express";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
+import { createAppErrorBody } from "../logging/app-error";
 import { isUnsafeLocalRequestAllowed } from "./local-dev-auth";
 import { extractUserId, verifyInitData } from "./telegram-init-data";
 import { verifyWebToken } from "./web-token";
@@ -52,19 +53,37 @@ export class AppAuthGuard implements CanActivate {
       return true;
     }
 
-    throw new UnauthorizedException("Missing authentication");
+    throw new UnauthorizedException(
+      createAppErrorBody({
+        code: "APP_AUTH_REQUIRED",
+        message: "Authentication is missing or invalid.",
+        hint: "Provide Telegram initData or a valid browser token and retry."
+      })
+    );
   }
 
   private authorizeTelegram(request: Request, initData: string): boolean {
     /* Validate Telegram initData signature and admin id. */
     const isValid = verifyInitData(initData, this.config.telegramBotToken);
     if (!isValid) {
-      throw new UnauthorizedException("Invalid Telegram initData");
+      throw new UnauthorizedException(
+        createAppErrorBody({
+          code: "APP_TELEGRAM_INIT_DATA_INVALID",
+          message: "Telegram initData signature is invalid.",
+          hint: "Reopen the Mini App from Telegram and retry."
+        })
+      );
     }
 
     const userId = extractUserId(initData);
     if (!userId || !this.config.adminIds.includes(userId)) {
-      throw new UnauthorizedException("Access denied");
+      throw new UnauthorizedException(
+        createAppErrorBody({
+          code: "APP_ACCESS_DENIED",
+          message: "This admin account is not allowed to use the backend.",
+          hint: "Sign in with an allowed admin account or update ADMIN_IDS."
+        })
+      );
     }
 
     (request as any).telegramInitData = initData;
@@ -76,17 +95,35 @@ export class AppAuthGuard implements CanActivate {
     /* Validate signed web token (browser access). */
     const match = authorization.match(/^Bearer\s+(.+)$/i);
     if (!match) {
-      throw new UnauthorizedException("Invalid Authorization header");
+      throw new UnauthorizedException(
+        createAppErrorBody({
+          code: "APP_AUTH_HEADER_INVALID",
+          message: "Authorization header must use Bearer token format.",
+          hint: "Send 'Authorization: Bearer <token>' and retry."
+        })
+      );
     }
 
     const token = match[1];
     const verified = verifyWebToken({ token, botToken: this.config.telegramBotToken });
     if (!verified) {
-      throw new UnauthorizedException("Invalid web token");
+      throw new UnauthorizedException(
+        createAppErrorBody({
+          code: "APP_WEB_TOKEN_INVALID",
+          message: "Browser access token is invalid or expired.",
+          hint: "Open the Mini App again to refresh the browser token."
+        })
+      );
     }
 
     if (!this.config.adminIds.includes(verified.adminId)) {
-      throw new UnauthorizedException("Access denied");
+      throw new UnauthorizedException(
+        createAppErrorBody({
+          code: "APP_ACCESS_DENIED",
+          message: "This admin account is not allowed to use the backend.",
+          hint: "Sign in with an allowed admin account or update ADMIN_IDS."
+        })
+      );
     }
 
     (request as any).authAdminId = verified.adminId;

@@ -5,14 +5,10 @@
  * - WorkspaceTabsContent - Renders active tab body with required callbacks.
  */
 
-import { ContainersTab } from "./ContainersTab";
-import { FilesTab } from "./FilesTab";
-import { GitHubTab, GitOverview } from "./GitHubTab";
+import { JSX, lazy, Suspense } from "react";
+
+import type { GitOverview } from "./GitHubTab";
 import { ProjectsTab } from "./ProjectsTab";
-import { ProvidersTab } from "./ProvidersTab";
-import { SettingsTab } from "./SettingsTab";
-import { TerminalTab } from "./TerminalTab";
-import { KanbanProjectTab } from "./KanbanProjectTab";
 import { TabKey } from "./WorkspaceHeader";
 import {
   ContainerAction,
@@ -37,6 +33,21 @@ import {
   ProjectRuntimeSnapshot,
   ProjectStatus
 } from "../types";
+
+const ContainersTab = lazy(async () => ({ default: (await import("./ContainersTab")).ContainersTab }));
+const FilesTab = lazy(async () => ({ default: (await import("./FilesTab")).FilesTab }));
+const GitHubTab = lazy(async () => ({ default: (await import("./GitHubTab")).GitHubTab }));
+const ProvidersTab = lazy(async () => ({ default: (await import("./ProvidersTab")).ProvidersTab }));
+const SettingsTab = lazy(async () => ({ default: (await import("./SettingsTab")).SettingsTab }));
+const TerminalTab = lazy(async () => ({ default: (await import("./TerminalTab")).TerminalTab }));
+const KanbanProjectTab = lazy(async () => ({ default: (await import("./KanbanProjectTab")).KanbanProjectTab }));
+
+const TAB_LOADING_MESSAGE = "Загрузка вкладки...";
+
+const renderLazyTab = (content: JSX.Element): JSX.Element => {
+  /* Lazy tab boundary keeps heavy editors and provider screens out of the initial Mini App bundle. */
+  return <Suspense fallback={<div className="placeholder">{TAB_LOADING_MESSAGE}</div>}>{content}</Suspense>;
+};
 
 type Props = {
   activeTab: TabKey;
@@ -213,7 +224,7 @@ export const WorkspaceTabsContent = (props: Props) => {
   }
 
   if (props.activeTab === "containers") {
-    return (
+    return renderLazyTab(
       <ContainersTab
         activeId={props.activeId}
         status={props.activeId ? props.statusMap[props.activeId] : undefined}
@@ -226,7 +237,7 @@ export const WorkspaceTabsContent = (props: Props) => {
   }
 
   if (props.activeTab === "files") {
-    return (
+    return renderLazyTab(
       <FilesTab
         activeId={props.activeId}
         filePath={props.filePath}
@@ -246,11 +257,11 @@ export const WorkspaceTabsContent = (props: Props) => {
   }
 
   if (props.activeTab === "tasks") {
-    return <KanbanProjectTab activeProject={props.activeProject} themeMode={props.themeMode} />;
+    return renderLazyTab(<KanbanProjectTab activeProject={props.activeProject} themeMode={props.themeMode} />);
   }
 
   if (props.activeTab === "terminal") {
-    return (
+    return renderLazyTab(
       <TerminalTab
         activeId={props.activeId}
         buffer={props.terminalBuffer}
@@ -262,7 +273,7 @@ export const WorkspaceTabsContent = (props: Props) => {
   }
 
   if (props.activeTab === "github") {
-    return (
+    return renderLazyTab(
       <GitHubTab
         activeId={props.activeId}
         overview={props.gitOverview}
@@ -278,7 +289,7 @@ export const WorkspaceTabsContent = (props: Props) => {
   }
 
   if (props.activeTab === "providers") {
-    return (
+    return renderLazyTab(
       <ProvidersTab
         selected={props.providerOverview?.selected ?? null}
         providers={props.providerOverview?.providers ?? []}
@@ -315,7 +326,7 @@ export const WorkspaceTabsContent = (props: Props) => {
     );
   }
 
-  return (
+  return renderLazyTab(
     <SettingsTab
       activeId={props.activeId}
       themeMode={props.themeMode}

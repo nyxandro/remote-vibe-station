@@ -10,12 +10,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiGet } from "../../api/client";
+import { apiGet, getEventStreamUrl } from "../../api/client";
 import { useKanban } from "../use-kanban";
 
 vi.mock("../../api/client", () => ({
   apiGet: vi.fn(),
-  apiPost: vi.fn()
+  apiPost: vi.fn(),
+  getEventStreamUrl: vi.fn()
 }));
 
 type MockSocketInstance = {
@@ -40,6 +41,7 @@ describe("useKanban", () => {
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
     vi.mocked(apiGet).mockReset();
+    vi.mocked(getEventStreamUrl).mockReset().mockResolvedValue("ws://example.test/events?token=kanban");
     MockWebSocket.instances = [];
   });
 
@@ -75,6 +77,7 @@ describe("useKanban", () => {
 
     await act(async () => {
       await result.current.loadTasks({ projectSlug: "alpha" });
+      await Promise.resolve();
     });
 
     const socket = MockWebSocket.instances[0];
@@ -108,6 +111,7 @@ describe("useKanban", () => {
 
     await act(async () => {
       await result.current.loadTasks({ projectSlug: "alpha" });
+      await Promise.resolve();
     });
 
     const socket = MockWebSocket.instances[0];

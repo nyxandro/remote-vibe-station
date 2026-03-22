@@ -5,8 +5,8 @@
  * - ProjectRecord (L9) - Stored project metadata.
  * - ProjectCreateRequest (L22) - Input for project registration.
  * - ProjectListItem (L31) - UI-friendly discovered project item.
- * - ProjectGitSummary (L54) - Uncommitted git changes summary.
- * - ProjectGitOverview (L66) - Branch, upstream, and file-level git overview.
+ * - ProjectGitSummary - Compact active-branch and local change summary.
+ * - ProjectGitOverview - Branch, upstream, and file-level git overview.
  */
 
 export type ProjectRecord = {
@@ -65,6 +65,7 @@ export type ProjectListItem = {
 };
 
 export type ProjectGitSummary = {
+  currentBranch?: string;
   filesChanged: number;
   additions: number;
   deletions: number;

@@ -17,6 +17,17 @@ import { ProjectGitService } from "../projects/project-git.service";
 import { ProjectsService } from "../projects/projects.service";
 import { AdminHeaderGuard } from "../security/admin-header.guard";
 import { AppAuthGuard } from "../security/app-auth.guard";
+import {
+  createTelegramControllerBadRequest,
+  requireTelegramAdminId,
+  telegramAdminChatRequiredError,
+  telegramChatIdRequiredError,
+  telegramCommandRequiredError,
+  telegramDiffPreviewNotFoundError,
+  telegramDiffPreviewTokenRequiredError,
+  telegramPromptContentRequiredError,
+  telegramProviderIdRequiredError
+} from "./telegram-controller-errors";
 import { TelegramDiffPreviewStore } from "./diff-preview/telegram-diff-preview.store";
 import { formatTelegramQuestionPrompt } from "./telegram-question-prompt";
 import { TelegramPromptQueueService } from "./prompt-queue/telegram-prompt-queue.service";
@@ -48,16 +59,17 @@ export class TelegramController {
   @Post("opencode/version/check")
   public async checkOpenCodeVersion(@Req() req: Request) {
     /* Bot startup calls this route to refresh latest-version cache proactively. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    requireTelegramAdminId(req);
 
     try {
       return await this.runtime.checkVersionStatus();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_OPENCODE_VERSION_CHECK_FAILED",
+        fallbackMessage: "Failed to check OpenCode version for Telegram startup.",
+        fallbackHint: "Check OpenCode runtime availability and retry the version check."
+      });
     }
   }
 
@@ -65,10 +77,7 @@ export class TelegramController {
   @Get("startup-summary")
   public async getStartupSummary(@Req() req: Request) {
     /* Return all blocks required for informative /start message in bot. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     const [project, settings, catalog] = await Promise.all([
       this.projects.getActiveProject(adminId),
@@ -101,10 +110,7 @@ export class TelegramController {
   @Get("settings")
   public async getSettings(@Req() req: Request) {
     /* Return model/agent/thinking settings and options for Telegram mode menu. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     return this.preferences.getSettings(adminId);
   }
@@ -129,10 +135,7 @@ export class TelegramController {
     @Req() req: Request
   ) {
     /* Accept text chunks plus supported Telegram attachments for debounced Telegram-to-OpenCode queueing. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     const text = typeof body?.text === "string" ? body.text.trim() : "";
     const chatId = typeof body?.chatId === "number" ? body.chatId : null;
@@ -150,10 +153,10 @@ export class TelegramController {
       .filter((item) => item.telegramFileId.length > 0);
 
     if (!text && attachments.length === 0) {
-      throw new BadRequestException("Prompt text or attachment is required");
+      throw telegramPromptContentRequiredError();
     }
     if (chatId === null) {
-      throw new BadRequestException("chatId is required");
+      throw telegramChatIdRequiredError();
     }
 
     try {
@@ -168,8 +171,12 @@ export class TelegramController {
         }))
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_PROMPT_ENQUEUE_FAILED",
+        fallbackMessage: "Failed to enqueue Telegram prompt.",
+        fallbackHint: "Check active project/session state and retry sending the Telegram prompt."
+      });
     }
   }
 
@@ -177,10 +184,7 @@ export class TelegramController {
   @Get("voice-control/admin")
   public getVoiceControlSettingsForAdmin(@Req() req: Request) {
     /* Bot reads voice config using x-admin-id because it does not send initData token. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     return this.preferences.getVoiceControlSecretSettings(adminId);
   }
@@ -189,10 +193,7 @@ export class TelegramController {
   @Get("voice-control")
   public getVoiceControlSettings(@Req() req: Request) {
     /* Mini App reads the same settings via Telegram initData/web token auth. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     return this.preferences.getVoiceControlSettings(adminId);
   }
@@ -204,16 +205,17 @@ export class TelegramController {
     @Req() req: Request
   ) {
     /* Mini App persists Groq key/model as-is for Telegram voice-to-text flow. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     try {
       return await this.preferences.updateVoiceControlSettings(adminId, body ?? {});
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_VOICE_CONTROL_UPDATE_FAILED",
+        fallbackMessage: "Failed to update Telegram voice control settings.",
+        fallbackHint: "Check Groq key/model values and retry saving Telegram voice settings."
+      });
     }
   }
 
@@ -224,21 +226,22 @@ export class TelegramController {
     @Query("providerID") providerIDRaw?: string
   ) {
     /* Return model list for provider switch screen. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    requireTelegramAdminId(req);
 
     const providerID = String(providerIDRaw ?? "").trim();
     if (!providerID) {
-      throw new BadRequestException("providerID is required");
+      throw telegramProviderIdRequiredError();
     }
 
     try {
       return { models: await this.preferences.listModels(providerID) };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_PROVIDER_MODELS_FAILED",
+        fallbackMessage: "Failed to load Telegram provider models.",
+        fallbackHint: "Check provider connectivity and retry loading provider models."
+      });
     }
   }
 
@@ -255,16 +258,17 @@ export class TelegramController {
     @Req() req: Request
   ) {
     /* Update model/agent/thinking from Telegram mode picker actions. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     try {
       return await this.preferences.updateSettings(adminId, body ?? {});
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_SETTINGS_UPDATE_FAILED",
+        fallbackMessage: "Failed to update Telegram settings.",
+        fallbackHint: "Check selected model/agent/thinking values and retry the update."
+      });
     }
   }
 
@@ -272,10 +276,7 @@ export class TelegramController {
   @Get("commands")
   public async listCommands(@Req() req: Request) {
     /* Return merged Telegram command catalog (menu + alias lookup) for bot sync. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     return this.commandCatalog.listForAdmin(adminId);
   }
@@ -288,24 +289,25 @@ export class TelegramController {
   ) {
     /* Execute OpenCode slash command in active project context. */
     if (!body || typeof body.command !== "string" || body.command.trim().length === 0) {
-      throw new BadRequestException("command is required");
+      throw telegramCommandRequiredError();
     }
 
     const command = body.command.trim();
     const args = Array.isArray(body.arguments)
       ? body.arguments.filter((item) => typeof item === "string")
       : [];
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     try {
       const result = await this.prompts.executeCommand({ command, arguments: args }, adminId);
       return { sessionId: result.sessionId, responseText: result.responseText };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_COMMAND_EXECUTION_FAILED",
+        fallbackMessage: "Failed to execute Telegram command.",
+        fallbackHint: "Check active project/session state and retry the Telegram command."
+      });
     }
   }
 
@@ -445,17 +447,18 @@ export class TelegramController {
   @Post("repair")
   public async repair(@Req() req: Request) {
     /* Trigger manual stale-session recovery for currently selected admin project. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     try {
       const result = await this.prompts.repair(adminId);
       return { ok: true, ...result };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_REPAIR_FAILED",
+        fallbackMessage: "Failed to repair Telegram/OpenCode session state.",
+        fallbackHint: "Check active project/session state and retry the repair action."
+      });
     }
   }
 
@@ -463,17 +466,18 @@ export class TelegramController {
   @Post("session/stop")
   public async stopActiveSession(@Req() req: Request) {
     /* Abort current OpenCode run for the active project session when Telegram issues /stop. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     try {
       const result = await this.prompts.stopActiveSession(adminId);
       return { ok: true, ...result };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_SESSION_STOP_FAILED",
+        fallbackMessage: "Failed to stop active Telegram/OpenCode session.",
+        fallbackHint: "Check active session state and retry the stop request."
+      });
     }
   }
 
@@ -485,7 +489,7 @@ export class TelegramController {
      * We accept adminId in body to keep bot implementation explicit.
      */
     if (!body || typeof body.adminId !== "number" || typeof body.chatId !== "number") {
-      throw new BadRequestException("adminId and chatId are required");
+      throw telegramAdminChatRequiredError();
     }
 
     return this.store.bindAdminChat(body.adminId, body.chatId);
@@ -496,7 +500,7 @@ export class TelegramController {
   public streamOn(@Body() body: { adminId?: number; chatId?: number }) {
     /* Bot calls this to enable stream for a chat. */
     if (!body || typeof body.adminId !== "number" || typeof body.chatId !== "number") {
-      throw new BadRequestException("adminId and chatId are required");
+      throw telegramAdminChatRequiredError();
     }
 
     this.store.bindAdminChat(body.adminId, body.chatId);
@@ -516,7 +520,7 @@ export class TelegramController {
   public streamOff(@Body() body: { adminId?: number; chatId?: number }) {
     /* Bot calls this to disable stream for a chat. */
     if (!body || typeof body.adminId !== "number" || typeof body.chatId !== "number") {
-      throw new BadRequestException("adminId and chatId are required");
+      throw telegramAdminChatRequiredError();
     }
 
     this.store.bindAdminChat(body.adminId, body.chatId);
@@ -543,17 +547,17 @@ export class TelegramController {
      * We cannot reliably map to a Telegram admin without initData,
      * so we fail fast here.
      */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
     let record;
     try {
       record = this.store.setStreamEnabled(adminId, true);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to enable stream";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_STREAM_ENABLE_FAILED",
+        fallbackMessage: "Failed to enable Telegram stream.",
+        fallbackHint: "Bind a Telegram chat first or retry after backend stream state recovers."
+      });
     }
 
     this.events.publish({
@@ -569,17 +573,17 @@ export class TelegramController {
   @Post("stream/stop")
   public stopStream(@Req() req: Request) {
     /* Disable Telegram stream from miniapp. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
     let record;
     try {
       record = this.store.setStreamEnabled(adminId, false);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to disable stream";
-      throw new BadRequestException(message);
+      throw createTelegramControllerBadRequest({
+        error,
+        fallbackCode: "APP_TELEGRAM_STREAM_DISABLE_FAILED",
+        fallbackMessage: "Failed to disable Telegram stream.",
+        fallbackHint: "Retry after backend stream state recovers or rebind the Telegram chat."
+      });
     }
 
     this.events.publish({
@@ -595,10 +599,7 @@ export class TelegramController {
   @Get("stream/status")
   public streamStatus(@Req() req: Request) {
     /* Return current stream setting for the Telegram user. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     return this.store.get(adminId);
   }
@@ -607,19 +608,16 @@ export class TelegramController {
   @Get("diff-preview/:token")
   public getDiffPreview(@Param("token") token: string, @Req() req: Request) {
     /* Return a stored file diff preview for Mini App deep-link token. */
-    const adminId = (req as any).authAdminId as number | undefined;
-    if (!adminId) {
-      throw new BadRequestException("Admin identity missing");
-    }
+    const adminId = requireTelegramAdminId(req);
 
     const normalizedToken = String(token ?? "").trim();
     if (!normalizedToken) {
-      throw new BadRequestException("token is required");
+      throw telegramDiffPreviewTokenRequiredError();
     }
 
     const preview = this.diffPreviews.get(normalizedToken);
     if (!preview || preview.adminId !== adminId) {
-      throw new BadRequestException("Diff preview not found");
+      throw telegramDiffPreviewNotFoundError();
     }
 
     return {

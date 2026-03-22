@@ -2,89 +2,41 @@
  * @fileoverview Telegram bot bootstrap and handlers.
  *
  * Exports:
- * - DEFAULT_PORT (L38) - Default HTTP port for webhook.
- * - bootstrap (L41) - Starts bot, outbox worker, slash sync, and transport mode.
+ * - bootstrap - Starts bot, outbox worker, slash sync, and transport mode.
  */
 
 import express from "express";
-import { isIP } from "node:net";
 import { Telegraf } from "telegraf";
 
-import { buildBackendErrorMessage } from "./backend-error";
-import { buildBotBackendHeaders } from "./backend-auth";
-import { buildCommandQueuedMessage } from "./command-ack";
-import { fetchActiveSessionTitle, formatActiveSessionLine } from "./active-session";
-import { startPeriodicTask } from "./command-sync";
+import { registerAdminProjectCommands } from "./bot-admin-commands";
+import {
+  bindChatToTelegramStream,
+  createCommandSyncRuntime
+} from "./bot-command-sync-runtime";
+import {
+  registerBotShutdownHandlers,
+  shouldAttachCookieDomain,
+  startBotHttpServer
+} from "./bot-http-runtime";
+import { launchBotRuntime } from "./bot-launch-runtime";
+import { registerBotPromptHandlers } from "./bot-prompt-handlers";
 import { loadConfig } from "./config";
-import { syncMiniAppMenuButton } from "./miniapp-menu-button";
-import { modeReplyKeyboard, registerModeControl } from "./mode-control";
+import { registerModeControl } from "./mode-control";
 import { registerOpenCodeCallbacks } from "./opencode-callbacks";
 import { registerOpenCodeAccessCommand } from "./opencode-access-command";
 import { registerOpenCodeWebAuthHttp } from "./opencode-web-auth-http";
-import { waitForOpenCodeVersionWarmup } from "./opencode-version-warmup";
 import { OpenCodeWebAuthService } from "./opencode-web-auth";
 import { registerRepairCommand } from "./repair-command";
 import { registerSessionCommands } from "./session-command";
 import { OutboxWorker } from "./outbox-worker";
-import { buildStartSummaryMessage, fetchStartupSummary } from "./start-summary";
 import { ThinkingIndicator } from "./thinking-indicator";
-import {
-  buildTelegramPromptEnqueueBody,
-  extractTelegramImageDocumentInput,
-  extractTelegramPhotoInput
-} from "./telegram-prompt-input";
-import {
-  BOT_LOCAL_COMMAND_NAMES,
-  TelegramMenuCommand,
-  parseSlashCommand
-} from "./telegram-commands";
-import {
-  VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE,
-  VOICE_TRANSCRIPTION_PROGRESS_MESSAGE,
-  buildTranscriptionFailureMessage,
-  buildTranscriptionSuccessHtml,
-  extractTelegramVoiceInput,
-  fetchVoiceControlSettings,
-  transcribeTelegramAudioWithGroq,
-  validateVoiceInput
-} from "./voice-control";
 
-const DEFAULT_PORT = 3001;
-const COMMAND_SYNC_INTERVAL_MS = 60_000;
 const OPENCODE_WEB_AUTH_STORAGE_FILE = "/app/data/opencode-web-auth.json";
 const OPENCODE_WEB_AUTH_LINK_TTL_MS = 5 * 60 * 1000;
 const OPENCODE_WEB_AUTH_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const OPENCODE_WEB_AUTH_COOKIE_NAME = "opencode_sid";
 
-const resolvePort = (value: string | undefined): number => {
-  /* Parse user-provided PORT and fall back to default on invalid values. */
-  if (!value) {
-    return DEFAULT_PORT;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    // eslint-disable-next-line no-console
-    console.warn(`Invalid PORT value '${value}', fallback to ${DEFAULT_PORT}`);
-    return DEFAULT_PORT;
-  }
-
-  return parsed;
-};
-
-const shouldSetCookieDomain = (hostname: string): boolean => {
-  /* Localhost/IP deployments require host-only cookies without Domain attribute. */
-  const normalized = hostname.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  if (normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1") {
-    return false;
-  }
-  return isIP(normalized) === 0;
-};
-
-const bootstrap = async (): Promise<void> => {
+export const bootstrap = async (): Promise<void> => {
   /* Load configuration and initialize bot. */
   const config = loadConfig();
   const bot = new Telegraf(config.telegramBotToken);
@@ -96,8 +48,7 @@ const bootstrap = async (): Promise<void> => {
   const indicator = new ThinkingIndicator(bot);
   const outbox = new OutboxWorker(config, bot, indicator);
   outbox.start();
-  let periodicCommandSyncStop: (() => void) | null = null;
-  let opencodeCommandLookup = new Map<string, string>();
+  const commandSyncRuntime = createCommandSyncRuntime({ bot, config });
 
   /* Helper to check admin access. */
   const isAdmin = (id: number | undefined): boolean =>
@@ -122,7 +73,7 @@ const bootstrap = async (): Promise<void> => {
   let opencodeCookieDomain: string | undefined;
   try {
     const hostname = new URL(config.opencodePublicBaseUrl).hostname;
-    opencodeCookieDomain = shouldSetCookieDomain(hostname) ? hostname : undefined;
+    opencodeCookieDomain = shouldAttachCookieDomain(hostname) ? hostname : undefined;
   } catch {
     throw new Error(`Invalid OPENCODE_PUBLIC_BASE_URL: ${config.opencodePublicBaseUrl}`);
   }
@@ -137,71 +88,6 @@ const bootstrap = async (): Promise<void> => {
     cookieDomain: opencodeCookieDomain
   });
 
-  const bindChat = async (adminId: number, chatId: number): Promise<void> => {
-    /* Tell backend which chat should receive stream output for this admin. */
-    const response = await fetch(`${config.backendUrl}/api/telegram/bind`, {
-      method: "POST",
-      headers: buildBotBackendHeaders(config, adminId, {
-        "Content-Type": "application/json"
-      }),
-      body: JSON.stringify({ adminId, chatId })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to bind chat: ${response.status} ${await response.text()}`);
-    }
-  };
-
-  const syncSlashCommands = async (adminId: number): Promise<void> => {
-    /*
-     * Telegram suggests commands from setMyCommands.
-     * Backend returns a normalized catalog with merged local+OpenCode commands.
-     */
-    const response = await fetch(`${config.backendUrl}/api/telegram/commands`, {
-      headers: buildBotBackendHeaders(config, adminId)
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to sync commands: ${response.status}`);
-    }
-
-    const body = (await response.json()) as {
-      commands?: TelegramMenuCommand[];
-      lookup?: Record<string, string>;
-    };
-
-    const menuCommands = Array.isArray(body.commands) ? body.commands : [];
-    opencodeCommandLookup = new Map(
-      Object.entries(body.lookup ?? {}).filter(
-        (entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string"
-      )
-    );
-
-    await bot.telegram.setMyCommands(menuCommands);
-  };
-
-  const startPeriodicCommandSync = (adminId: number): void => {
-    /* Refresh slash-menu periodically so Telegram suggestions stay актуальными. */
-    const controller = startPeriodicTask({
-      intervalMs: COMMAND_SYNC_INTERVAL_MS,
-      run: async () => {
-        await syncSlashCommands(adminId);
-      },
-      onError: (error) => {
-        // eslint-disable-next-line no-console
-        console.error("Periodic slash sync failed", error);
-      }
-    });
-
-    periodicCommandSyncStop = controller.stop;
-  };
-
-  const stopPeriodicCommandSync = (): void => {
-    /* Ensure timer cleanup during shutdown/reload. */
-    periodicCommandSyncStop?.();
-    periodicCommandSyncStop = null;
-  };
-
   bot.catch(async (error, ctx) => {
     /* Never crash the bot on handler errors. */
     // eslint-disable-next-line no-console
@@ -213,566 +99,38 @@ const bootstrap = async (): Promise<void> => {
     }
   });
 
-  bot.command("start", async (ctx) => {
-    /* Telegram standard entrypoint; do not forward to OpenCode. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    /* Refresh menu first, then show state snapshot built from backend source of truth. */
-    try {
-      await syncSlashCommands(ctx.from!.id);
-    } catch {
-      await ctx.reply("Не удалось обновить список slash-команд OpenCode.");
-    }
-
-    try {
-      const summary = await fetchStartupSummary(config, ctx.from!.id);
-      /* Session line for /start should reflect currently active OpenCode thread title. */
-      if (summary.project) {
-        try {
-          const activeSessionTitle = await fetchActiveSessionTitle(config, ctx.from!.id);
-          summary.session = activeSessionTitle ? { title: activeSessionTitle } : null;
-        } catch {
-          summary.session = null;
-        }
-      } else {
-        summary.session = null;
-      }
-
-      await ctx.reply(buildStartSummaryMessage(summary), modeReplyKeyboard());
-    } catch {
-      await ctx.reply(
-        "Привет! Не удалось получить стартовую сводку. " +
-          "Проверь /project, затем используй /mode и /chat для работы.",
-        modeReplyKeyboard()
-      );
-    }
+  registerAdminProjectCommands({
+    bot,
+    config,
+    isAdmin,
+    bindChat: (adminId, chatId) => bindChatToTelegramStream(config, adminId, chatId),
+    syncSlashCommands: commandSyncRuntime.syncSlashCommands
   });
 
-  bot.command("chat", async (ctx) => {
-    /* Enable streaming of agent output to this chat. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    const adminId = ctx.from!.id;
-    await bindChat(adminId, ctx.chat.id);
-
-    /* Persist stream state on backend (source of truth). */
-    await fetch(`${config.backendUrl}/api/telegram/stream/on`, {
-      method: "POST",
-      headers: buildBotBackendHeaders(config, adminId, {
-        "Content-Type": "application/json"
-      }),
-      body: JSON.stringify({ adminId, chatId: ctx.chat.id })
-    });
-
-    await ctx.reply("Поток включен для этого чата. /end чтобы выключить.");
+  registerBotPromptHandlers({
+    bot,
+    config,
+    indicator,
+    isAdmin,
+    bindChat: (adminId, chatId) => bindChatToTelegramStream(config, adminId, chatId),
+    commandSyncRuntime
   });
 
-  bot.command("end", async (ctx) => {
-    /* Disable streaming to this chat without stopping the agent. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
+  const { closeHttpServer } = startBotHttpServer(app);
 
-    const adminId = ctx.from!.id;
-    await bindChat(adminId, ctx.chat.id);
-
-    await fetch(`${config.backendUrl}/api/telegram/stream/off`, {
-      method: "POST",
-      headers: buildBotBackendHeaders(config, adminId, {
-        "Content-Type": "application/json"
-      }),
-      body: JSON.stringify({ adminId, chatId: ctx.chat.id })
-    });
-
-    await ctx.reply("Поток выключен. /chat чтобы включить снова.");
+  /* Start webhook server plus either local polling runtime or public webhook runtime. */
+  await launchBotRuntime({
+    app,
+    bot,
+    config,
+    commandSyncRuntime,
+    closeHttpServer,
+    registerShutdownHandlers: registerBotShutdownHandlers
   });
-
-  bot.command("projects", async (ctx) => {
-    /* List discovered projects. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    const response = await fetch(`${config.backendUrl}/api/admin/projects`, {
-      headers: buildBotBackendHeaders(config, Number(ctx.from?.id))
-    });
-
-    if (!response.ok) {
-      await ctx.reply(buildBackendErrorMessage(response.status, null));
-      return;
-    }
-
-    const items = (await response.json()) as Array<{ slug: string; runnable: boolean }>;
-    const lines = items
-      .slice(0, 50)
-      .map((p) => `- ${p.slug}${p.runnable ? "" : " (no-compose)"}`)
-      .join("\n");
-    await ctx.reply(`Проекты:\n${lines}\n\nВыбор: /project <slug>`);
-  });
-
-  bot.command("project", async (ctx) => {
-    /* Select active project for subsequent prompts. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    const parts = ctx.message.text.trim().split(/\s+/g);
-    const slug = parts[1];
-    if (!slug) {
-      await ctx.reply("Использование: /project <slug>");
-      return;
-    }
-
-    const response = await fetch(
-      `${config.backendUrl}/api/admin/projects/${encodeURIComponent(slug)}/select`,
-      {
-      method: "POST",
-      headers: buildBotBackendHeaders(config, Number(ctx.from?.id), {
-        "Content-Type": "application/json",
-        /* Bot will reply itself; avoid duplicate project.selected event. */
-        "x-suppress-events": "1"
-      }),
-      body: "{}"
-      }
-    );
-
-    if (!response.ok) {
-      const body = await response.text();
-      await ctx.reply(buildBackendErrorMessage(response.status, body));
-      return;
-    }
-
-    const project = (await response.json()) as { slug: string; rootPath: string };
-
-    /* Show active session context immediately after project switch. */
-    let sessionLine = formatActiveSessionLine(null);
-    try {
-      const activeSessionTitle = await fetchActiveSessionTitle(config, ctx.from!.id);
-      sessionLine = formatActiveSessionLine(activeSessionTitle);
-    } catch {
-      sessionLine = formatActiveSessionLine(null);
-    }
-
-    await ctx.reply(`📁 Выбран проект: ${project.slug}\n${project.rootPath}\n${sessionLine}`);
-
-    /* Re-sync command menu to include project-level custom commands. */
-    try {
-      await syncSlashCommands(ctx.from!.id);
-    } catch {
-      await ctx.reply("Проект выбран, но список команд OpenCode не обновлен.");
-    }
-  });
-
-  const submitPromptText = async (input: {
-    adminId: number;
-    chatId: number;
-    payload: Record<string, unknown>;
-    errorLabel: string;
-  }): Promise<void> => {
-    /* Reuse common enqueue flow for text, transcribed voice and image prompts. */
-    await bindChat(input.adminId, input.chatId);
-    await indicator.start(input.chatId);
-
-    void (async () => {
-      try {
-        const response = await fetch(`${config.backendUrl}/api/telegram/prompt/enqueue`, {
-          method: "POST",
-          headers: buildBotBackendHeaders(config, input.adminId, {
-            "Content-Type": "application/json"
-          }),
-          body: JSON.stringify({ chatId: input.chatId, ...input.payload })
-        });
-
-        if (!response.ok) {
-          const body = await response.text();
-          await indicator.stop(input.chatId);
-          await bot.telegram.sendMessage(input.chatId, buildBackendErrorMessage(response.status, body));
-          return;
-        }
-
-        const payload = (await response.json()) as {
-          ok?: boolean;
-          position?: number;
-          buffered?: boolean;
-          merged?: boolean;
-        };
-        await indicator.stop(input.chatId);
-
-        /* Tell the user only when a brand-new logical prompt is queued behind an active turn. */
-        if (payload.buffered && !payload.merged && typeof payload.position === "number" && payload.position > 1) {
-          await bot.telegram.sendMessage(input.chatId, `Сообщение поставлено в очередь: #${payload.position}`, {
-            disable_notification: true
-          });
-        }
-      } catch (error) {
-        await indicator.stop(input.chatId);
-        const message = error instanceof Error ? error.message : String(error);
-        await bot.telegram.sendMessage(input.chatId, `${input.errorLabel}: ${message}`);
-      }
-    })();
-  };
-
-  bot.on("voice", async (ctx) => {
-    /* Convert Telegram voice note to text and forward it to OpenCode prompt API. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    const voiceInput = extractTelegramVoiceInput(ctx.message);
-    if (!voiceInput) {
-      return;
-    }
-
-    const adminId = ctx.from!.id;
-    const chatId = ctx.chat.id;
-
-    const validationError = validateVoiceInput(voiceInput);
-    if (validationError) {
-      await ctx.reply(validationError);
-      return;
-    }
-
-    let statusMessageId: number | null = null;
-    try {
-      const settings = await fetchVoiceControlSettings(config, adminId);
-      if (!settings.enabled || !settings.apiKey || !settings.model) {
-        await ctx.reply(VOICE_TRANSCRIPTION_NOT_CONFIGURED_MESSAGE);
-        return;
-      }
-
-      const statusMessage = await ctx.reply(VOICE_TRANSCRIPTION_PROGRESS_MESSAGE);
-      statusMessageId = statusMessage.message_id;
-
-      const telegramFileUrl = String(await ctx.telegram.getFileLink(voiceInput.fileId));
-      const transcribedText = await transcribeTelegramAudioWithGroq({
-        telegramFileUrl,
-        apiKey: settings.apiKey,
-        model: settings.model,
-        mimeType: voiceInput.mimeType
-      });
-
-      if (statusMessageId !== null) {
-        await ctx.telegram.editMessageText(
-          chatId,
-          statusMessageId,
-          undefined,
-          buildTranscriptionSuccessHtml(transcribedText),
-          {
-            parse_mode: "HTML"
-          }
-        );
-      }
-
-      await submitPromptText({
-        adminId,
-        chatId,
-        payload: buildTelegramPromptEnqueueBody({
-          text: transcribedText,
-          messageId: ctx.message.message_id
-        }),
-        errorLabel: "Ошибка запроса"
-      });
-    } catch (error) {
-      /* Log root cause so operations can distinguish setup and runtime failures. */
-      // eslint-disable-next-line no-console
-      console.error("Voice transcription failed", error);
-      const failureMessage = buildTranscriptionFailureMessage(error);
-      if (statusMessageId !== null) {
-        await ctx.telegram.editMessageText(
-          chatId,
-          statusMessageId,
-          undefined,
-          failureMessage
-        );
-        return;
-      }
-      await ctx.reply(failureMessage);
-    }
-  });
-
-  bot.on("photo", async (ctx) => {
-    /* Forward Telegram photos into the same buffered backend queue used for text prompts. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    const promptBody = extractTelegramPhotoInput(ctx.message);
-    if (!promptBody) {
-      return;
-    }
-
-    await submitPromptText({
-      adminId: ctx.from!.id,
-      chatId: ctx.chat.id,
-      payload: promptBody,
-      errorLabel: "Ошибка запроса"
-    });
-  });
-
-  bot.on("document", async (ctx) => {
-    /* Support image and PDF documents while failing fast for unsupported generic file uploads. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    const promptBody = extractTelegramImageDocumentInput(ctx.message);
-    if (!promptBody) {
-      await ctx.reply(
-        "Сейчас в чат агента поддерживаются изображения и PDF: photo, document(image/*) или document(application/pdf)."
-      );
-      return;
-    }
-
-    await submitPromptText({
-      adminId: ctx.from!.id,
-      chatId: ctx.chat.id,
-      payload: promptBody,
-      errorLabel: "Ошибка запроса"
-    });
-  });
-
-  bot.on("text", async (ctx) => {
-    /* Handle prompt messages from admin. */
-    if (!isAdmin(ctx.from?.id)) {
-      await ctx.reply("Access denied");
-      return;
-    }
-
-    /* Do not forward bot commands as prompts. */
-    const text = ctx.message.text.trim();
-    const adminId = ctx.from!.id;
-    const chatId = ctx.chat.id;
-    const slash = parseSlashCommand(text);
-    if (slash) {
-      /*
-       * Local commands are handled by dedicated bot.command handlers above.
-       * For other commands, forward to OpenCode command execution endpoint.
-       */
-      if (BOT_LOCAL_COMMAND_NAMES.has(slash.command)) {
-        return;
-      }
-
-      let resolvedCommand = opencodeCommandLookup.get(slash.command);
-      if (!resolvedCommand) {
-        /* Re-sync once before rejecting to reduce stale-menu race conditions. */
-        try {
-          await syncSlashCommands(ctx.from!.id);
-        } catch {
-          // ignore
-        }
-
-        resolvedCommand = opencodeCommandLookup.get(slash.command);
-        if (!resolvedCommand) {
-          await ctx.reply(`Неизвестная команда: /${slash.command}`);
-          return;
-        }
-      }
-
-      await bindChat(adminId, chatId);
-      await indicator.start(chatId);
-
-      /*
-       * Run command call in background to avoid Telegraf 90s middleware timeout.
-       * Outbox still delivers normal responses when backend finishes.
-       */
-      void (async () => {
-        try {
-          const commandResponse = await fetch(`${config.backendUrl}/api/telegram/command`, {
-            method: "POST",
-            headers: buildBotBackendHeaders(config, adminId, {
-              "Content-Type": "application/json"
-            }),
-            body: JSON.stringify({
-              command: resolvedCommand,
-              arguments: slash.args
-            })
-          });
-
-          if (!commandResponse.ok) {
-            const body = await commandResponse.text();
-            await indicator.stop(chatId);
-            await bot.telegram.sendMessage(
-              chatId,
-              buildBackendErrorMessage(commandResponse.status, body)
-            );
-            return;
-          }
-
-          await commandResponse.json();
-          await indicator.stop(chatId);
-          await bot.telegram.sendMessage(chatId, buildCommandQueuedMessage(slash.command), {
-            disable_notification: true
-          });
-        } catch (error) {
-          await indicator.stop(chatId);
-          const message = error instanceof Error ? error.message : String(error);
-          await bot.telegram.sendMessage(chatId, `Ошибка команды: ${message}`);
-        }
-      })();
-      return;
-    }
-
-    if (text.length === 0) {
-      await ctx.reply("Empty prompt");
-      return;
-    }
-
-    await submitPromptText({
-      adminId,
-      chatId,
-      payload: buildTelegramPromptEnqueueBody({
-        text,
-        messageId: ctx.message.message_id
-      }),
-      errorLabel: "Ошибка запроса"
-    });
-  });
-
-  /* Start webhook server and bot. */
-
-  /*
-   * Local dev uses polling (no public HTTPS required).
-   * Webhook mode is used when PUBLIC_BASE_URL is a real HTTPS URL.
-   */
-  const isLocal =
-    config.publicBaseUrl.startsWith("http://localhost") ||
-    config.publicBaseUrl.startsWith("http://127.0.0.1");
-  const primaryAdminId =
-    Array.isArray(config.adminIds) && typeof config.adminIds[0] === "number" ? config.adminIds[0] : null;
-
-  const checkOpenCodeVersionOnBoot = async (adminId: number): Promise<void> => {
-    /* Deploy restarts can bring backend and OpenCode up a few seconds after the bot process itself. */
-    try {
-      await waitForOpenCodeVersionWarmup({
-        run: async () => {
-          const response = await fetch(`${config.backendUrl}/api/telegram/opencode/version/check`, {
-            method: "POST",
-            headers: buildBotBackendHeaders(config, adminId, {
-              "Content-Type": "application/json"
-            }),
-            body: "{}"
-          });
-
-          if (!response.ok) {
-            throw new Error(`status=${response.status}`);
-          }
-        },
-        onRetry: ({ attempt, maxAttempts, error }) => {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `OpenCode version warmup retry ${attempt}/${maxAttempts - 1} after transient startup failure`,
-            error
-          );
-        }
-      });
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("OpenCode version check on boot failed", error);
-    }
-  };
-
-  /* Keep auth endpoints reachable in both polling and webhook modes. */
-  const port = resolvePort(process.env.PORT);
-  const server = app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Bot HTTP server is listening on port ${port}`);
-  });
-
-  server.on("error", (error) => {
-    // eslint-disable-next-line no-console
-    console.error("Bot HTTP server failed to start", error);
-    process.exit(1);
-  });
-
-  const closeHttpServer = async (): Promise<void> => {
-    /* Ensure HTTP listener is closed during process shutdown. */
-    await new Promise<void>((resolve) => {
-      server.close(() => {
-        resolve();
-      });
-    });
-  };
-
-  const registerShutdownHandlers = (): void => {
-    /* Keep shutdown flow identical for polling and webhook modes. */
-    process.once("SIGINT", () => {
-      void (async () => {
-        stopPeriodicCommandSync();
-        bot.stop("SIGINT");
-        await closeHttpServer();
-      })();
-    });
-    process.once("SIGTERM", () => {
-      void (async () => {
-        stopPeriodicCommandSync();
-        bot.stop("SIGTERM");
-        await closeHttpServer();
-      })();
-    });
-  };
-
-  if (isLocal) {
-    /* Keep Telegram menu button aligned with current deployment even in polling mode. */
-    await syncMiniAppMenuButton(bot.telegram, config.publicBaseUrl);
-
-    /* Best-effort initial slash command sync for Telegram menu suggestions. */
-    if (primaryAdminId !== null) {
-      try {
-        await syncSlashCommands(primaryAdminId);
-      } catch {
-        // ignore
-      }
-    }
-
-    if (primaryAdminId !== null) {
-      await checkOpenCodeVersionOnBoot(primaryAdminId);
-    }
-
-    if (primaryAdminId !== null) {
-      startPeriodicCommandSync(primaryAdminId);
-    }
-
-    await bot.launch();
-    registerShutdownHandlers();
-
-    return;
-  }
-
-  if (primaryAdminId !== null) {
-    await checkOpenCodeVersionOnBoot(primaryAdminId);
-  }
-
-  app.use(bot.webhookCallback("/bot/webhook"));
-
-  await bot.telegram.setWebhook(`${config.publicBaseUrl}/bot/webhook`);
-  await syncMiniAppMenuButton(bot.telegram, config.publicBaseUrl);
-
-  /* Best-effort initial slash command sync for webhook mode. */
-  if (primaryAdminId !== null) {
-    try {
-      await syncSlashCommands(primaryAdminId);
-    } catch {
-      // ignore
-    }
-  }
-
-  if (primaryAdminId !== null) {
-    startPeriodicCommandSync(primaryAdminId);
-  }
-
-  registerShutdownHandlers();
 };
 
-void bootstrap();
+void bootstrap().catch((error) => {
+  // eslint-disable-next-line no-console
+  console.error("Bot bootstrap failed", error);
+  process.exit(1);
+});

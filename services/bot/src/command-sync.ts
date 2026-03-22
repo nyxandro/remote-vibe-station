@@ -27,6 +27,7 @@ export const startPeriodicTask = (input: StartPeriodicTaskInput): PeriodicTaskCo
       input.onError?.(error);
     });
   }, input.intervalMs);
+  timer.unref?.();
 
   return {
     stop: () => {

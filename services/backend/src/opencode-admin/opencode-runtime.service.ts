@@ -77,7 +77,7 @@ export class OpenCodeRuntimeService {
   }
 
   public async updateToLatestVersion(): Promise<OpenCodeUpdateResult> {
-    /* Install latest package in running container(s) and restart them. */
+    /* Immutable runtime images must be replaced via deploy, not mutated inside the running container. */
     const before = await this.checkVersionStatus();
     const latestVersion = before.latestVersion;
 
@@ -94,36 +94,9 @@ export class OpenCodeRuntimeService {
       };
     }
 
-    const names = await this.listOpenCodeContainerNames();
-    for (const name of names) {
-      await this.runDocker([
-        "exec",
-        name,
-        "npm",
-        "install",
-        "-g",
-        `${OPENCODE_NPM_PACKAGE}@${latestVersion}`
-      ]);
-    }
-
-    for (const name of names) {
-      await this.runDocker(["restart", name]);
-    }
-
-    const afterCurrentVersion = await this.readCurrentVersion({ containerNames: names });
-    const after: OpenCodeVersionStatus = {
-      currentVersion: afterCurrentVersion,
-      latestVersion,
-      latestCheckedAt: this.latestVersionCache?.checkedAt ?? new Date().toISOString(),
-      updateAvailable: latestVersion !== afterCurrentVersion
-    };
-
-    return {
-      updated: true,
-      restarted: names,
-      before,
-      after
-    };
+    throw new Error(
+      `APP_OPENCODE_IMMUTABLE_UPDATE_REQUIRED: OpenCode runtime uses immutable images. Publish or pull image version ${latestVersion} and redeploy the container instead of updating packages inside the running runtime.`
+    );
   }
 
   private async listOpenCodeContainerNames(): Promise<string[]> {

@@ -2,6 +2,7 @@
  * @fileoverview Tests for CLI/Proxy settings controller contracts.
  */
 
+import { BadRequestException } from "@nestjs/common";
 import { Request } from "express";
 
 import { ProxySettingsController } from "../proxy-settings.controller";
@@ -87,5 +88,36 @@ describe("ProxySettingsController", () => {
 
     expect(service.applyRuntimeStack).toHaveBeenCalledTimes(1);
     expect(result.ok).toBe(true);
+  });
+
+  test("returns structured validation error for unsupported mode", async () => {
+    /* Proxy settings should reject unsupported runtime mode with stable API metadata. */
+    const service = {
+      getSettings: jest.fn(),
+      applyRuntimeStack: jest.fn(),
+      updateSettings: jest.fn()
+    };
+
+    const controller = new ProxySettingsController(service as never);
+
+    await expect(
+      controller.saveSettings(
+        { mode: "broken" as any, noProxy: "localhost" },
+        { authAdminId: 649624756 } as unknown as Request
+      )
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    try {
+      await controller.saveSettings(
+        { mode: "broken" as any, noProxy: "localhost" },
+        { authAdminId: 649624756 } as unknown as Request
+      );
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "APP_PROXY_MODE_INVALID",
+        message: "Proxy mode must be either 'direct' or 'vless'.",
+        hint: "Choose one supported proxy mode and retry saving proxy settings."
+      });
+    }
   });
 });

@@ -1,8 +1,8 @@
 /**
- * @fileoverview Git helpers for project-level uncommitted change summaries.
+ * @fileoverview Git helpers for project-level branch and change summaries.
  *
  * Exports:
- * - ProjectGitService (L25) - Collects file/line deltas from local git repositories.
+ * - ProjectGitService - Collects active branch plus file/line deltas from local git repositories.
  */
 
 import { execFile } from "node:child_process";
@@ -20,27 +20,25 @@ const execFileAsync = promisify(execFile);
 export class ProjectGitService {
   public async summaryForProjectRoot(rootPath: string): Promise<ProjectGitSummary | null> {
     /*
-     * Return uncommitted git stats for project cards.
-     * If folder is not a git repository or has no changes, return null.
+     * Return branch-aware git stats for project cards.
+     * Only non-git folders return null because clean repositories should still expose their active branch.
      */
     if (!(await this.isGitRepository(rootPath))) {
       return null;
     }
 
-    const [porcelain, unstagedNumstat, stagedNumstat] = await Promise.all([
+    const [porcelain, unstagedNumstat, stagedNumstat, currentBranchRaw] = await Promise.all([
       this.runGitCommand(["status", "--porcelain"], rootPath),
       this.runGitCommand(["diff", "--numstat"], rootPath),
-      this.runGitCommand(["diff", "--cached", "--numstat"], rootPath)
+      this.runGitCommand(["diff", "--cached", "--numstat"], rootPath),
+      this.runGitCommand(["branch", "--show-current"], rootPath)
     ]);
 
     const filesChanged = countChangedFilesFromPorcelain(porcelain);
-    if (filesChanged === 0) {
-      return null;
-    }
-
     const unstaged = parseNumstatTotals(unstagedNumstat);
     const staged = parseNumstatTotals(stagedNumstat);
     return {
+      currentBranch: currentBranchRaw.trim() || "HEAD",
       filesChanged,
       additions: unstaged.additions + staged.additions,
       deletions: unstaged.deletions + staged.deletions
