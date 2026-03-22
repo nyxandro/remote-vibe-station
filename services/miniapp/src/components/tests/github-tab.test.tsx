@@ -55,6 +55,38 @@ describe("GitHubTab", () => {
     expect(screen.getByText("-4")).toBeTruthy();
   });
 
+  it("shows current branch in selector and enables switch only for another branch", () => {
+    /* Branch switch should be inert until the user picks a different target branch. */
+    const onCheckout = vi.fn();
+    render(
+      <GitHubTab
+        activeId="tvoc"
+        overview={buildOverview()}
+        onRefresh={vi.fn()}
+        onCheckout={onCheckout}
+        onCommit={vi.fn()}
+        onFetch={vi.fn()}
+        onPull={vi.fn()}
+        onPush={vi.fn()}
+        onMerge={vi.fn()}
+      />
+    );
+
+    const branchSelect = screen.getByLabelText("Switch branch");
+    const switchButton = screen.getByRole("button", { name: "Switch" });
+
+    expect((branchSelect as HTMLSelectElement).value).toBe("main");
+    expect((switchButton as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(branchSelect, { target: { value: "feature/ui" } });
+
+    expect((switchButton as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(switchButton);
+
+    expect(onCheckout).toHaveBeenCalledWith("feature/ui");
+  });
+
   it("submits commit message via callback", () => {
     /* Commit action should be explicit and user-driven. */
     const onCommit = vi.fn();

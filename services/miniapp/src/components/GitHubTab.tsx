@@ -6,7 +6,7 @@
  * - GitHubTab (L31) - Mobile-first UI for branch control and core git actions.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 
 import { GitOverview as GitOverviewModel } from "../types";
 
@@ -28,9 +28,18 @@ export const GitHubTab = (props: Props) => {
   const [targetBranch, setTargetBranch] = useState<string>("");
   const [commitMessage, setCommitMessage] = useState<string>("");
   const [mergeSource, setMergeSource] = useState<string>("");
+  const switchBranchSelectId = useId();
 
   /* Show commit controls only when the local working tree actually has pending changes. */
   const hasPendingChanges = Boolean(props.overview && props.overview.files.length > 0);
+
+  /* Keep the branch selector aligned with the repository head after project or branch changes. */
+  useEffect(() => {
+    setTargetBranch(props.overview?.currentBranch ?? "");
+  }, [props.activeId, props.overview?.currentBranch]);
+
+  /* Allow switching only when the user picked a different branch than the current HEAD. */
+  const canSwitchBranch = Boolean(props.overview && targetBranch && targetBranch !== props.overview.currentBranch);
 
   const mergeCandidates = useMemo(() => {
     /* Exclude current branch from merge source options. */
@@ -79,14 +88,16 @@ export const GitHubTab = (props: Props) => {
           </div>
 
           <div className="git-card">
-            <div className="git-field-label">Switch branch</div>
+            <label className="git-field-label" htmlFor={switchBranchSelectId}>
+              Switch branch
+            </label>
             <div className="git-actions-row">
               <select
+                id={switchBranchSelectId}
                 className="input git-select"
                 value={targetBranch}
                 onChange={(event) => setTargetBranch(event.target.value)}
               >
-                <option value="">Choose branch</option>
                 {props.overview.branches.map((branch) => (
                   <option key={branch} value={branch}>
                     {branch}
@@ -95,7 +106,7 @@ export const GitHubTab = (props: Props) => {
               </select>
               <button
                 className="btn outline"
-                disabled={!targetBranch}
+                disabled={!canSwitchBranch}
                 onClick={() => props.onCheckout(targetBranch)}
                 type="button"
               >
