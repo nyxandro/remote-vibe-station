@@ -29,6 +29,9 @@ export const GitHubTab = (props: Props) => {
   const [commitMessage, setCommitMessage] = useState<string>("");
   const [mergeSource, setMergeSource] = useState<string>("");
 
+  /* Show commit controls only when the local working tree actually has pending changes. */
+  const hasPendingChanges = Boolean(props.overview && props.overview.files.length > 0);
+
   const mergeCandidates = useMemo(() => {
     /* Exclude current branch from merge source options. */
     if (!props.overview) {
@@ -127,28 +130,30 @@ export const GitHubTab = (props: Props) => {
             </div>
           </div>
 
-          <div className="git-card">
-            <div className="git-field-label">Commit all changes</div>
-            <div className="git-actions-row">
-              <input
-                className="input git-select"
-                placeholder="Commit message"
-                value={commitMessage}
-                onChange={(event) => setCommitMessage(event.target.value)}
-              />
-              <button
-                className="btn primary"
-                disabled={!commitMessage.trim()}
-                onClick={() => {
-                  props.onCommit(commitMessage.trim());
-                  setCommitMessage("");
-                }}
-                type="button"
-              >
-                Commit
-              </button>
+          {hasPendingChanges ? (
+            <div className="git-card">
+              <div className="git-field-label">Commit all changes</div>
+              <div className="git-actions-row">
+                <input
+                  className="input git-select"
+                  placeholder="Commit message"
+                  value={commitMessage}
+                  onChange={(event) => setCommitMessage(event.target.value)}
+                />
+                <button
+                  className="btn primary"
+                  disabled={!commitMessage.trim()}
+                  onClick={() => {
+                    props.onCommit(commitMessage.trim());
+                    setCommitMessage("");
+                  }}
+                  type="button"
+                >
+                  Commit
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="git-card">
             <div className="git-field-label">Changed files</div>

@@ -1,5 +1,8 @@
 /**
  * @fileoverview UI tests for GitHubTab git operations surface.
+ *
+ * Test suites:
+ * - GitHubTab - Verifies git action visibility and commit interactions.
  */
 
 /* @vitest-environment jsdom */
@@ -15,6 +18,14 @@ const buildOverview = (): GitOverview => ({
   ahead: 1,
   behind: 0,
   files: [{ path: "src/app.ts", status: "modified", additions: 12, deletions: 4 }]
+});
+
+const buildCleanOverview = (): GitOverview => ({
+  currentBranch: "main",
+  branches: ["main", "feature/ui"],
+  ahead: 0,
+  behind: 0,
+  files: []
 });
 
 describe("GitHubTab", () => {
@@ -67,5 +78,27 @@ describe("GitHubTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Commit" }));
 
     expect(onCommit).toHaveBeenCalledWith("feat: update git tab");
+  });
+
+  it("hides commit controls when working tree is clean", () => {
+    /* Clean repositories should not show commit UI that cannot be used. */
+    render(
+      <GitHubTab
+        activeId="tvoc"
+        overview={buildCleanOverview()}
+        onRefresh={vi.fn()}
+        onCheckout={vi.fn()}
+        onCommit={vi.fn()}
+        onFetch={vi.fn()}
+        onPull={vi.fn()}
+        onPush={vi.fn()}
+        onMerge={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("Commit all changes")).toBeNull();
+    expect(screen.queryByPlaceholderText("Commit message")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Commit" })).toBeNull();
+    expect(screen.getByText("Working tree clean.")).toBeTruthy();
   });
 });
