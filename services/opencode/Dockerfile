@@ -89,6 +89,8 @@ RUN apt-get update \
   && ln -sf /usr/bin/docker-compose /usr/lib/docker/cli-plugins/docker-compose \
   && ln -sf /usr/bin/docker-compose /usr/libexec/docker/cli-plugins/docker-compose \
   && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
+  && ln -sf /usr/bin/chromium /usr/local/bin/google-chrome \
+  && ln -sf /usr/bin/chromium /usr/local/bin/google-chrome-stable \
   && rm -rf /var/lib/apt/lists/*
 
 # OpenCode CLI is published as the `opencode-ai` package on npm and exposes

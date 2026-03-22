@@ -31,6 +31,7 @@ test("opencode Dockerfile installs git docker ssh and gh tooling", () => {
   assert.match(dockerfile, /ripgrep/);
   assert.match(dockerfile, /fd-find/);
   assert.match(dockerfile, /chromium/);
+  assert.match(dockerfile, /google-chrome/);
   assert.match(dockerfile, /playwright/);
   assert.match(dockerfile, /XDG_CACHE_HOME=\/toolbox\/cache/);
   assert.match(dockerfile, /NPM_CONFIG_PREFIX=\/toolbox\/npm-global/);
@@ -44,6 +45,16 @@ test("opencode Dockerfile installs git docker ssh and gh tooling", () => {
   assert.match(dockerfile, /COPY toolbox-profile\.sh \/etc\/profile\.d\/toolbox\.sh/);
   assert.match(dockerfile, /docker-wrapper\.sh/);
   assert.match(dockerfile, /COPY --chmod=755 github-gh-auth-wrapper\.sh \/usr\/local\/bin\/gh/);
+});
+
+test("opencode entrypoint persists CodeRabbit auth inside the shared toolbox volume", () => {
+  /* Agent auth should survive container redeploys instead of disappearing after every image update. */
+  const entrypoint = readRepoFile("services/opencode/entrypoint.sh");
+
+  assert.match(entrypoint, /\/toolbox\/coderabbit/);
+  assert.match(entrypoint, /\/toolbox\/coderabbit-config/);
+  assert.match(entrypoint, /\/root\/\.coderabbit/);
+  assert.match(entrypoint, /\/root\/\.config\/coderabbit/);
 });
 
 test("backend Dockerfile installs git ssh and gh tooling", () => {

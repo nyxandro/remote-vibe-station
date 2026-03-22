@@ -53,4 +53,29 @@ node /usr/local/bin/telegram-media-plugin-sync.js /usr/local/share/opencode/tele
 mv "$TMP_PATH" "$CONFIG_PATH"
 
 # Continue with OpenCode server process.
+ensure_toolbox_link() {
+  target_path="$1"
+  persistent_path="$2"
+
+  # Persisted toolbox directories should become the canonical home for CLI auth state.
+  mkdir -p "$(dirname "$target_path")" "$persistent_path"
+
+  # Preserve any pre-existing data before replacing the target with a symlink.
+  if [ -d "$target_path" ] && [ ! -L "$target_path" ]; then
+    if [ -z "$(ls -A "$persistent_path" 2>/dev/null)" ] && [ -n "$(ls -A "$target_path" 2>/dev/null)" ]; then
+      cp -a "$target_path"/. "$persistent_path"/
+    fi
+    rm -rf "$target_path"
+  fi
+
+  if [ ! -e "$target_path" ]; then
+    ln -s "$persistent_path" "$target_path"
+  fi
+}
+
+# Keep long-lived CLI auth in the shared toolbox volume so redeploys do not log the agent out.
+ensure_toolbox_link /root/.coderabbit /toolbox/coderabbit
+ensure_toolbox_link /root/.config/coderabbit /toolbox/coderabbit-config
+
+# Continue with OpenCode server process.
 exec "$@"
