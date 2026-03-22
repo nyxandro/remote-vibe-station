@@ -115,6 +115,8 @@ sudo ./scripts/install-runtime.sh \
 - `Build And Publish Images` - собирает и публикует образы в GHCR на каждый push в `master`/`main`
 - `Deploy Runtime` - после успешной публикации подключается к серверу по SSH, делает `docker compose pull` и `docker compose up -d --remove-orphans`
 
+То есть в нормально настроенном runtime push в `master` сам доводит новые контейнеры до сервера: отдельный ручной `docker compose pull && up -d` нужен только как запасной вариант, если GitHub Actions или SSH secrets временно недоступны.
+
 Для включения автодеплоя добавьте GitHub Secrets в репозиторий:
 
 - `DEPLOY_HOST` - IP или hostname сервера

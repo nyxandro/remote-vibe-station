@@ -96,6 +96,7 @@
 
 - Any merge into master is treated as a production deployment trigger and must be intentional
 - Production Docker images (frontend and backend) must be built only from the canonical repository state (CI/CD pipeline from the master branch). Manual or local builds on the server from outdated sources are forbidden to avoid desynchronization between code and configuration.
+- In the configured production runtime, push/merge into `master` automatically triggers GitHub Actions `Build And Publish Images`, then `Deploy Runtime`, so the server pulls fresh GHCR images and restarts containers via Docker Compose without manual SSH rollout.
 - All environments (dev/prod) must be run only via Docker Compose.
 - Migrations must always be executed inside the backend container via `npm run migrate`.
 - In all environments the edge reverse proxy runs in Docker (Nginx or Traefik) and proxies traffic to the `frontend` and `backend` containers.

@@ -111,9 +111,12 @@ cd services/miniapp && npm test
 
 ## Деплой обновлений
 
-Сборка production-образов идет через GitHub Actions при push в `master`.
+В штатной production-конфигурации push в `master` автоматически запускает два workflow:
 
-После публикации новых образов на сервере обычно достаточно:
+- `Build And Publish Images` - собирает и публикует свежие образы в GHCR;
+- `Deploy Runtime` - после успешной сборки подключается к runtime по SSH, делает `docker compose pull` и `docker compose up -d --remove-orphans`.
+
+Ручной rollout через SSH нужен только как аварийный fallback, если автодеплой временно недоступен. Тогда на сервере достаточно:
 
 ```bash
 cd /opt/remote-vibe-station-runtime
@@ -121,4 +124,4 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
 ```
 
-Если в `.env` используются SHA-теги, сначала обновите `RVS_BACKEND_IMAGE`, `RVS_MINIAPP_IMAGE`, `RVS_BOT_IMAGE` и `RVS_OPENCODE_IMAGE`.
+Если в `.env` используются SHA-теги вместо `latest`, сначала обновите `RVS_BACKEND_IMAGE`, `RVS_MINIAPP_IMAGE`, `RVS_BOT_IMAGE` и `RVS_OPENCODE_IMAGE`.
