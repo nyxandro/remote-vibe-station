@@ -14,11 +14,13 @@ import { TelegramAssistantPartState } from "./telegram-assistant-part-state";
 import { TelegramOpenCodeRuntimeFileOperations } from "./telegram-opencode-runtime-file-operations";
 import { TelegramOpenCodeRuntimeInteractions } from "./telegram-opencode-runtime-interactions";
 import { TelegramOutboxService } from "./telegram-outbox.service";
+import { resolveTelegramBashProgressKey } from "./telegram-runtime-bash-progress";
 import { buildAssistantPartKey, extractPatternMatches } from "./telegram-runtime-bridge-utils";
 import { TelegramRuntimeFinalReply } from "./telegram-runtime-final-reply";
 import { TelegramRuntimePartReplayGuard } from "./telegram-runtime-part-replay-guard";
+import { TelegramRuntimeTodoProgress } from "./telegram-runtime-todo-progress";
 import { TelegramRuntimeTurnState } from "./telegram-runtime-turn-state";
-import { extractTodoItemsFromToolPart, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
+import { extractTodoItemsFromToolPart } from "./telegram-todo-progress";
 type OpenCodeBusEvent = {
   type?: string;
   properties?: Record<string, unknown>;
@@ -49,6 +51,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly assistantPartState = new TelegramAssistantPartState();
   private readonly finalReply: TelegramRuntimeFinalReply;
   private readonly finalizedRuntimePartReplayGuard = new TelegramRuntimePartReplayGuard();
+  private readonly todoProgress = new TelegramRuntimeTodoProgress();
   private readonly runtimeTurnState = new TelegramRuntimeTurnState();
   private readonly thinkingActiveBySession = new Map<string, boolean>();
   private readonly emittedSystemNotificationsBySession = new Map<string, Set<string>>();
@@ -76,6 +79,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (event.type === "opencode.turn.started") {
       const sessionID = String((event.data as any)?.sessionId ?? "").trim();
       if (sessionID) {
+        this.todoProgress.openTurn(sessionID);
         this.runtimeTurnState.openTurn(sessionID);
         this.finalReply.rememberTurnStart({ sessionID, meta: event.data as Record<string, unknown> });
       }
@@ -198,12 +202,13 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
           ? `${outputRaw.slice(0, BASH_PROGRESS_MAX_CHARS)}\n...`
           : outputRaw;
       const header = status === "completed" ? "✅ Команда завершена" : status === "error" ? "❌ Команда с ошибкой" : "⏳ Выполняю команду";
-      const progressKey = this.resolveBashProgressKey({
+      const progressKey = resolveTelegramBashProgressKey({
         adminId: route.adminId,
         sessionID,
         part,
         command,
-        status
+        status,
+        bashProgressKeyByPart: this.bashProgressKeyByPart
       });
       const nowMs = Date.now();
       const last = this.bashProgressEmittedAtMs.get(progressKey) ?? 0;
@@ -232,16 +237,25 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     if (toolName === "todowrite") {
-      /* Todo list updates should land as fresh chat messages so the newest checklist stays visible at the bottom. */
+      /* Todo list updates should rewrite one canonical checklist so stale or partial snapshots cannot confuse Telegram. */
       if (status !== "completed") {
         return;
       }
 
       const todos = extractTodoItemsFromToolPart(part);
-      const text = formatTelegramTodoProgressMessage(todos);
-      this.outbox.enqueueAdminNotification({
+      const update = this.todoProgress.applySnapshot({
         adminId: route.adminId,
-        text,
+        sessionID,
+        todos
+      });
+      if (!update) {
+        return;
+      }
+
+      this.outbox.enqueueProgressReplace({
+        adminId: route.adminId,
+        progressKey: update.progressKey,
+        text: update.text,
         parseMode: "HTML"
       });
       return;
@@ -308,42 +322,6 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     this.assistantTextBySession.set(sessionID, sessionText);
   }
 
-  private resolveBashProgressKey(input: {
-    adminId: number;
-    sessionID: string;
-    part: any;
-    command: string;
-    status: string;
-  }): string {
-    /*
-     * Keep one replace key per logical bash tool part.
-     * OpenCode may rotate callID between partial updates, so id/session binding is the stable anchor.
-     */
-    const callId = String(input.part.callID ?? "").trim();
-    const partId = String(input.part.id ?? "").trim();
-
-    /*
-     * Runtime can rotate both callID and part.id between partial updates.
-     * For live terminal output we bind one replace slot to session+command.
-     */
-    const stablePartToken = `cmd:${input.command}`;
-    const mapKey = `bash-part:${input.adminId}:${input.sessionID}:${stablePartToken}`;
-    const existing = this.bashProgressKeyByPart.get(mapKey);
-    if (existing) {
-      if (input.status === "completed" || input.status === "error") {
-        this.bashProgressKeyByPart.delete(mapKey);
-      }
-      return existing;
-    }
-
-    const progressIdentity = partId || callId || input.command;
-    const progressKey = `bash:${input.adminId}:${input.sessionID}:${progressIdentity}`;
-    if (input.status !== "completed" && input.status !== "error") {
-      this.bashProgressKeyByPart.set(mapKey, progressKey);
-    }
-    return progressKey;
-  }
-
   private handleSessionStatus(properties: Record<string, unknown>): void {
     /* Stop indicator when session transitions to idle state. */
     const sessionID = String(properties.sessionID ?? "");
@@ -379,6 +357,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     /* Idle closes the current turn and, when needed, upgrades the last runtime-only text into a final reply. */
     this.setThinking(adminId, sessionID, false);
     this.finalReply.enqueueBufferedFinalReply({ sessionID, adminId, text: String(this.assistantTextBySession.get(sessionID) ?? "") });
+    this.todoProgress.closeTurn(sessionID);
     this.runtimeTurnState.closeTurn(sessionID);
     this.clearSessionRuntimeState(sessionID);
   }
@@ -440,6 +419,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
   public finalizeAssistantReply(sessionID: string): void {
     /* The synchronous final reply is authoritative, so any later SSE replay for this turn becomes stale noise. */
+    this.todoProgress.closeTurn(sessionID);
     this.runtimeTurnState.closeTurn(sessionID);
     this.clearSessionRuntimeState(sessionID);
   }

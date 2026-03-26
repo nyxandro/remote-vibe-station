@@ -35,7 +35,9 @@ const CREATE_TASK_DESCRIPTION = [
 const REFINE_TASK_DESCRIPTION = [
   "Refine exactly one existing task.",
   "Send taskId plus only the fields you want to change.",
+  "Omit acceptanceCriteria entirely when you want to leave the current checklist unchanged.",
   "If you replace acceptanceCriteria, send the full list; plain strings are preferred, but criterion objects with id/text/status/blockedReason are accepted.",
+  "Never send acceptanceCriteria: [] unless you also set clearAcceptanceCriteria: true for an intentional checklist clear.",
   "Use kanban_update_criterion to change the status of one existing criterion during execution instead of sending a partial criterion-status patch here.",
   "Use this tool to tighten scope, move cards through refinement/ready/queue stages, and keep the checklist accurate before or during execution."
 ].join(" ");
@@ -332,6 +334,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
           status: tool.schema.enum(STATUS_OPTIONS).optional(),
           priority: tool.schema.enum(PRIORITY_OPTIONS).optional(),
           acceptanceCriteria: criterionInputsSchema,
+          clearAcceptanceCriteria: tool.schema.boolean().optional(),
           resultSummary: tool.schema.string().optional(),
           blockedReason: tool.schema.string().optional()
         },

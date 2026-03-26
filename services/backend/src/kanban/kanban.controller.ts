@@ -22,8 +22,20 @@ import {
   KanbanCriterionInput,
   KanbanCriterionStatus,
   KanbanPriority,
-  KanbanStatus
+  KanbanStatus,
+  UpdateKanbanTaskInput
 } from "./kanban.types";
+
+type AppTaskUpdateBody = {
+  title?: string;
+  description?: string;
+  status?: KanbanStatus;
+  priority?: KanbanPriority;
+  acceptanceCriteria?: KanbanCriterionInput[];
+  clearAcceptanceCriteria?: boolean;
+  resultSummary?: string | null;
+  blockedReason?: string | null;
+};
 
 @Controller("api/kanban")
 @UseGuards(AppAuthGuard)
@@ -112,31 +124,12 @@ export class KanbanController {
   @Post("tasks/:id/update")
   public async updateTask(
     @Param("id") id: string,
-    @Body()
-      body: {
-        title?: string;
-        description?: string;
-        status?: KanbanStatus;
-        priority?: KanbanPriority;
-        acceptanceCriteria?: KanbanCriterionInput[];
-        resultSummary?: string | null;
-        blockedReason?: string | null;
-      }
+    @Body() body: AppTaskUpdateBody
   ) {
     /* Card editing reuses one patch route instead of many narrow field-specific endpoints. */
     console.log(`[KanbanController] updateTask: id=${id}, body=${JSON.stringify(body)}`);
     try {
-      const task = await this.kanban.updateTask(id, {
-        ...(typeof body?.title === "string" ? { title: body.title } : {}),
-        ...(typeof body?.description === "string" ? { description: body.description } : {}),
-        ...(body?.status ? { status: this.parseRequiredStatus(body.status) } : {}),
-        ...(body?.priority ? { priority: this.parseRequiredPriority(body.priority) } : {}),
-        ...(Array.isArray(body?.acceptanceCriteria)
-          ? { acceptanceCriteria: body.acceptanceCriteria }
-          : {}),
-        ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
-        ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
-      });
+      const task = await this.kanban.updateTask(id, this.buildTaskUpdatePatch(body));
       publishKanbanTaskUpdated(this.events, { task, source: "app" });
       return task;
     } catch (error) {
@@ -256,6 +249,23 @@ export class KanbanController {
       throw new KanbanValidationError("Valid kanban criterion status is required");
     }
     return value as KanbanCriterionStatus;
+  }
+
+  private buildTaskUpdatePatch(body: AppTaskUpdateBody): UpdateKanbanTaskInput {
+    /* Empty arrays from clients often mean "unchanged", but an explicit clear flag must still wipe the checklist. */
+    const shouldReplaceAcceptanceCriteria =
+      body.clearAcceptanceCriteria === true ||
+      (Array.isArray(body.acceptanceCriteria) && body.acceptanceCriteria.length > 0);
+
+    return {
+      ...(typeof body.title === "string" ? { title: body.title } : {}),
+      ...(typeof body.description === "string" ? { description: body.description } : {}),
+      ...(body.status ? { status: this.parseRequiredStatus(body.status) } : {}),
+      ...(body.priority ? { priority: this.parseRequiredPriority(body.priority) } : {}),
+      ...(shouldReplaceAcceptanceCriteria ? { acceptanceCriteria: body.acceptanceCriteria ?? [] } : {}),
+      ...(body.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
+      ...(body.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
+    };
   }
 
   private rethrowAsHttp(error: unknown): never {

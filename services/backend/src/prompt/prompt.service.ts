@@ -430,6 +430,19 @@ export class PromptService {
       sessionID
     });
 
+    /* Manual stop must be observable so downstream automation can suppress same-session auto-continuation. */
+    this.events.publish({
+      type: "opencode.session.stopped",
+      ts: new Date().toISOString(),
+      data: {
+        adminId: adminId ?? null,
+        projectSlug: active.slug,
+        directory: active.rootPath,
+        sessionId: sessionID,
+        aborted
+      }
+    });
+
     return {
       projectSlug: active.slug,
       sessionID,

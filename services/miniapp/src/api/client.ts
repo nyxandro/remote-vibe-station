@@ -71,6 +71,27 @@ const getInitData = (): string | undefined => {
   return (window as any)?.Telegram?.WebApp?.initData as string | undefined;
 };
 
+const removeHashParamFromLocation = (paramName: string): void => {
+  /* Consuming one hash-based auth token must preserve unrelated launch params such as startapp deep links. */
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  if (!hash) {
+    return;
+  }
+
+  const params = new URLSearchParams(hash);
+  if (!params.has(paramName)) {
+    return;
+  }
+
+  params.delete(paramName);
+  const nextHash = params.toString();
+  window.history.replaceState(
+    null,
+    document.title,
+    `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ""}`
+  );
+};
+
 const readWebTokenFromLocation = (): string | null => {
   /* Support regular-browser Mini App launches where auth arrives through #token=... in the hash. */
   const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
@@ -106,7 +127,7 @@ const getWebToken = (): string | undefined => {
   }
 
   storeWebToken(fromHash);
-  window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
+  removeHashParamFromLocation("token");
   return fromHash;
 };
 

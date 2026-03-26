@@ -82,6 +82,8 @@ import { CliproxyAuthRuntimeService } from "./proxy/cliproxy-auth-runtime.servic
 import { CliproxyManagementClient } from "./proxy/cliproxy-management.client";
 import { KanbanController } from "./kanban/kanban.controller";
 import { KanbanAgentController } from "./kanban/kanban-agent.controller";
+import { KanbanSessionContinuationService } from "./kanban/kanban-session-continuation.service";
+import { KanbanSessionContinuationStore } from "./kanban/kanban-session-continuation.store";
 import { KanbanRunnerHandoffService } from "./kanban/kanban-runner-handoff.service";
 import { KanbanRunnerHandoffStore } from "./kanban/kanban-runner-handoff.store";
 import { KanbanRunnerService } from "./kanban/kanban-runner.service";
@@ -172,6 +174,8 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     CliproxyAccountService,
     KanbanStore,
     KanbanService,
+    KanbanSessionContinuationStore,
+    KanbanSessionContinuationService,
     KanbanRunnerHandoffStore,
     KanbanRunnerHandoffService,
     KanbanRunnerSessionService,

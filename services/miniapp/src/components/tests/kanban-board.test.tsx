@@ -304,6 +304,44 @@ describe("KanbanBoard", () => {
     expect(screen.getByDisplayValue("Discuss backlog item")).toBeTruthy();
   });
 
+  it("sends an explicit checklist clear flag when edit mode removes every acceptance criterion", async () => {
+    /* Once the app endpoint stops treating [] as delete, the board must mark intentional full clears explicitly. */
+    const onUpdateTask = vi.fn(async () => undefined);
+
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[buildTask()]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onRefresh={vi.fn()}
+        onCreateTask={vi.fn()}
+        onUpdateTask={onUpdateTask}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Open task Discuss backlog item/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove criterion" })[0] as HTMLElement);
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove criterion" })[0] as HTMLElement);
+    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+
+    await waitFor(() => {
+      expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+        title: "Discuss backlog item",
+        description: "Clarify acceptance criteria",
+        status: "backlog",
+        priority: "medium",
+        acceptanceCriteria: [],
+        clearAcceptanceCriteria: true,
+        resultSummary: null,
+        blockedReason: null
+      });
+    });
+  });
+
   it("renders criterion progress segments with per-status neon classes", () => {
     /* Dense cards should expose criterion health at a glance, so each segment gets a status-specific color channel. */
     const neonTask: KanbanTask = {

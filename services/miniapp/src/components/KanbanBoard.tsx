@@ -184,12 +184,16 @@ export const KanbanBoard = (props: Props) => {
 
     try {
       if (editingTask) {
+        /* Once [] means "unchanged" server-side, the UI must mark intentional full checklist clears explicitly. */
+        const clearAcceptanceCriteria = editingTask.acceptanceCriteria.length > 0 && payload.acceptanceCriteria.length === 0;
+
         await props.onUpdateTask(editingTask.id, {
           title: payload.title,
           description: payload.description,
           status: payload.status,
           priority: payload.priority,
           acceptanceCriteria: payload.acceptanceCriteria,
+          ...(clearAcceptanceCriteria ? { clearAcceptanceCriteria: true } : {}),
           resultSummary: payload.resultSummary,
           blockedReason: payload.blockedReason
         });

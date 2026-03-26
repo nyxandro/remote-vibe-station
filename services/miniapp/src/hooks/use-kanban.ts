@@ -33,6 +33,7 @@ export type UpdateKanbanTaskPayload = {
   status?: KanbanStatus;
   priority?: KanbanPriority;
   acceptanceCriteria?: KanbanCriterion[];
+  clearAcceptanceCriteria?: boolean;
   resultSummary?: string | null;
   blockedReason?: string | null;
 };

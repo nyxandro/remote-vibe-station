@@ -12,6 +12,7 @@ import { OpenCodePromptInputPart } from "../../open-code/opencode.types";
 import { normalizeOpenCodeTransportErrorMessage } from "../../open-code/opencode-transport-errors";
 import { PromptService } from "../../prompt/prompt.service";
 import { ProjectsService } from "../../projects/projects.service";
+import { TelegramStreamStore } from "../telegram-stream.store";
 import { TelegramOutboxService } from "../outbox/telegram-outbox.service";
 import { TelegramPromptAttachmentsService } from "./telegram-prompt-attachments.service";
 import { TelegramPromptQueueStore } from "./telegram-prompt-queue.store";
@@ -26,6 +27,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
 
   public constructor(
     private readonly store: TelegramPromptQueueStore,
+    private readonly streamStore: TelegramStreamStore,
     private readonly prompts: PromptService,
     private readonly projects: ProjectsService,
     private readonly attachments: TelegramPromptAttachmentsService,
@@ -88,6 +90,47 @@ export class TelegramPromptQueueService implements OnModuleInit {
       position: queueDepth + 1,
       buffered: true,
       merged: hadBuffer
+    };
+  }
+
+  public async enqueueSystemPrompt(input: {
+    adminId: number;
+    projectSlug: string;
+    directory: string;
+    text: string;
+  }): Promise<{ position: number }> {
+    /* Backend automation may enqueue an explicit follow-up turn without waiting for a new Telegram user message. */
+    const normalizedText = input.text.trim();
+    if (!normalizedText) {
+      throw new Error(
+        "APP_TELEGRAM_SYSTEM_PROMPT_TEXT_REQUIRED: System prompt text is empty. Provide non-empty continuation text and retry."
+      );
+    }
+
+    const binding = this.streamStore.get(input.adminId);
+    if (!binding) {
+      throw new Error(
+        `APP_TELEGRAM_CHAT_BINDING_REQUIRED: Telegram chat binding is missing for admin ${input.adminId}. Send any bot message first, then retry the continuation.`
+      );
+    }
+
+    const key = this.buildQueueKey(input.adminId, input.directory);
+    const queueDepth = this.store.countOutstandingItems(key);
+    this.store.enqueueItem({
+      key,
+      adminId: input.adminId,
+      chatId: binding.chatId,
+      directory: input.directory,
+      projectSlug: input.projectSlug,
+      text: normalizedText,
+      attachments: [],
+      sourceMessageIds: [],
+      createdAtIso: new Date().toISOString()
+    });
+    this.pumpQueue(key);
+
+    return {
+      position: queueDepth + 1
     };
   }
 

@@ -11,6 +11,7 @@ import * as path from "node:path";
 
 import { TelegramPromptQueueService } from "../telegram-prompt-queue.service";
 import { TelegramPromptQueueStore } from "../telegram-prompt-queue.store";
+import { TelegramStreamStore } from "../../telegram-stream.store";
 
 const TEST_DATA_DIR = path.join(process.cwd(), "data");
 const QUEUE_PATH = path.join(TEST_DATA_DIR, "telegram.prompt-queue.json");
@@ -25,6 +26,7 @@ const flushTimers = async (): Promise<void> => {
 const createService = () => {
   /* Keep dependencies explicit so queue behaviour is isolated and deterministic. */
   const store = new TelegramPromptQueueStore();
+  const streamStore = new TelegramStreamStore();
   const promptService = {
     dispatchPromptParts: jest.fn().mockResolvedValue({ sessionId: "session-1", responseText: "ok" })
   };
@@ -44,13 +46,14 @@ const createService = () => {
 
   const service = new TelegramPromptQueueService(
     store,
+    streamStore,
     promptService as never,
     projects as never,
     attachments as never,
     outbox as never
   );
 
-  return { service, store, promptService, projects, attachments, outbox };
+  return { service, store, streamStore, promptService, projects, attachments, outbox };
 };
 
 describe("TelegramPromptQueueService", () => {
@@ -123,6 +126,32 @@ describe("TelegramPromptQueueService", () => {
       expect.objectContaining({
         promptTextForTelemetry: "Второй",
         parts: [{ type: "text", text: "Второй" }]
+      })
+    );
+  });
+
+  it("enqueues an internal system prompt immediately for the bound admin chat", async () => {
+    /* Backend automation should be able to nudge the same Telegram project queue without waiting for a user message chunk. */
+    const { service, streamStore, promptService } = createService();
+    streamStore.bindAdminChat(7, 70);
+
+    const result = await service.enqueueSystemPrompt({
+      adminId: 7,
+      projectSlug: "remote-vibe-station",
+      directory: "/home/nyx/projects/remote-vibe-station",
+      text: "Продолжай текущую kanban-задачу."
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(result).toEqual({ position: 1 });
+    expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 7,
+        projectSlug: "remote-vibe-station",
+        directory: "/home/nyx/projects/remote-vibe-station",
+        promptTextForTelemetry: "Продолжай текущую kanban-задачу.",
+        parts: [{ type: "text", text: "Продолжай текущую kanban-задачу." }]
       })
     );
   });

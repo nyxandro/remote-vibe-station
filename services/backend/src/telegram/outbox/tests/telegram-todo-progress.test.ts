@@ -78,8 +78,8 @@ describe("telegram todo progress helper", () => {
 });
 
 describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
-  it("sends a fresh Telegram todo message for every completed todowrite update", () => {
-    /* Todo list changes should stay visible at the end of chat instead of editing an older checklist far above. */
+  it("updates one live Telegram todo checklist in place during the same turn", () => {
+    /* One stable replace slot is easier to follow than a burst of checklist snapshots at the end of chat. */
     const { bridge, outbox } = makeBridge();
 
     (bridge as any).handlePartUpdated({
@@ -118,23 +118,192 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
-    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(2);
-    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
+    expect(outbox.enqueueAdminNotification).not.toHaveBeenCalled();
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
+    expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         adminId: 10,
+        progressKey: "todo:10:session-todo:1",
         parseMode: "HTML",
         text: expect.stringContaining("<b>0 из 2 задач завершено</b>")
       })
     );
-    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
+    expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         adminId: 10,
+        progressKey: "todo:10:session-todo:1",
         parseMode: "HTML",
         text: expect.stringContaining("✅ <s>Подключить сервер</s>")
       })
     );
+  });
+
+  it("preserves already completed todos when a later snapshot omits them", () => {
+    /* OpenCode sometimes rewrites a shorter todo array, but Telegram should not lose completed items mid-turn. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-part-a",
+        sessionID: "session-stable",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { content: "Подготовить runtime", status: "completed", priority: "high" },
+              { content: "Прогнать smoke", status: "in_progress", priority: "high" },
+              { content: "Обновить отчет", status: "pending", priority: "medium" }
+            ]
+          }
+        }
+      }
+    });
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-part-b",
+        sessionID: "session-stable",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { content: "Прогнать smoke", status: "in_progress", priority: "high" },
+              { content: "Обновить отчет", status: "in_progress", priority: "medium" }
+            ]
+          }
+        }
+      }
+    });
+
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
+    const secondCall = outbox.enqueueProgressReplace.mock.calls[1][0];
+    expect(secondCall.progressKey).toBe("todo:10:session-stable:1");
+    expect(secondCall.text).toContain("<b>1 из 3 задач завершено</b>");
+    expect(secondCall.text).toContain("✅ <s>Подготовить runtime</s>");
+  });
+
+  it("ignores late regressing snapshots once a newer todo state was already rendered", () => {
+    /* Out-of-order todowrite events must never roll Telegram progress backward. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-part-1",
+        sessionID: "session-regress",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { content: "Шаг 1", status: "completed", priority: "high" },
+              { content: "Шаг 2", status: "completed", priority: "high" },
+              { content: "Шаг 3", status: "in_progress", priority: "high" }
+            ]
+          }
+        }
+      }
+    });
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-part-older",
+        sessionID: "session-regress",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { content: "Шаг 1", status: "completed", priority: "high" },
+              { content: "Шаг 2", status: "pending", priority: "high" },
+              { content: "Шаг 3", status: "pending", priority: "high" }
+            ]
+          }
+        }
+      }
+    });
+
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(1);
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progressKey: "todo:10:session-regress:1",
+        text: expect.stringContaining("<b>2 из 3 задач завершено</b>")
+      })
+    );
+  });
+
+  it("starts a new todo progress slot on the next turn so old completed items do not leak forever", () => {
+    /* Each new OpenCode turn deserves a fresh checklist instead of carrying the previous turn's completed items. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).onEvent({
+      type: "opencode.turn.started",
+      ts: new Date().toISOString(),
+      data: {
+        adminId: 10,
+        projectSlug: "demo",
+        directory: "/tmp/demo",
+        sessionId: "session-reset"
+      }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-turn-1",
+        sessionID: "session-reset",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { content: "Старый шаг", status: "completed", priority: "high" },
+              { content: "Старый хвост", status: "pending", priority: "medium" }
+            ]
+          }
+        }
+      }
+    });
+
+    (bridge as any).onEvent({
+      type: "opencode.turn.started",
+      ts: new Date().toISOString(),
+      data: {
+        adminId: 10,
+        projectSlug: "demo",
+        directory: "/tmp/demo",
+        sessionId: "session-reset"
+      }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-turn-2",
+        sessionID: "session-reset",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { content: "Новый шаг", status: "in_progress", priority: "high" }
+            ]
+          }
+        }
+      }
+    });
+
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
+    const firstCall = outbox.enqueueProgressReplace.mock.calls[0][0];
+    const secondCall = outbox.enqueueProgressReplace.mock.calls[1][0];
+    expect(firstCall.progressKey).toBe("todo:10:session-reset:1");
+    expect(secondCall.progressKey).toBe("todo:10:session-reset:2");
+    expect(secondCall.text).toContain("Новый шаг");
+    expect(secondCall.text).not.toContain("Старый шаг");
   });
 });

@@ -54,7 +54,7 @@ describe("PromptService session management", () => {
       opencodeEvents as never
     );
 
-    return { service, opencode, sessionRouting, opencodeEvents };
+    return { service, opencode, sessionRouting, opencodeEvents, events };
   };
 
   test("creates new session and binds it to Telegram admin", async () => {
@@ -159,7 +159,7 @@ describe("PromptService session management", () => {
 
   test("aborts the currently selected session for /stop", async () => {
     /* /stop should target the active project session without rotating chat context. */
-    const { service, opencode, opencodeEvents } = buildService({
+    const { service, opencode, opencodeEvents, events } = buildService({
       slug: "arena",
       rootPath: "/home/nyx/projects/arena"
     });
@@ -171,6 +171,18 @@ describe("PromptService session management", () => {
       directory: "/home/nyx/projects/arena",
       sessionID: "session-new"
     });
+    expect(events.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "opencode.session.stopped",
+        data: expect.objectContaining({
+          adminId: 649624756,
+          projectSlug: "arena",
+          directory: "/home/nyx/projects/arena",
+          sessionId: "session-new",
+          aborted: true
+        })
+      })
+    );
     expect(result).toEqual({
       projectSlug: "arena",
       sessionID: "session-new",

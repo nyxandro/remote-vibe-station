@@ -45,6 +45,8 @@ const normalizeTodoItems = (value: unknown): TelegramTodoItem[] => {
     return [];
   }
 
+  const duplicateCountsByContent = new Map<string, number>();
+
   return value.flatMap((item, index) => {
     if (!item || typeof item !== "object") {
       return [];
@@ -53,7 +55,15 @@ const normalizeTodoItems = (value: unknown): TelegramTodoItem[] => {
     const record = item as Record<string, unknown>;
     const content = typeof record.content === "string" ? record.content.trim() : "";
     const status = normalizeTodoStatus(record.status);
-    const id = typeof record.id === "string" && record.id.trim().length > 0 ? record.id.trim() : `${index + 1}`;
+    const normalizedContentId = content.toLowerCase().replaceAll(/\s+/g, " ");
+    const duplicateIndex = (duplicateCountsByContent.get(normalizedContentId) ?? 0) + 1;
+    duplicateCountsByContent.set(normalizedContentId, duplicateIndex);
+    const id =
+      typeof record.id === "string" && record.id.trim().length > 0
+        ? record.id.trim()
+        : normalizedContentId
+          ? `content:${normalizedContentId}:${duplicateIndex}`
+          : `index:${index + 1}`;
     const priority = typeof record.priority === "string" && record.priority.trim().length > 0 ? record.priority.trim() : null;
     if (!content || !status) {
       return [];

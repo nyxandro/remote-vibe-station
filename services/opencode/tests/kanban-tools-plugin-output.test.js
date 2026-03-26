@@ -71,9 +71,20 @@ test("kanban refine tool description redirects criterion status edits to the ded
   assert.match(pluginSource, /Use kanban_update_criterion to change the status of one existing criterion/);
 });
 
+test("kanban refine tool description requires explicit intent before clearing acceptance criteria", () => {
+  /* Accidental empty arrays must no longer read as destructive checklist deletion in agent tool prompts. */
+  assert.match(pluginSource, /Omit acceptanceCriteria entirely when you want to leave the current checklist unchanged/);
+  assert.match(pluginSource, /clearAcceptanceCriteria/);
+});
+
 test("kanban plugin source accepts both string and structured criterion inputs", () => {
   /* The tool schema should tolerate criterion objects because prior tool output already exposes ids and statuses. */
   assert.match(pluginSource, /tool\.schema\.union\(\[/);
   assert.match(pluginSource, /tool\.schema\.object\(\{/);
   assert.match(pluginSource, /blockedReason: tool\.schema\.string\(\)\.nullable\(\)\.optional\(\)/);
+});
+
+test("kanban refine tool schema exposes an explicit checklist clear flag", () => {
+  /* Empty arrays stay ambiguous for LLMs, so destructive checklist clears need a dedicated boolean flag. */
+  assert.match(pluginSource, /clearAcceptanceCriteria: tool\.schema\.boolean\(\)\.optional\(\)/);
 });

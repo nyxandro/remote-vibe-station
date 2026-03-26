@@ -20,10 +20,24 @@ import {
   KanbanCriterionInput,
   KanbanCriterionStatus,
   KanbanPriority,
-  KanbanStatus
+  KanbanStatus,
+  UpdateKanbanTaskInput
 } from "./kanban.types";
 
 const DEFAULT_SESSION_AGENT_ID = "opencode-agent";
+
+type AgentTaskRefineBody = {
+  agentId?: string;
+  sessionId?: string;
+  title?: string;
+  description?: string;
+  status?: KanbanStatus;
+  priority?: KanbanPriority;
+  acceptanceCriteria?: KanbanCriterionInput[];
+  clearAcceptanceCriteria?: boolean;
+  resultSummary?: string | null;
+  blockedReason?: string | null;
+};
 
 @Controller("api/kanban/agent")
 @UseGuards(KanbanAgentGuard)
@@ -103,18 +117,7 @@ export class KanbanAgentController {
   @Post("tasks/:id/refine")
   public async refineTask(
     @Param("id") id: string,
-    @Body()
-    body: {
-      agentId?: string;
-      sessionId?: string;
-      title?: string;
-      description?: string;
-      status?: KanbanStatus;
-      priority?: KanbanPriority;
-      acceptanceCriteria?: KanbanCriterionInput[];
-      resultSummary?: string | null;
-      blockedReason?: string | null;
-    }
+    @Body() body: AgentTaskRefineBody
   ) {
     /* Starting a task through the agent endpoint must claim session ownership atomically before extra edits apply. */
     try {
@@ -259,17 +262,7 @@ export class KanbanAgentController {
 
   private async updateTaskForAgent(
     taskId: string,
-      body: {
-        agentId?: string;
-        sessionId?: string;
-        title?: string;
-      description?: string;
-      status?: KanbanStatus;
-      priority?: KanbanPriority;
-      acceptanceCriteria?: KanbanCriterionInput[];
-      resultSummary?: string | null;
-      blockedReason?: string | null;
-    }
+    body: AgentTaskRefineBody
   ) {
     /* Session starts become an atomic claim before any non-status metadata edits are applied. */
     const nextStatus = body?.status ? this.parseStatus(body.status) : null;
@@ -280,14 +273,9 @@ export class KanbanAgentController {
         executionSource: "session",
         executionSessionId: body?.sessionId ?? null
       });
-      const patch = {
-        ...(typeof body?.title === "string" ? { title: body.title } : {}),
-        ...(typeof body?.description === "string" ? { description: body.description } : {}),
-        ...(body?.priority ? { priority: this.parsePriority(body.priority) } : {}),
-        ...(Array.isArray(body?.acceptanceCriteria) ? { acceptanceCriteria: body.acceptanceCriteria } : {}),
-        ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
-        ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
-      };
+
+      /* After claiming execution, only the remaining metadata patch should be forwarded. */
+      const patch = this.buildAgentTaskPatch({ body, status: null });
       return Object.keys(patch).length > 0
         ? this.kanban.updateTaskFromExecution({
             taskId: started.id,
@@ -300,16 +288,25 @@ export class KanbanAgentController {
     return this.kanban.updateTaskFromExecution({
       taskId,
       actor: this.resolveExecutionActor(body),
-      patch: {
-        ...(typeof body?.title === "string" ? { title: body.title } : {}),
-        ...(typeof body?.description === "string" ? { description: body.description } : {}),
-        ...(nextStatus ? { status: nextStatus } : {}),
-        ...(body?.priority ? { priority: this.parsePriority(body.priority) } : {}),
-        ...(Array.isArray(body?.acceptanceCriteria) ? { acceptanceCriteria: body.acceptanceCriteria } : {}),
-        ...(body?.resultSummary !== undefined ? { resultSummary: body.resultSummary } : {}),
-        ...(body?.blockedReason !== undefined ? { blockedReason: body.blockedReason } : {})
-      }
+      patch: this.buildAgentTaskPatch({ body, status: nextStatus })
     });
+  }
+
+  private buildAgentTaskPatch(input: { body: AgentTaskRefineBody; status: KanbanStatus | null }): UpdateKanbanTaskInput {
+    /* Empty arrays from LLM tools usually mean "unchanged", but an explicit clear flag must still wipe the checklist. */
+    const shouldReplaceAcceptanceCriteria =
+      input.body.clearAcceptanceCriteria === true ||
+      (Array.isArray(input.body.acceptanceCriteria) && input.body.acceptanceCriteria.length > 0);
+
+    return {
+      ...(typeof input.body.title === "string" ? { title: input.body.title } : {}),
+      ...(typeof input.body.description === "string" ? { description: input.body.description } : {}),
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.body.priority ? { priority: this.parsePriority(input.body.priority) } : {}),
+      ...(shouldReplaceAcceptanceCriteria ? { acceptanceCriteria: input.body.acceptanceCriteria ?? [] } : {}),
+      ...(input.body.resultSummary !== undefined ? { resultSummary: input.body.resultSummary } : {}),
+      ...(input.body.blockedReason !== undefined ? { blockedReason: input.body.blockedReason } : {})
+    };
   }
 
   private resolveExecutionActor(body: { agentId?: string; sessionId?: string } | null | undefined): KanbanExecutionActor {
