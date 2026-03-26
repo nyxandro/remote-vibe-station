@@ -25,6 +25,7 @@ import {
 import { publishPromptRuntimeTurnStarted } from "../prompt/prompt-runtime-turn-event";
 import { ProjectsService } from "../projects/projects.service";
 import { buildKanbanRunnerPrompt } from "./kanban-runner-prompt";
+import { KanbanRunnerHandoffStore } from "./kanban-runner-handoff.store";
 import { KanbanRunnerSessionService } from "./kanban-runner-session.service";
 import { KanbanExecutionConflictError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
@@ -74,7 +75,8 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly opencodeEvents: OpenCodeEventsService,
     private readonly events: EventsService,
     @Optional() private readonly sessionRouting?: OpenCodeSessionRoutingStore,
-    @Optional() finalMessages?: OpenCodeFinalMessageService
+    @Optional() finalMessages?: OpenCodeFinalMessageService,
+    @Optional() private readonly handoffStore?: KanbanRunnerHandoffStore
   ) {
     /* Tests may instantiate the runner without full Nest DI, so build the shared final publisher lazily when omitted. */
     this.finalMessages = finalMessages ?? new OpenCodeFinalMessageService(this.opencode, this.events);
@@ -315,6 +317,11 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
 
+    /* Startup and live wake-ups must respect the persisted Telegram delivery barrier before starting the next queued task. */
+    if (this.hasPendingHandoffBarrier(projectSlug)) {
+      return null;
+    }
+
     const queuedTask = tasks.find((task) => task.status === "queued" && task.executionSource !== "session") ?? null;
     if (!queuedTask) {
       return null;
@@ -362,13 +369,12 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
       const status = String((event.data as any)?.status ?? "").trim();
       const claimedBy = String((event.data as any)?.claimedBy ?? "").trim();
       const executionSource = String((event.data as any)?.executionSource ?? "").trim();
-      const source = String((event.data as any)?.source ?? "").trim();
       if (!projectSlug) {
         return;
       }
 
       const isCandidate =
-        (status === "queued" && executionSource !== "session" && source !== "agent") ||
+        (status === "queued" && executionSource !== "session") ||
         (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner");
       if (isCandidate) {
         this.scheduleProjectRun(projectSlug, "task-event");
@@ -400,6 +406,11 @@ export class KanbanRunnerService implements OnModuleInit, OnModuleDestroy {
     if (status === "in_progress" && claimedBy === KANBAN_RUNNER_AGENT_ID && executionSource === "runner") {
       this.scheduleProjectRun(projectSlug, "runner-finished");
     }
+  }
+
+  private hasPendingHandoffBarrier(projectSlug: string): boolean {
+    /* Pending final-reply delivery must block only the next queued pickup for the same project. */
+    return this.handoffStore?.listAll().some((entry) => entry.projectSlug === projectSlug) ?? false;
   }
 
   private scheduleProjectRun(projectSlug: string, reason: KanbanRunnerReason): void {
