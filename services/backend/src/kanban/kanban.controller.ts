@@ -5,7 +5,7 @@
  * - KanbanController - CRUD, workflow, and secure-link routes for Mini App/browser board access.
  */
 
-import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Query, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Inject, Param, Post, Query, Req, UnauthorizedException, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
 import { AppConfig, ConfigToken } from "../config/config.types";
@@ -14,7 +14,7 @@ import { isUnsafeLocalRequestAllowed } from "../security/local-dev-auth";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { KanbanValidationError } from "./kanban.errors";
 import { KanbanService } from "./kanban.service";
-import { publishKanbanTaskUpdated } from "./kanban-task-events";
+import { publishKanbanTaskDeleted, publishKanbanTaskUpdated } from "./kanban-task-events";
 import {
   KANBAN_CRITERION_STATUSES,
   KANBAN_PRIORITIES,
@@ -132,6 +132,18 @@ export class KanbanController {
       const task = await this.kanban.updateTask(id, this.buildTaskUpdatePatch(body));
       publishKanbanTaskUpdated(this.events, { task, source: "app" });
       return task;
+    } catch (error) {
+      this.rethrowAsHttp(error);
+    }
+  }
+
+  @Delete("tasks/:id")
+  public async deleteTask(@Param("id") id: string) {
+    /* User-controlled deletion is intentionally app-only so agents cannot erase backlog history mid-execution. */
+    try {
+      const task = await this.kanban.deleteTask(id);
+      publishKanbanTaskDeleted(this.events, { task, source: "app" });
+      return { ok: true };
     } catch (error) {
       this.rethrowAsHttp(error);
     }

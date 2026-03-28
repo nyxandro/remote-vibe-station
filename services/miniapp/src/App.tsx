@@ -33,6 +33,7 @@ import { useCliproxyAccounts } from "./hooks/use-cliproxy-accounts";
 import { useProxySettings } from "./hooks/use-proxy-settings";
 import { useServerMetrics } from "./hooks/use-server-metrics";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
+import { useRuntimeServices } from "./hooks/use-runtime-services";
 import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
 
@@ -115,10 +116,7 @@ export const App = () => {
   });
   const { terminalBuffer, clearTerminalBuffer } = useTerminalEvents(activeId);
   const clearActiveSelection = (): void => {
-    setActiveId(null);
-    setActiveTab("projects");
-    resetFiles();
-    setSettingsActiveFile(null);
+    setActiveId(null); setActiveTab("projects"); resetFiles(); setSettingsActiveFile(null);
   };
   const { telegramStreamEnabled, startTelegramChat, endTelegramChat } = useTelegramStreamControl(
     setError,
@@ -152,6 +150,7 @@ export const App = () => {
     isLoading: isServerMetricsLoading,
     loadMetrics: loadServerMetrics
   } = useServerMetrics(setError);
+  const { snapshot: runtimeServices, isLoading: isRuntimeServicesLoading, restartingByService, loadSnapshot: loadRuntimeServices, restartService: restartRuntimeService } = useRuntimeServices(setError);
   const {
     snapshot: proxySettings,
     isLoading: isProxySettingsLoading,
@@ -174,12 +173,7 @@ export const App = () => {
     activateAccount: activateCliproxyAccount,
     deleteAccount: deleteCliproxyAccount
   } = useCliproxyAccounts(setError, refreshProvidersSurface);
-
-  const { createProjectFolder, cloneProjectRepository, deleteProjectFolder } = useProjectWorkspace(
-    setError,
-    loadProjects,
-    clearActiveSelection
-  );
+  const { createProjectFolder, cloneProjectRepository, deleteProjectFolder } = useProjectWorkspace(setError, loadProjects, clearActiveSelection);
   const {
     runtime,
     isRuntimeLoading,
@@ -210,10 +204,7 @@ export const App = () => {
     loadStatus
   });
 
-  async function invalidateProjectCatalog(_projectId: string): Promise<void> {
-    /* Git mutations affect project cards too, so keep the catalog summary fresh after success. */
-    await loadProjects();
-  }
+  async function invalidateProjectCatalog(_projectId: string): Promise<void> { await loadProjects(); }
 
   async function refreshGitAndProjectsAfterWorkspaceMutation(projectId: string | null): Promise<void> {
     /* File/settings edits change the repo state and must invalidate both GitHub tab and Projects cards. */
@@ -232,12 +223,13 @@ export const App = () => {
   async function refreshSettingsSurface(projectId: string | null): Promise<void> {
     /* Manual settings reload/restart should refresh every visible diagnostics slice as one batch. */
     const requests: Array<Promise<void>> = [
-      loadSettingsOverview(projectId),
-      checkOpenCodeVersionStatus(),
-      loadRuntime(projectId),
-      loadGithubAuthStatus(),
-      loadServerMetrics()
-    ];
+        loadSettingsOverview(projectId),
+        checkOpenCodeVersionStatus(),
+        loadRuntime(projectId),
+        loadGithubAuthStatus(),
+        loadServerMetrics(),
+        loadRuntimeServices()
+      ];
 
     if (canControlTelegramStream) {
       requests.push(loadVoiceControlSettings());
@@ -246,13 +238,7 @@ export const App = () => {
     await Promise.all(requests);
   }
 
-  useEffect(() => {
-    void (async () => {
-      await syncOpenCodeAtStartup();
-      await loadProjects();
-      await restoreActiveProject();
-    })();
-  }, []);
+  useEffect(() => { void (async () => { await syncOpenCodeAtStartup(); await loadProjects(); await restoreActiveProject(); })(); }, []);
 
   const visibleProjects = useMemo(() => {
     return projects
@@ -289,6 +275,7 @@ export const App = () => {
     loadVoiceControlSettings,
     loadGithubAuthStatus,
     loadServerMetrics,
+    loadRuntimeServices,
     loadProviderOverview,
     loadProxySettings,
     loadCliproxyAccounts
@@ -372,9 +359,7 @@ export const App = () => {
           onDeployProject={(id) => void deployStart(id)}
           onStopProjectDeploy={(id) => void deployStop(id)}
           onCreateProjectFolder={(name) => void createProjectFolder(name)}
-          onCloneRepository={(repositoryUrl, folderName) =>
-            void cloneProjectRepository(repositoryUrl, folderName)
-          }
+          onCloneRepository={(repositoryUrl, folderName) => void cloneProjectRepository(repositoryUrl, folderName)}
           onRunComposeAction={(action) => withActiveProject((id) => void runAction(id, action))}
           onRunContainerAction={(service, action) =>
             withActiveProject((id) => void runContainerAction(id, service, action))
@@ -408,18 +393,14 @@ export const App = () => {
           onRefreshProjects={() => void loadProjects()}
           onSyncProjects={() => void syncOpenCodeNow()}
           onRestartOpenCode={() => void restartOpenCodeNow()}
-          onOpenSettingsFile={(kind, relativePath) =>
-            void openSettingsFile(kind, activeId, relativePath)
-          }
+          onOpenSettingsFile={(kind, relativePath) => void openSettingsFile(kind, activeId, relativePath)}
           onCreateSettingsFile={(kind, name) => void createSettingsFile(kind, activeId, name)}
           onSaveSettingsFile={(content) => saveSettingsFile(activeId, content)}
-          onDeleteActiveProject={() => {
+          onDeleteActiveProject={async () => {
             if (!activeId) {
               return;
             }
-            if (window.confirm(`Delete local project folder '${activeId}'?`)) {
-              void deleteProjectFolder(activeId);
-            }
+            await deleteProjectFolder(activeId);
           }}
           projectRuntime={{
             snapshot: runtime,
@@ -449,11 +430,11 @@ export const App = () => {
             isUpdating: isOpenCodeVersionUpdating
           }}
           onUpdateOpenCodeVersion={() => void updateOpenCodeVersionNow()}
-          serverMetrics={{
-            snapshot: serverMetrics,
-            isLoading: isServerMetricsLoading
-          }}
+          serverMetrics={{ snapshot: serverMetrics, isLoading: isServerMetricsLoading }}
+          runtimeServices={{ snapshot: runtimeServices, isLoading: isRuntimeServicesLoading, restartingByService }}
           onReloadServerMetrics={() => void loadServerMetrics()}
+          onReloadRuntimeServices={() => void loadRuntimeServices()}
+          onRestartRuntimeService={(serviceId) => void restartRuntimeService(serviceId)}
           iconForEntry={(name, kind) => iconForFileEntry(name, kind)}
           onGitCheckout={(branch) => withActiveProject((id) => void checkoutBranch(id, branch))}
           onGitCommit={(message) => withActiveProject((id) => void commitAll(id, message))}
@@ -489,7 +470,7 @@ export const App = () => {
             onCompleteCliproxyAuth: (input) => void completeCliproxyOAuth(input),
             onTestCliproxyAccount: (accountId) => void testCliproxyAccount(accountId),
             onActivateCliproxyAccount: (accountId) => void activateCliproxyAccount(accountId),
-            onDeleteCliproxyAccount: (accountId) => void deleteCliproxyAccount(accountId)
+            onDeleteCliproxyAccount: (accountId) => deleteCliproxyAccount(accountId)
           }}
         />
       </section>

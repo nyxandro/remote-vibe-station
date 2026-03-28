@@ -78,7 +78,7 @@ export const getKanbanStatusTimelineLabel = (status: KanbanStatus): string => {
     case "backlog":
       return "Backlog";
     case "refinement":
-      return "Refinement";
+      return "Plan";
     case "ready":
       return "Ready";
     case "queued":

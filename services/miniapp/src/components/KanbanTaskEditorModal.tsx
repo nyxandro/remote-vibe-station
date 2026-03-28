@@ -1,5 +1,5 @@
 /**
- * @fileoverview Modal editor for creating and refining kanban tasks.
+ * @fileoverview Modal editor for creating and planning kanban tasks.
  *
  * Exports:
  * - KanbanTaskEditorSubmit - Payload emitted by the editor modal.
@@ -20,26 +20,25 @@ import {
   Zap,
   Clock,
   Play,
-  Ban
+  Ban,
+  Trash2
 } from "lucide-react";
-
 import { KanbanCriterion, KanbanCriterionStatus, KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
 import {
   readStoredKanbanTaskEditorDraft,
   writeStoredKanbanTaskEditorDraft
 } from "./kanban-task-editor-draft";
+import { DangerConfirmModal } from "./DangerConfirmModal";
 import { KanbanCriteriaEditor } from "./KanbanCriteriaEditor";
 import { KanbanTaskOutcomeFields } from "./KanbanTaskOutcomeFields";
 import { KanbanTaskTimelineAccordion } from "./KanbanTaskTimelineAccordion";
 import { ThemeMode } from "../utils/theme";
-
 const VisualMarkdownEditor = lazy(async () => ({
   default: (await import("./VisualMarkdownEditor")).VisualMarkdownEditor
 }));
-
 const STATUS_OPTIONS: Array<{ value: KanbanStatus; label: string; icon: any }> = [
   { value: "backlog", label: "Backlog", icon: Inbox },
-  { value: "refinement", label: "Refinement", icon: Filter },
+  { value: "refinement", label: "Plan", icon: Filter },
   { value: "ready", label: "Ready", icon: Zap },
   { value: "queued", label: "Queue", icon: Clock },
   { value: "in_progress", label: "In progress", icon: Play },
@@ -74,6 +73,7 @@ type Props = {
   themeMode?: ThemeMode;
   onClose: () => void;
   onSubmit: (payload: KanbanTaskEditorSubmit) => void;
+  onDelete?: () => Promise<void> | void;
 };
 
 const DEFAULT_CRITERION_DRAFT = "";
@@ -127,6 +127,7 @@ export const KanbanTaskEditorModal = (props: Props) => {
   const [criterionDraft, setCriterionDraft] = useState<string>(DEFAULT_CRITERION_DRAFT);
   const [resultSummary, setResultSummary] = useState<string>("");
   const [blockedReason, setBlockedReason] = useState<string>("");
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState<boolean>(false);
 
   const resetCreateState = useCallback((nextProjectSlug: string) => {
     /* Fresh create sessions start from the requested project while keeping workflow defaults consistent. */
@@ -178,6 +179,7 @@ export const KanbanTaskEditorModal = (props: Props) => {
       setCriterionDraft(DEFAULT_CRITERION_DRAFT);
       setResultSummary(props.task.resultSummary ?? "");
       setBlockedReason(props.task.blockedReason ?? "");
+      setIsDeleteConfirmOpen(false);
       return;
     }
 
@@ -430,6 +432,19 @@ export const KanbanTaskEditorModal = (props: Props) => {
         </div>
 
         <div className="kanban-modal-actions">
+          {props.task && props.onDelete ? (
+            <button
+              aria-label="Delete task"
+              className="btn kanban-delete-icon-button"
+              disabled={props.isSaving}
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              title="Delete task"
+              type="button"
+            >
+              <Trash2 size={16} />
+            </button>
+          ) : null}
+
           <button className="btn ghost" onClick={props.onClose} type="button">
             Cancel
           </button>
@@ -460,6 +475,24 @@ export const KanbanTaskEditorModal = (props: Props) => {
             {submitLabel}
           </button>
         </div>
+
+        {isDeleteConfirmOpen && props.task && props.onDelete ? (
+          <DangerConfirmModal
+            title="Delete task permanently?"
+            description="This removes the card from the shared board for everyone and cannot be undone."
+            subjectLabel="Selected task"
+            subjectTitle={props.task.title}
+            subjectMeta={[props.task.projectName, STATUS_OPTIONS.find((option) => option.value === props.task?.status)?.label ?? props.task.status]}
+            cancelLabel="Keep task"
+            confirmLabel="Delete permanently"
+            confirmBusyLabel="Deleting..."
+            isBusy={props.isSaving}
+            onClose={() => setIsDeleteConfirmOpen(false)}
+            onConfirm={async () => {
+              await props.onDelete?.();
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

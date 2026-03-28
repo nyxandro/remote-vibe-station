@@ -20,6 +20,8 @@
  * - CliproxyOAuthStartPayload - OAuth start response with browser URL and state.
  * - OpenCodeVersionStatus (L124) - Current/latest OpenCode version metadata.
  * - OpenCodeVersionUpdateResult (L131) - Result payload for OpenCode update operation.
+ * - ManagedRuntimeServiceId - Supported runtime services shown in server health dashboard.
+ * - RuntimeServicesSnapshot - Health snapshot for Mini App server service dashboard.
  * - DiffPreviewResponse (L159) - Token-based diff preview payload.
  */
 
@@ -333,6 +335,40 @@ export type OpenCodeVersionUpdateResult = {
   restarted: string[];
   before: OpenCodeVersionStatus;
   after: OpenCodeVersionStatus;
+};
+
+export type ManagedRuntimeServiceId = "miniapp" | "bot" | "opencode" | "cliproxy";
+
+export type ManagedRuntimeServiceHealth = "healthy" | "degraded" | "down";
+
+export type RuntimeServiceProbe = {
+  ok: boolean;
+  statusCode: number | null;
+  latencyMs: number | null;
+  errorCode: string | null;
+};
+
+export type RuntimeServiceSnapshot = {
+  id: ManagedRuntimeServiceId;
+  label: string;
+  composeService: ManagedRuntimeServiceId;
+  containerName: string | null;
+  containerStatus: string;
+  health: ManagedRuntimeServiceHealth;
+  healthcheckStatus: string | null;
+  startedAt: string | null;
+  uptimeSeconds: number | null;
+  probeUrl: string | null;
+  probe: RuntimeServiceProbe | null;
+  message: string;
+  actions: {
+    canRestart: boolean;
+  };
+};
+
+export type RuntimeServicesSnapshot = {
+  capturedAt: string;
+  services: RuntimeServiceSnapshot[];
 };
 
 export type FileEntry = {

@@ -6,11 +6,12 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Plus, RefreshCw, Search, X } from "lucide-react";
+import { ExternalLink, Plus, Search, X } from "lucide-react";
 
 import { useDraggableScroll } from "../hooks/use-draggable-scroll";
 import { CreateKanbanTaskPayload, UpdateKanbanTaskPayload } from "../hooks/use-kanban";
 import { KanbanTaskEditorModal, KanbanTaskEditorSubmit } from "./KanbanTaskEditorModal";
+import { KanbanTaskCard } from "./KanbanTaskCard";
 import { clearStoredKanbanTaskEditorDraft } from "./kanban-task-editor-draft";
 import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../types";
 import { ThemeMode } from "../utils/theme";
@@ -19,7 +20,7 @@ const COLUMN_PAGE_SIZE = 10;
 
 const COLUMNS: Array<{ status: KanbanStatus; label: string; emptyText: string }> = [
   { status: "backlog", label: "Backlog", emptyText: "Store raw ideas here before grooming starts." },
-  { status: "refinement", label: "Refinement", emptyText: "Clarify missing scope, inputs, and acceptance criteria here." },
+  { status: "refinement", label: "Plan", emptyText: "Clarify scope, inputs, acceptance criteria, and rollout plan here." },
   { status: "ready", label: "Ready", emptyText: "Prepared tasks wait here until you intentionally queue them." },
   { status: "queued", label: "Queue", emptyText: "Approved tasks wait here for execution pickup." },
   { status: "in_progress", label: "In progress", emptyText: "Agent-claimed work appears here." },
@@ -52,14 +53,22 @@ type Props = {
   isLoading: boolean;
   isSaving: boolean;
   themeMode?: ThemeMode;
-  onRefresh: () => void;
   onCreateTask: (payload: CreateKanbanTaskPayload) => Promise<void> | void;
+  onDeleteTask?: (taskId: string) => Promise<void> | void;
   onUpdateTask: (taskId: string, patch: UpdateKanbanTaskPayload) => Promise<void> | void;
   onMoveTask: (taskId: string, status: KanbanStatus) => void;
   onOpenGlobalBoard?: () => void;
 };
 
-
+const createInitialColumnVisibleCounts = (): Record<KanbanStatus, number> => ({
+  backlog: COLUMN_PAGE_SIZE,
+  refinement: COLUMN_PAGE_SIZE,
+  ready: COLUMN_PAGE_SIZE,
+  queued: COLUMN_PAGE_SIZE,
+  in_progress: COLUMN_PAGE_SIZE,
+  blocked: COLUMN_PAGE_SIZE,
+  done: COLUMN_PAGE_SIZE
+});
 
 export const KanbanBoard = (props: Props) => {
   const [search, setSearch] = useState<string>("");
@@ -70,16 +79,10 @@ export const KanbanBoard = (props: Props) => {
   const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false);
   const [editingTask, setEditingTask] = useState<KanbanTask | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
-  const [columnVisibleCounts, setColumnVisibleCounts] = useState<Record<KanbanStatus, number>>({
-    backlog: COLUMN_PAGE_SIZE,
-    refinement: COLUMN_PAGE_SIZE,
-    ready: COLUMN_PAGE_SIZE,
-    queued: COLUMN_PAGE_SIZE,
-    in_progress: COLUMN_PAGE_SIZE,
-    blocked: COLUMN_PAGE_SIZE,
-    done: COLUMN_PAGE_SIZE
-  });
+  const [columnVisibleCounts, setColumnVisibleCounts] = useState<Record<KanbanStatus, number>>(createInitialColumnVisibleCounts);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const columnRefs = useRef<Partial<Record<KanbanStatus, HTMLElement | null>>>({});
+  const autoPositionedViewKeyRef = useRef<string | null>(null);
 
   const { ref: boardRef, isDragging: isBoardDragging, handlers: boardHandlers } = useDraggableScroll();
 
@@ -89,7 +92,6 @@ export const KanbanBoard = (props: Props) => {
       setProjectFilter(props.activeProjectSlug ?? "all");
       return;
     }
-
     if (props.initialProjectFilter) {
       setProjectFilter(props.initialProjectFilter);
     }
@@ -100,7 +102,6 @@ export const KanbanBoard = (props: Props) => {
     if (!isSearchOpen) {
       return;
     }
-
     searchInputRef.current?.focus();
   }, [isSearchOpen]);
 
@@ -117,7 +118,6 @@ export const KanbanBoard = (props: Props) => {
       if (!normalizedSearch) {
         return true;
       }
-
       const haystack = [task.title, task.description, task.projectName, ...task.acceptanceCriteria.map((criterion) => criterion.text)]
         .join("\n")
         .toLowerCase();
@@ -125,17 +125,16 @@ export const KanbanBoard = (props: Props) => {
     });
   }, [projectFilter, props.activeProjectSlug, props.scope, props.tasks, search]);
 
+  const filteredViewKey = useMemo(() => {
+    /* Auto-positioning should reset only when the visible board context changes. */
+    const normalizedSearch = search.trim().toLowerCase();
+    const effectiveProjectSlug = props.scope === "project" ? props.activeProjectSlug ?? "all" : projectFilter;
+    return `${props.scope}|${effectiveProjectSlug}|${normalizedSearch}`;
+  }, [projectFilter, props.activeProjectSlug, props.scope, search]);
+
   useEffect(() => {
     /* Filter changes should collapse every column back to the first page so pagination stays predictable. */
-    setColumnVisibleCounts({
-      backlog: COLUMN_PAGE_SIZE,
-      refinement: COLUMN_PAGE_SIZE,
-      ready: COLUMN_PAGE_SIZE,
-      queued: COLUMN_PAGE_SIZE,
-      in_progress: COLUMN_PAGE_SIZE,
-      blocked: COLUMN_PAGE_SIZE,
-      done: COLUMN_PAGE_SIZE
-    });
+    setColumnVisibleCounts(createInitialColumnVisibleCounts());
   }, [filteredTasks]);
 
   const tasksByStatus = useMemo(() => {
@@ -170,13 +169,42 @@ export const KanbanBoard = (props: Props) => {
         if (createdDiff !== 0) {
           return createdDiff;
         }
-
         return right.id.localeCompare(left.id);
       });
     }
 
     return buckets;
   }, [filteredTasks]);
+
+  const firstNonEmptyStatus = useMemo(() => {
+    /* Mobile boards should land on the nearest useful column instead of always starting at empty backlog. */
+    return COLUMNS.find((column) => tasksByStatus[column.status].length > 0)?.status ?? null;
+  }, [tasksByStatus]);
+
+  useEffect(() => {
+    /* Auto-scroll once per visible board context so live updates do not keep yanking the user sideways. */
+    if (!boardRef.current || !firstNonEmptyStatus) {
+      return;
+    }
+
+    if (autoPositionedViewKeyRef.current === filteredViewKey) {
+      return;
+    }
+
+    const targetColumn = columnRefs.current[firstNonEmptyStatus];
+    if (!targetColumn) {
+      return;
+    }
+
+    /* jsdom lacks scrollTo(), so keep a scrollLeft fallback while browsers still get smooth positioning. */
+    if (typeof boardRef.current.scrollTo === "function") {
+      boardRef.current.scrollTo({ left: targetColumn.offsetLeft, behavior: "smooth" });
+    } else {
+      boardRef.current.scrollLeft = targetColumn.offsetLeft;
+    }
+
+    autoPositionedViewKeyRef.current = filteredViewKey;
+  }, [boardRef, filteredViewKey, firstNonEmptyStatus]);
 
   const handleEditorSubmit = async (payload: KanbanTaskEditorSubmit): Promise<void> => {
     /* Create and edit dialogs both feed the board through one normalized payload shape. */
@@ -216,6 +244,21 @@ export const KanbanBoard = (props: Props) => {
       setIsCreateOpen(false);
     } catch (error) {
       setEditorError(error instanceof Error ? error.message : "Failed to save task");
+    }
+  };
+
+  const handleEditorDelete = async (): Promise<void> => {
+    /* Keep delete failures in the shared editor alert area instead of closing the modal and losing context. */
+    if (!editingTask || !props.onDeleteTask) {
+      return;
+    }
+
+    setEditorError(null);
+    try {
+      await props.onDeleteTask(editingTask.id);
+      setEditingTask(null);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "Failed to delete task");
     }
   };
 
@@ -285,16 +328,6 @@ export const KanbanBoard = (props: Props) => {
                 ) : null}
 
                 <button
-                  className="btn outline kanban-toolbar-icon-button"
-                  onClick={props.onRefresh}
-                  type="button"
-                  aria-label="Refresh board"
-                  title="Refresh board"
-                >
-                  <RefreshCw size={16} />
-                </button>
-
-                <button
                   className="btn primary kanban-toolbar-icon-button"
                   onClick={() => setIsCreateOpen(true)}
                   type="button"
@@ -318,6 +351,10 @@ export const KanbanBoard = (props: Props) => {
         {COLUMNS.map((column) => (
           <section
             key={column.status}
+            ref={(node) => {
+              /* Keep stable DOM anchors per status so board auto-positioning can target the first useful column. */
+              columnRefs.current[column.status] = node;
+            }}
             className={
               dropStatus === column.status
                 ? `kanban-column ${COLUMN_STYLE_CLASS[column.status]} kanban-column-active`
@@ -355,61 +392,18 @@ export const KanbanBoard = (props: Props) => {
               ) : null}
 
               {tasksByStatus[column.status].slice(0, columnVisibleCounts[column.status]).map((task) => (
-                <article
+                <KanbanTaskCard
                   key={task.id}
-                  className={`kanban-card kanban-card-${task.status}`}
-                  draggable
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Open task ${task.title}`}
-                  onClick={() => setEditingTask(task)}
-                  onKeyDown={(event) => {
-                    /* Keyboard users need the same full-card edit affordance as pointer users. */
-                    if (event.key !== "Enter" && event.key !== " ") {
-                      return;
-                    }
-
-                    event.preventDefault();
-                    setEditingTask(task);
-                  }}
+                  task={task}
+                  scope={props.scope}
+                  priorityLabel={PRIORITY_LABELS[task.priority]}
+                  onOpen={() => setEditingTask(task)}
                   onDragStart={() => setDragTaskId(task.id)}
                   onDragEnd={() => {
                     setDragTaskId(null);
                     setDropStatus(null);
                   }}
-                >
-                  <div className="kanban-card-title">{task.title}</div>
-
-                  <div className="kanban-card-topline">
-                    <div className="kanban-card-topline-left">
-                      <span className={`kanban-priority-badge kanban-priority-${task.priority}`}>
-                        {PRIORITY_LABELS[task.priority]}
-                      </span>
-                      {props.scope === "global" ? (
-                        <span className="kanban-project-badge">{task.projectName}</span>
-                      ) : null}
-                    </div>
-
-                  </div>
-
-                  {task.acceptanceCriteria.length > 0 ? (
-                    <div className="kanban-card-progress">
-                      {task.acceptanceCriteria.map((criterion, index) => (
-                        <div
-                          key={criterion.id || index}
-                          className={
-                            criterion.status === "blocked"
-                              ? "kanban-card-progress-segment kanban-card-progress-segment-blocked"
-                              : criterion.status === "done"
-                              ? `kanban-card-progress-segment kanban-card-progress-segment-done kanban-card-progress-segment-done-${task.status}`
-                              : "kanban-card-progress-segment"
-                          }
-                          title={criterion.text}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
+                />
               ))}
 
               {tasksByStatus[column.status].length > columnVisibleCounts[column.status] ? (
@@ -455,6 +449,7 @@ export const KanbanBoard = (props: Props) => {
           isSaving={props.isSaving}
           themeMode={props.themeMode}
           onClose={() => setEditingTask(null)}
+          onDelete={props.onDeleteTask ? handleEditorDelete : undefined}
           onSubmit={handleEditorSubmit}
         />
       ) : null}

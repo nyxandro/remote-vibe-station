@@ -175,6 +175,20 @@ export class KanbanService {
     return this.decorateTask(updated);
   }
 
+  public async deleteTask(taskId: string): Promise<KanbanTaskView> {
+    /* Deletion physically removes obsolete cards so user-owned cleanup does not leave hidden JSON residue behind. */
+    const deleted = await this.store.transact((draft) => {
+      const task = this.findTaskOrThrow(draft.tasks, taskId);
+      if (task.status === "in_progress") {
+        throw new KanbanValidationError(`Cannot delete kanban task "${task.id}" while it is in progress. Block or finish it first.`);
+      }
+      draft.tasks = draft.tasks.filter((item) => item.id !== task.id);
+      return task;
+    });
+
+    return this.decorateTask(deleted);
+  }
+
   public async updateCriterion(input: {
     taskId: string;
     criterionId: string;

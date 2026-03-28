@@ -24,6 +24,7 @@ export type ReactiveWorkspaceSyncInput = {
   loadVoiceControlSettings: () => Promise<void> | void;
   loadGithubAuthStatus: () => Promise<void> | void;
   loadServerMetrics: () => Promise<void> | void;
+  loadRuntimeServices: () => Promise<void> | void;
   loadProviderOverview: () => Promise<void> | void;
   loadProxySettings: () => Promise<void> | void;
   loadCliproxyAccounts: () => Promise<void> | void;
@@ -98,7 +99,8 @@ export const useReactiveWorkspaceSync = (input: ReactiveWorkspaceSyncInput): voi
           current.loadOpenCodeVersionStatus(),
           current.loadRuntime(current.activeId),
           current.loadGithubAuthStatus(),
-          current.loadServerMetrics()
+          current.loadServerMetrics(),
+          current.loadRuntimeServices()
         ];
 
         if (current.canControlTelegramStream) {

@@ -624,4 +624,62 @@ describe("SettingsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update OpenCode" }));
     expect(onUpdateOpenCodeVersion).toHaveBeenCalledTimes(1);
   });
+
+  it("renders service health dashboard and opens service modal", () => {
+    /* Settings should expose critical runtime service controls directly under the title. */
+    const onRestartRuntimeService = vi.fn();
+
+    render(
+      <SettingsTab
+        activeId={null}
+        themeMode="light"
+        overview={null}
+        activeFile={null}
+        onChangeTheme={vi.fn()}
+        onRefreshProjects={vi.fn()}
+        onSyncProjects={vi.fn()}
+        onRestartOpenCode={vi.fn()}
+        onLoadOverview={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreateFile={vi.fn()}
+        onSaveActiveFile={vi.fn()}
+        onDeleteActiveProject={vi.fn()}
+        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
+        onSaveProjectRuntimeSettings={vi.fn()}
+        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
+        runtimeServices={{
+          snapshot: {
+            capturedAt: "2026-03-28T12:00:00.000Z",
+            services: [
+              {
+                id: "opencode",
+                label: "OpenCode",
+                composeService: "opencode",
+                containerName: "remote-vibe-station-opencode-1",
+                containerStatus: "running",
+                health: "healthy",
+                healthcheckStatus: null,
+                startedAt: "2026-03-28T11:00:00.000Z",
+                uptimeSeconds: 3600,
+                probeUrl: "http://opencode:4096/",
+                probe: { ok: true, statusCode: 200, latencyMs: 31, errorCode: null },
+                message: "Service is responding normally.",
+                actions: { canRestart: true }
+              }
+            ]
+          },
+          isLoading: false,
+          restartingByService: {}
+        }}
+        onReloadRuntimeServices={vi.fn()}
+        onRestartRuntimeService={onRestartRuntimeService}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /OpenCode/i })[0]);
+    expect(screen.getByRole("dialog", { name: "OpenCode" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restart service" }));
+    expect(onRestartRuntimeService).toHaveBeenCalledWith("opencode");
+  });
 });

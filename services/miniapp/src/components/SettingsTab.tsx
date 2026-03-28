@@ -7,21 +7,26 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CliproxyAccountState,
+  ManagedRuntimeServiceId,
   GithubAuthStatus,
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
   ProjectRuntimeSettingsPatch,
   ProjectRuntimeSnapshot,
   OpenCodeVersionStatus,
+  RuntimeServicesSnapshot,
   SystemMetricsSnapshot,
   SettingsFileSummary,
   VoiceControlSettings
 } from "../types";
 import { inferTextEditorLanguage } from "../utils/text-editor-language";
+import { SettingsRuntimeDashboard } from "./SettingsRuntimeDashboard";
 import { ThemeMode } from "../utils/theme";
 import { GitHubAuthSettingsSection } from "./GitHubAuthSettingsSection";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
 import { ServerParametersAccordion } from "./ServerParametersAccordion";
+import { SettingsProjectDangerZone } from "./SettingsProjectDangerZone";
 import { SettingsEditorModal } from "./SettingsEditorModal";
 import { ThemeModeToggle } from "./ThemeModeToggle";
 import { VoiceControlSettingsSection } from "./VoiceControlSettingsSection";
@@ -47,7 +52,7 @@ type Props = {
   onOpenFile: (kind: OpenCodeSettingsKind, relativePath?: string) => void;
   onCreateFile: (kind: OpenCodeSettingsKind, name?: string) => void;
   onSaveActiveFile: (content: string) => Promise<void> | void;
-  onDeleteActiveProject: () => void;
+  onDeleteActiveProject: () => Promise<void> | void;
   projectRuntime: {
     snapshot: ProjectRuntimeSnapshot | null;
     isLoading: boolean;
@@ -88,11 +93,17 @@ type Props = {
     isUpdating: boolean;
   };
   onUpdateOpenCodeVersion?: () => void;
-  serverMetrics?: {
-    snapshot: SystemMetricsSnapshot | null;
-    isLoading: boolean;
-  };
+  serverMetrics?: { snapshot: SystemMetricsSnapshot | null; isLoading: boolean };
   onReloadServerMetrics?: () => void;
+  runtimeServices?: { snapshot: RuntimeServicesSnapshot | null; isLoading: boolean; restartingByService: Partial<Record<ManagedRuntimeServiceId, boolean>> };
+  proxyState?: {
+    snapshot: import("../types").ProxySettingsSnapshot | null;
+    accounts: CliproxyAccountState | null;
+    isApplying: boolean;
+  };
+  onReloadRuntimeServices?: () => void;
+  onRestartRuntimeService?: (serviceId: ManagedRuntimeServiceId) => void;
+  onApplyProxyRuntime?: () => void;
 };
 
 export const SettingsTab = (props: Props) => {
@@ -257,6 +268,24 @@ export const SettingsTab = (props: Props) => {
         <h3 className="panel-title">Settings</h3>
       </div>
 
+      {props.runtimeServices ? (
+        <SettingsRuntimeDashboard
+          overview={props.overview}
+          openCodeVersion={props.openCodeVersion}
+          restartOpenCodeState={props.restartOpenCodeState}
+          runtimeServices={props.runtimeServices}
+          proxyState={props.proxyState}
+          onReloadRuntimeServices={props.onReloadRuntimeServices ?? (() => {})}
+          onRestartRuntimeService={props.onRestartRuntimeService}
+          onApplyProxyRuntime={props.onApplyProxyRuntime}
+          onOpenFile={(kind) => props.onOpenFile(kind)}
+          onRefreshProjects={props.onRefreshProjects}
+          onSyncProjects={props.onSyncProjects}
+          onRestartOpenCode={props.onRestartOpenCode}
+          onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
+        />
+      ) : null}
+
       <details className="settings-accordion-item" open>
         <summary>1. Agent rules</summary>
         <div className="settings-accordion-body">
@@ -396,16 +425,14 @@ export const SettingsTab = (props: Props) => {
                 </button>
               ) : null}
 
-              <button className="btn ghost" onClick={props.onDeleteActiveProject} type="button">
-                Delete selected local project
-              </button>
+              <SettingsProjectDangerZone
+                activeProjectId={props.activeId}
+                onDeleteActiveProject={props.onDeleteActiveProject}
+              />
             </>
           ) : (
-            <div className="placeholder">Select a project to manage deletion.</div>
+            <SettingsProjectDangerZone activeProjectId={null} onDeleteActiveProject={props.onDeleteActiveProject} />
           )}
-          <div className="project-create-note">
-            If the project is a git repository with uncommitted changes, deletion is blocked.
-          </div>
         </div>
       </details>
 
@@ -463,9 +490,7 @@ export const SettingsTab = (props: Props) => {
         saveResult={editorSaveResult}
         onChange={setDraft}
         onClose={() => setIsEditorOpen(false)}
-        onSave={() => {
-          void saveEditorDraft();
-        }}
+        onSave={() => void saveEditorDraft()}
       />
     </section>
   );

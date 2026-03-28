@@ -4,7 +4,7 @@
 
 /* @vitest-environment jsdom */
 
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PROVIDERS_TAB_FIELD_IDS } from "../providers-tab-field-ids";
@@ -268,9 +268,8 @@ describe("ProvidersTab", () => {
     expect(props.onTestCliproxyAccount).toHaveBeenCalledWith("codex-user@example.com");
   });
 
-  it("deletes CLIProxy account only after confirmation", () => {
-    /* Destructive account removal must stay behind explicit browser confirmation. */
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("deletes CLIProxy account only after explicit modal confirmation", () => {
+    /* Destructive account removal should stay inside the Mini App UI instead of falling back to the browser prompt. */
     const { props } = renderProvidersTab({
       selected: {
         model: { providerID: "cliproxy", modelID: "gpt-5.4" },
@@ -282,9 +281,33 @@ describe("ProvidersTab", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    expect(props.onDeleteCliproxyAccount).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Удалить CLIProxy аккаунт?" });
+    expect(dialog).toBeTruthy();
+    expect(within(dialog).getByText("codex-user@example.com")).toBeTruthy();
 
-    expect(confirmSpy).toHaveBeenCalledWith("Удалить аккаунт codex-user@example.com?");
+    fireEvent.click(screen.getByRole("button", { name: "Удалить аккаунт" }));
+
     expect(props.onDeleteCliproxyAccount).toHaveBeenCalledWith("codex-user@example.com");
+  });
+
+  it("lets the operator cancel CLIProxy account deletion from the modal", () => {
+    /* Operators should be able to back out of destructive CLIProxy actions without deleting auth state. */
+    const { props } = renderProvidersTab({
+      selected: {
+        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+        thinking: "high",
+        agent: "build"
+      },
+      cliproxyAccounts: cliproxyAccountsFixture,
+      proxySnapshot: proxySnapshotFixture
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    fireEvent.click(screen.getByRole("button", { name: "Оставить аккаунт" }));
+
+    expect(screen.queryByRole("dialog", { name: "Удалить CLIProxy аккаунт?" })).toBeNull();
+    expect(props.onDeleteCliproxyAccount).not.toHaveBeenCalled();
   });
 
   it("deduplicates repeated CLIProxy account details", () => {

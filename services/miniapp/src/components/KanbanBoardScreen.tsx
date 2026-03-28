@@ -23,8 +23,8 @@ export const KanbanBoardScreen = (props: Props) => {
     isSaving,
     error,
     loadTasks,
-    reloadTasks,
     createTask,
+    deleteTask,
     updateTask,
     moveTask
   } = useKanban();
@@ -44,7 +44,7 @@ export const KanbanBoardScreen = (props: Props) => {
           <div>
             <div className="panel-title">Shared Kanban [REFRESHED]</div>
             <div className="kanban-standalone-copy">
-              One secure board for backlog storage, task refinement, execution readiness, queue management, and agent work across all projects.
+              One secure board for backlog storage, task planning, execution readiness, queue management, and agent work across all projects.
             </div>
           </div>
 
@@ -71,11 +71,8 @@ export const KanbanBoardScreen = (props: Props) => {
           isLoading={isLoading || isProjectsLoading}
           isSaving={isSaving}
           themeMode={themeMode}
-          onRefresh={() => {
-            void reloadTasks();
-            void loadProjects();
-          }}
           onCreateTask={(payload) => createTask(payload)}
+          onDeleteTask={(taskId) => deleteTask(taskId)}
           onUpdateTask={(taskId, patch) => updateTask(taskId, patch)}
           onMoveTask={(taskId, status) => moveTask(taskId, status)}
         />

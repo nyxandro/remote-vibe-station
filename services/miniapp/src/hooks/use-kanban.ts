@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { apiGet, apiPost, getEventStreamUrl } from "../api/client";
+import { apiDelete, apiGet, apiPost, getEventStreamUrl } from "../api/client";
 import { KanbanCriterion, KanbanPriority, KanbanStatus, KanbanTask } from "../types";
 
 export type KanbanTaskFilter = {
@@ -245,7 +245,7 @@ export const useKanban = () => {
 
   const updateTask = useCallback(
     async (taskId: string, patch: UpdateKanbanTaskPayload): Promise<void> => {
-      /* Backlog refinement and card edits share the same update endpoint. */
+      /* Backlog planning and card edits share the same update endpoint. */
       console.info("[useKanban] updateTask", taskId, patch);
       await mutate(async () => {
         await apiPost(`/api/kanban/tasks/${encodeURIComponent(taskId)}/update`, patch);
@@ -277,6 +277,16 @@ export const useKanban = () => {
     [mutate]
   );
 
+  const deleteTask = useCallback(
+    async (taskId: string): Promise<void> => {
+      /* User deletion reuses the shared mutation lifecycle so the current filtered board refreshes consistently. */
+      await mutate(async () => {
+        await apiDelete(`/api/kanban/tasks/${encodeURIComponent(taskId)}`);
+      });
+    },
+    [mutate]
+  );
+
   const createBoardLink = useCallback(async (projectSlug?: string | null): Promise<{ url: string }> => {
     /* Shared board links are generated on-demand so the browser token stays short-lived. */
     setError(null);
@@ -299,6 +309,7 @@ export const useKanban = () => {
     loadTasks,
     reloadTasks,
     createTask,
+    deleteTask,
     updateTask,
     updateCriterion,
     moveTask,

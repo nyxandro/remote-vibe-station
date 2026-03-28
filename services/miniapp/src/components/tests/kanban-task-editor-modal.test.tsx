@@ -212,4 +212,58 @@ describe("KanbanTaskEditorModal", () => {
     expect(screen.getByText(/Blocked/i)).toBeTruthy();
     expect(screen.getByText(/20m paused/i)).toBeTruthy();
   });
+
+  it("opens a dedicated delete confirmation modal before removing the task", () => {
+    /* Destructive task removal should stay inside the kanban design system instead of using the native browser prompt. */
+    const onDelete = vi.fn();
+
+    render(
+      <KanbanTaskEditorModal
+        mode="edit"
+        scope="project"
+        activeProjectSlug="alpha"
+        projects={[buildProject()]}
+        task={buildTask()}
+        isSaving={false}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        onDelete={onDelete}
+      />
+    );
+
+    expect(screen.queryByText("Delete task")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Delete task" }));
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Delete task permanently?" })).toBeTruthy();
+    expect(screen.getByText("Prepare release")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the user dismiss the delete confirmation modal without removing the task", () => {
+    /* Cancellation must stay one tap away so operators can back out of destructive actions safely. */
+    const onDelete = vi.fn();
+
+    render(
+      <KanbanTaskEditorModal
+        mode="edit"
+        scope="project"
+        activeProjectSlug="alpha"
+        projects={[buildProject()]}
+        task={buildTask()}
+        isSaving={false}
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        onDelete={onDelete}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete task" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep task" }));
+
+    expect(screen.queryByRole("dialog", { name: "Delete task permanently?" })).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
 });

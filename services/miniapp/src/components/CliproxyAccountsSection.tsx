@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import { CliproxyAccountState, CliproxyOAuthStartPayload } from "../types";
 import { CliproxyQuotaBlock } from "./CliproxyQuotaBlock";
+import { DangerConfirmModal } from "./DangerConfirmModal";
 import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 type Props = {
@@ -27,7 +28,7 @@ type Props = {
   }) => void;
   onTestAccount: (accountId: string) => void;
   onActivateAccount: (accountId: string) => void;
-  onDeleteAccount: (accountId: string) => void;
+  onDeleteAccount: (accountId: string) => Promise<void> | void;
 };
 
 type ParsedCliproxyStatusMessage = {
@@ -39,6 +40,7 @@ export const CliproxyAccountsSection = (props: Props) => {
   const [callbackUrlDraft, setCallbackUrlDraft] = useState<string>("");
   const [codeDraft, setCodeDraft] = useState<string>("");
   const [stateDraft, setStateDraft] = useState<string>("");
+  const [pendingDeleteAccountId, setPendingDeleteAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     /* Starting a new auth flow must reset callback drafts from previous attempts. */
@@ -48,6 +50,7 @@ export const CliproxyAccountsSection = (props: Props) => {
   }, [props.oauthStart]);
 
   const selectedProvider = props.oauthStart?.provider;
+  const pendingDeleteAccount = props.accounts?.accounts.find((account) => account.id === pendingDeleteAccountId) ?? null;
 
   const formatDuration = (seconds: number): string => {
     /* Relative reset countdown must stay readable instead of exposing raw provider seconds. */
@@ -286,11 +289,7 @@ export const CliproxyAccountsSection = (props: Props) => {
                     className="btn ghost"
                     type="button"
                     disabled={props.isSubmitting}
-                    onClick={() => {
-                      if (window.confirm(`Удалить аккаунт ${account.name}?`)) {
-                        props.onDeleteAccount(account.id);
-                      }
-                    }}
+                    onClick={() => setPendingDeleteAccountId(account.id)}
                   >
                     Удалить
                   </button>
@@ -385,6 +384,26 @@ export const CliproxyAccountsSection = (props: Props) => {
             {props.isSubmitting ? "Submitting..." : "Завершить подключение"}
           </button>
         </>
+      ) : null}
+
+      {pendingDeleteAccount ? (
+        <DangerConfirmModal
+          title="Удалить CLIProxy аккаунт?"
+          description="Mini App удалит auth file этого аккаунта из CLIProxy. Если он понадобится снова, авторизацию придется пройти заново."
+          subjectLabel="Выбранный аккаунт"
+          subjectTitle={pendingDeleteAccount.name}
+          subjectMeta={[pendingDeleteAccount.providerLabel, pendingDeleteAccount.status ?? "unknown"]}
+          cancelLabel="Оставить аккаунт"
+          confirmLabel="Удалить аккаунт"
+          confirmBusyLabel="Удаляем аккаунт..."
+          isBusy={props.isSubmitting}
+          onClose={() => setPendingDeleteAccountId(null)}
+          onConfirm={async () => {
+            /* Close only after the current CLIProxy mutation finishes so repeated taps cannot double-submit deletion. */
+            await props.onDeleteAccount(pendingDeleteAccount.id);
+            setPendingDeleteAccountId(null);
+          }}
+        />
       ) : null}
     </div>
   );

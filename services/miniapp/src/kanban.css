@@ -424,7 +424,8 @@ html[data-theme="dark"] .kanban-card-progress-segment {
 }
 
 .kanban-priority-badge,
-.kanban-project-badge {
+.kanban-project-badge,
+.kanban-duration-badge {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
@@ -453,6 +454,11 @@ html[data-theme="dark"] .kanban-card-progress-segment {
   background: #e9f0ff;
 }
 
+.kanban-duration-badge {
+  color: #17644a;
+  background: #ddf7eb;
+}
+
 html[data-theme="dark"] .kanban-priority-low {
   color: #d6e6f8;
   background: rgba(98, 128, 160, 0.28);
@@ -471,6 +477,11 @@ html[data-theme="dark"] .kanban-priority-high {
 html[data-theme="dark"] .kanban-project-badge {
   color: #d5e2ff;
   background: rgba(88, 124, 204, 0.22);
+}
+
+html[data-theme="dark"] .kanban-duration-badge {
+  color: #b8f0d3;
+  background: rgba(40, 124, 90, 0.28);
 }
 
 .kanban-card-description,
@@ -589,6 +600,26 @@ html[data-theme="dark"] .kanban-project-badge {
   justify-content: flex-end;
   gap: 12px;
   flex-shrink: 0;
+}
+
+.kanban-delete-icon-button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  margin-right: auto;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ff8f6b 0%, #de4a3e 100%);
+  border-color: transparent;
+  box-shadow: 0 12px 24px rgba(222, 74, 62, 0.22);
+}
+
+.kanban-delete-icon-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(222, 74, 62, 0.28);
 }
 
 .kanban-modal-title {
@@ -938,6 +969,11 @@ html[data-theme="dark"] .kanban-project-badge {
 
   .kanban-modal-actions .btn {
     flex: 1;
+  }
+
+  .kanban-modal-actions .kanban-delete-icon-button {
+    flex: 0 0 44px;
+    width: 44px;
   }
 
   .kanban-columns {

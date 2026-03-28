@@ -68,7 +68,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={onCreateTask}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -101,7 +100,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={onCreateTask}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -137,7 +135,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={onCreateTask}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -168,7 +165,7 @@ describe("KanbanBoard", () => {
   });
 
   it("renders all workflow columns including agent execution states", () => {
-    /* Human and agent users need one board that separates raw ideas, refinement, readiness, queueing, and execution. */
+    /* Human and agent users need one board that separates raw ideas, planning, readiness, queueing, and execution. */
     render(
       <KanbanBoard
         scope="project"
@@ -177,7 +174,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -185,16 +181,91 @@ describe("KanbanBoard", () => {
     );
 
     expect(screen.getByText("Backlog")).toBeTruthy();
-    expect(screen.getByText("Refinement")).toBeTruthy();
+    expect(screen.getByText("Plan")).toBeTruthy();
     expect(screen.getByText("Ready")).toBeTruthy();
     expect(screen.getByText("Queue")).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
     expect(screen.getByText("Blocked")).toBeTruthy();
     expect(screen.getByText("Done")).toBeTruthy();
     expect(screen.getByText("Discuss backlog item")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Refresh board" })).toBeNull();
     expect(screen.getByTitle("One").className).toContain("kanban-card-progress-segment-done");
     expect(screen.getByTitle("One").className).toContain("kanban-card-progress-segment-done-backlog");
     expect(screen.getByTitle("Two").className).toBe("kanban-card-progress-segment");
+  });
+
+  it("shows the total execution time badge on completed cards", () => {
+    /* Done cards should surface total active execution time directly on the board without reopening the task modal. */
+    render(
+      <KanbanBoard
+        scope="project"
+        tasks={[
+          buildTask({
+            id: "task-done",
+            title: "Completed task",
+            status: "done",
+            statusTimeline: [
+              { status: "queued", changedAt: "2026-03-10T09:00:00.000Z" },
+              { status: "in_progress", changedAt: "2026-03-10T09:10:00.000Z" },
+              { status: "blocked", changedAt: "2026-03-10T09:40:00.000Z" },
+              { status: "queued", changedAt: "2026-03-10T10:00:00.000Z" },
+              { status: "in_progress", changedAt: "2026-03-10T10:05:00.000Z" },
+              { status: "done", changedAt: "2026-03-10T10:20:00.000Z" }
+            ]
+          })
+        ]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    expect(screen.getByLabelText("Execution time 45m")).toBeTruthy();
+  });
+
+  it("starts on the first non-empty column when earlier columns are empty", async () => {
+    /* Narrow mobile boards should land on the nearest useful column instead of an empty backlog shell. */
+    const scrollTo = vi.fn();
+    const { rerender } = render(
+      <KanbanBoard
+        scope="project"
+        tasks={[]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    const board = document.querySelector(".kanban-columns") as HTMLDivElement;
+    board.scrollTo = scrollTo;
+    const planColumn = screen.getByText("Plan").closest("section") as HTMLElement;
+    Object.defineProperty(planColumn, "offsetLeft", { configurable: true, value: 320 });
+
+    rerender(
+      <KanbanBoard
+        scope="project"
+        tasks={[buildTask({ id: "task-plan", status: "refinement", title: "Plan next task" })]}
+        projects={[buildProject()]}
+        activeProjectSlug="alpha"
+        isLoading={false}
+        isSaving={false}
+        onCreateTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onMoveTask={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({ left: 320, behavior: "smooth" });
+    });
   });
 
   it("sorts cards in each column by updatedAt descending", () => {
@@ -211,7 +282,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -237,7 +307,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -267,7 +336,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -289,7 +357,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}
@@ -316,7 +383,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={vi.fn()}
         onUpdateTask={onUpdateTask}
         onMoveTask={vi.fn()}
@@ -363,7 +429,6 @@ describe("KanbanBoard", () => {
         activeProjectSlug="alpha"
         isLoading={false}
         isSaving={false}
-        onRefresh={vi.fn()}
         onCreateTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onMoveTask={vi.fn()}

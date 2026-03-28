@@ -10,10 +10,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiGet, getEventStreamUrl } from "../../api/client";
+import { apiDelete, apiGet, getEventStreamUrl } from "../../api/client";
 import { useKanban } from "../use-kanban";
 
 vi.mock("../../api/client", () => ({
+  apiDelete: vi.fn(),
   apiGet: vi.fn(),
   apiPost: vi.fn(),
   getEventStreamUrl: vi.fn()
@@ -40,6 +41,7 @@ describe("useKanban", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
+    vi.mocked(apiDelete).mockReset();
     vi.mocked(apiGet).mockReset();
     vi.mocked(getEventStreamUrl).mockReset().mockResolvedValue("ws://example.test/events?token=kanban");
     MockWebSocket.instances = [];
@@ -126,5 +128,44 @@ describe("useKanban", () => {
     });
 
     expect(vi.mocked(apiGet)).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes a task through the app endpoint and reloads the active board", async () => {
+    /* User deletion should reuse the standard mutation pipeline so the visible kanban view stays in sync. */
+    vi.mocked(apiGet)
+      .mockResolvedValueOnce([
+        {
+          id: "task-1",
+          projectSlug: "alpha",
+          projectName: "Alpha",
+          title: "Delete me",
+          description: "",
+          status: "queued",
+          priority: "medium",
+          acceptanceCriteria: [],
+          resultSummary: null,
+          blockedReason: null,
+          createdAt: "2026-03-10T09:00:00.000Z",
+          updatedAt: "2026-03-10T10:00:00.000Z",
+          claimedBy: null,
+          leaseUntil: null
+        }
+      ])
+      .mockResolvedValueOnce([]);
+    vi.mocked(apiDelete).mockResolvedValueOnce({ ok: true } as never);
+
+    const { result } = renderHook(() => useKanban());
+
+    await act(async () => {
+      await result.current.loadTasks({ projectSlug: "alpha" });
+    });
+
+    await act(async () => {
+      await result.current.deleteTask("task-1");
+    });
+
+    expect(vi.mocked(apiDelete)).toHaveBeenCalledWith("/api/kanban/tasks/task-1");
+    expect(vi.mocked(apiGet)).toHaveBeenNthCalledWith(2, "/api/kanban/tasks?projectSlug=alpha");
+    expect(result.current.tasks).toEqual([]);
   });
 });

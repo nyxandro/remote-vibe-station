@@ -30,6 +30,12 @@ type Props = {
 export const FullscreenCodeModal = (props: Props) => {
   const titleId = useId();
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const onCloseRef = useRef(props.onClose);
+
+  useEffect(() => {
+    /* Keep the latest close callback without retriggering the focus-trap effect on every parent rerender. */
+    onCloseRef.current = props.onClose;
+  }, [props.onClose]);
 
   useEffect(() => {
     /* Fullscreen dialogs should trap focus and support Escape consistently across settings and file preview flows. */
@@ -56,7 +62,7 @@ export const FullscreenCodeModal = (props: Props) => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        props.onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -92,7 +98,7 @@ export const FullscreenCodeModal = (props: Props) => {
       window.removeEventListener("keydown", onKeyDown);
       previousActiveElement?.focus();
     };
-  }, [props.isOpen, props.onClose]);
+  }, [props.isOpen]);
 
   if (!props.isOpen) {
     return null;

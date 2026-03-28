@@ -26,11 +26,13 @@ import {
   ProxyApplyResult,
   ProxySettingsInput,
   ProxySettingsSnapshot,
+  RuntimeServicesSnapshot,
   SystemMetricsSnapshot,
   ProjectGitSummary,
   ProjectRecord,
   ProjectRuntimeSettingsPatch,
   ProjectRuntimeSnapshot,
+  ManagedRuntimeServiceId,
   ProjectStatus
 } from "../types";
 
@@ -100,7 +102,7 @@ type Props = {
   onOpenSettingsFile: (kind: OpenCodeSettingsKind, relativePath?: string) => void;
   onCreateSettingsFile: (kind: OpenCodeSettingsKind, name?: string) => void;
   onSaveSettingsFile: (content: string) => Promise<void> | void;
-  onDeleteActiveProject: () => void;
+  onDeleteActiveProject: () => Promise<void> | void;
   projectRuntime: {
     snapshot: ProjectRuntimeSnapshot | null;
     isLoading: boolean;
@@ -144,6 +146,13 @@ type Props = {
     snapshot: SystemMetricsSnapshot | null;
     isLoading: boolean;
   };
+  runtimeServices?: {
+    snapshot: RuntimeServicesSnapshot | null;
+    isLoading: boolean;
+    restartingByService: Partial<Record<ManagedRuntimeServiceId, boolean>>;
+  };
+  onReloadRuntimeServices?: () => void;
+  onRestartRuntimeService?: (serviceId: ManagedRuntimeServiceId) => void;
   onReloadServerMetrics?: () => void;
   onUpdateOpenCodeVersion: () => void;
   iconForEntry: (name: string, kind: "file" | "dir") => JSX.Element;
@@ -196,7 +205,7 @@ type Props = {
     }) => void;
     onTestCliproxyAccount: (accountId: string) => void;
     onActivateCliproxyAccount: (accountId: string) => void;
-    onDeleteCliproxyAccount: (accountId: string) => void;
+    onDeleteCliproxyAccount: (accountId: string) => Promise<void> | void;
   };
 };
 
@@ -350,10 +359,23 @@ export const WorkspaceTabsContent = (props: Props) => {
       onGithubTokenDraftChange={props.onGithubTokenDraftChange}
       onSaveGithubToken={props.onSaveGithubToken}
       onDisconnectGithubAuth={props.onDisconnectGithubAuth}
-      openCodeVersion={props.openCodeVersion}
-      onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
-      serverMetrics={props.serverMetrics}
-      onReloadServerMetrics={props.onReloadServerMetrics}
-    />
-  );
-};
+       openCodeVersion={props.openCodeVersion}
+       onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
+       serverMetrics={props.serverMetrics}
+       runtimeServices={props.runtimeServices}
+       proxyState={props.proxyState.snapshot ? {
+         snapshot: props.proxyState.snapshot,
+         accounts: props.proxyState.cliproxyAccounts,
+         isApplying: props.proxyState.isApplying
+       } : {
+         snapshot: null,
+         accounts: props.proxyState.cliproxyAccounts,
+         isApplying: props.proxyState.isApplying
+       }}
+       onReloadServerMetrics={props.onReloadServerMetrics}
+       onReloadRuntimeServices={props.onReloadRuntimeServices}
+       onRestartRuntimeService={props.onRestartRuntimeService}
+       onApplyProxyRuntime={props.proxyState.onApply}
+     />
+   );
+ };

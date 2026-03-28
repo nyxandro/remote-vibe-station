@@ -1,0 +1,254 @@
+/**
+ * Dashboard and modal styles for server runtime service health.
+ */
+
+.service-health-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(27, 108, 255, 0.12);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(27, 108, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(248, 250, 255, 0.98), rgba(240, 244, 255, 0.95));
+}
+
+.service-health-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-health-title,
+.service-health-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #10213f;
+}
+
+.service-health-caption {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.service-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.service-health-card {
+  text-align: left;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.service-health-card.healthy {
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.service-health-card.degraded {
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
+.service-health-card.down {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.service-health-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.service-health-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #122441;
+}
+
+.service-health-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.service-health-pill.healthy,
+.service-health-detail-value.healthy {
+  color: #166534;
+  background: #ecfdf5;
+}
+
+.service-health-pill.degraded,
+.service-health-detail-value.degraded {
+  color: #92400e;
+  background: #fff7ed;
+}
+
+.service-health-pill.down,
+.service-health-detail-value.down {
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.service-health-meta,
+.service-health-card-message,
+.service-health-inline-action {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.service-health-inline-action {
+  font-weight: 700;
+  color: #1b6cff;
+}
+
+.service-health-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.service-health-modal {
+  width: min(780px, 100%);
+  max-height: min(88vh, 860px);
+  overflow: auto;
+  border-radius: 22px;
+  background: #ffffff;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+.service-health-modal-header,
+.service-health-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-health-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.service-health-modal-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.service-health-detail-card,
+.service-health-message-box,
+.service-health-children {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: #f8faff;
+  padding: 14px;
+}
+
+.service-health-detail-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.service-health-detail-value {
+  margin-top: 8px;
+  width: fit-content;
+  font-size: 14px;
+  font-weight: 700;
+  color: #10213f;
+  padding: 4px 8px;
+  border-radius: 10px;
+}
+
+.service-health-detail-value.small {
+  padding: 0;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.service-health-message-box {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #24364d;
+}
+
+.service-health-children {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+html[data-theme="dark"] .service-health-shell {
+  border-color: rgba(96, 165, 250, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(17, 24, 39, 0.96));
+}
+
+html[data-theme="dark"] .service-health-card,
+html[data-theme="dark"] .service-health-modal {
+  background: #111827;
+}
+
+html[data-theme="dark"] .service-health-title,
+html[data-theme="dark"] .service-health-modal-title,
+html[data-theme="dark"] .service-health-card-name,
+html[data-theme="dark"] .service-health-message-box,
+html[data-theme="dark"] .service-health-detail-value.small {
+  color: #eff6ff;
+}
+
+html[data-theme="dark"] .service-health-detail-card,
+html[data-theme="dark"] .service-health-message-box,
+html[data-theme="dark"] .service-health-children {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+@media (max-width: 720px) {
+  .service-health-header-row,
+  .service-health-modal-header,
+  .service-health-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .service-health-modal-grid,
+  .service-health-modal-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .service-health-modal {
+    padding: 16px;
+  }
+}

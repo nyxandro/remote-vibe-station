@@ -2,11 +2,11 @@
  * @fileoverview OpenCode local plugin that exposes kanban task tools backed by the backend API.
  *
  * Exports:
- * - KanbanToolsPlugin - Registers task listing, creation, refinement, criterion updates, claiming, and completion tools.
+ * - KanbanToolsPlugin - Registers task listing, creation, planning/refinement, criterion updates, claiming, and completion tools.
  *
  * Key constructs:
  * - CREATE_TASK_DESCRIPTION - LLM-facing contract for single-task creation payloads.
- * - REFINE_TASK_DESCRIPTION - LLM-facing contract for safe task refinement payloads.
+ * - REFINE_TASK_DESCRIPTION - LLM-facing contract for safe task planning payloads.
  * - criterionInputSchema - Shared criterion schema that accepts string or structured checklist items.
  * - formatTaskDetails - Renders stable task identifiers and checklist state for agent follow-up calls.
  */
@@ -27,19 +27,19 @@ const CREATE_TASK_DESCRIPTION = [
   "Required: title.",
   "Optional: projectSlug, description, status, priority, acceptanceCriteria.",
   "acceptanceCriteria may be plain strings or full criterion objects with text plus optional id/status/blockedReason.",
-  "Allowed status values: backlog, refinement, ready, queued, in_progress, blocked, done.",
+  "Allowed status values: backlog, refinement (Plan), ready, queued, in_progress, blocked, done.",
   "Allowed priority values: low, medium, high.",
   "Omit projectSlug only when the current directory already maps to the project."
 ].join(" ");
 
 const REFINE_TASK_DESCRIPTION = [
-  "Refine exactly one existing task.",
+  "Plan or refine exactly one existing task.",
   "Send taskId plus only the fields you want to change.",
   "Omit acceptanceCriteria entirely when you want to leave the current checklist unchanged.",
   "If you replace acceptanceCriteria, send the full list; plain strings are preferred, but criterion objects with id/text/status/blockedReason are accepted.",
   "Never send acceptanceCriteria: [] unless you also set clearAcceptanceCriteria: true for an intentional checklist clear.",
   "Use kanban_update_criterion to change the status of one existing criterion during execution instead of sending a partial criterion-status patch here.",
-  "Use this tool to tighten scope, move cards through refinement/ready/queue stages, and keep the checklist accurate before or during execution."
+  "Use this tool to tighten scope, move cards through Plan/refinement, ready, and queue stages, and keep the checklist accurate before or during execution."
 ].join(" ");
 
 type KanbanCriterionInput =
@@ -167,7 +167,7 @@ const humanizeStatus = (status: KanbanTask["status"]): string => {
     case "backlog":
       return "Backlog";
     case "refinement":
-      return "Refinement";
+      return "Plan";
     case "ready":
       return "Ready";
     case "queued":
@@ -234,7 +234,7 @@ const formatTaskLine = (task: KanbanTask): string => {
 };
 
 const formatTaskDetails = (task: KanbanTask | null): string => {
-  /* Detailed card view gives the agent enough context for refinement and implementation decisions. */
+  /* Detailed card view gives the agent enough context for planning and implementation decisions. */
   if (!task) {
     return "No matching task.";
   }
@@ -353,7 +353,7 @@ export const KanbanToolsPlugin: Plugin = async () => {
             throw error;
           }
           if (!task) {
-            throw new Error("Kanban backend returned an empty response for task refinement");
+            throw new Error("Kanban backend returned an empty response for task planning");
           }
           return `Updated task.\n${formatTaskDetails(task)}`;
         }

@@ -33,7 +33,8 @@ const createTask = (overrides?: Record<string, unknown>) => ({
 const createController = () => {
   /* Keep collaborators minimal because these tests target updateTask request shaping only. */
   const kanban = {
-    updateTask: jest.fn(async (_taskId: string, patch: Record<string, unknown>) => createTask(patch))
+    updateTask: jest.fn(async (_taskId: string, patch: Record<string, unknown>) => createTask(patch)),
+    deleteTask: jest.fn(async (_taskId: string) => createTask())
   };
   const events = {
     publish: jest.fn()
@@ -93,6 +94,30 @@ describe("KanbanController updateTask", () => {
     expect(kanban.updateTask).toHaveBeenCalledWith("task-1", {
       status: "ready",
       acceptanceCriteria: []
+    });
+  });
+});
+
+describe("KanbanController deleteTask", () => {
+  test("removes the task and emits a non-runnable kanban mutation event", async () => {
+    /* Deletion should refresh subscribed boards without accidentally waking the automation runner for removed work. */
+    const { controller, kanban, events } = createController();
+
+    await controller.deleteTask("task-1");
+
+    expect(kanban.deleteTask).toHaveBeenCalledWith("task-1");
+    expect(events.publish).toHaveBeenCalledWith({
+      type: "kanban.task.updated",
+      ts: expect.any(String),
+      data: {
+        taskId: "task-1",
+        taskTitle: "Protect checklist",
+        projectSlug: "alpha",
+        status: "deleted",
+        claimedBy: null,
+        executionSource: null,
+        source: "app"
+      }
     });
   });
 });
