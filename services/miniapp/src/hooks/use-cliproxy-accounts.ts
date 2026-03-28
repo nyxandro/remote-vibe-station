@@ -92,6 +92,11 @@ export const useCliproxyAccounts = (
     [setError]
   );
 
+  const clearOAuth = useCallback((): void => {
+    /* Operators can dismiss the reconnect modal without mutating accounts or submitting stale callback data. */
+    setOauthStart(null);
+  }, []);
+
   const completeOAuth = useCallback(
     async (input: OAuthCompletionInput): Promise<void> => {
       /* Complete flow from pasted callback URL or explicit code/state pair. */
@@ -183,6 +188,7 @@ export const useCliproxyAccounts = (
     isSubmitting,
     oauthStart,
     setOauthStart,
+    clearOAuth,
     loadState,
     startOAuth,
     completeOAuth,

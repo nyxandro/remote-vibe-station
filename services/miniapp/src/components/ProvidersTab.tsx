@@ -38,6 +38,7 @@ type Props = {
   onChangeOAuthCodeDraft?: (value: string) => void;
   onReloadCliproxy?: () => void;
   onStartCliproxyAuth: (provider: CliproxyAccountState["providers"][number]["id"]) => void;
+  onCloseCliproxyAuthModal: () => void;
   onCompleteCliproxyAuth: (input: {
     provider: CliproxyAccountState["providers"][number]["id"];
     callbackUrl?: string;
@@ -204,6 +205,7 @@ export const ProvidersTab = (props: Props) => {
         isSubmitting={props.isCliproxySubmitting}
         onReload={props.onReloadCliproxy}
         onStartAuth={props.onStartCliproxyAuth}
+        onCloseAuthModal={props.onCloseCliproxyAuthModal}
         onCompleteAuth={props.onCompleteCliproxyAuth}
         onTestAccount={props.onTestCliproxyAccount}
         onActivateAccount={props.onActivateCliproxyAccount}

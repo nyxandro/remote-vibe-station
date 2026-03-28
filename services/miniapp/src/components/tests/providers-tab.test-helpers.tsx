@@ -114,6 +114,7 @@ export const buildProvidersTabProps = (
     onChangeOAuthCodeDraft: vi.fn(),
     onReloadCliproxy: vi.fn(),
     onStartCliproxyAuth: vi.fn(),
+    onCloseCliproxyAuthModal: vi.fn(),
     onCompleteCliproxyAuth: vi.fn(),
     onTestCliproxyAccount: vi.fn(),
     onActivateCliproxyAccount: vi.fn(),

@@ -2,7 +2,7 @@
  * @fileoverview UI tests for compact CLIProxy account accordion cards.
  *
  * Test suites:
- * - CliproxyAccountsSection - Verifies collapsed summaries, accordion toggling, quota selection, and account actions.
+ * - CliproxyAccountsSection - Verifies collapsed summaries, OAuth modal flows, quota selection, and account actions.
  */
 
 /* @vitest-environment jsdom */
@@ -27,6 +27,7 @@ const buildProps = (
     isSubmitting: false,
     onReload: vi.fn(),
     onStartAuth: vi.fn(),
+    onCloseAuthModal: vi.fn(),
     onCompleteAuth: vi.fn(),
     onTestAccount: vi.fn(),
     onActivateAccount: vi.fn(),
@@ -70,6 +71,79 @@ describe("CliproxyAccountsSection", () => {
     expect(screen.queryByText(/7 дней/i)).toBeNull();
     expect(screen.queryByText("Запросы: 3")).toBeNull();
     expect(screen.queryByRole("button", { name: "Тест" })).toBeNull();
+  });
+
+  it("renders the CLIProxy OAuth step inside a modal dialog instead of inline page content", () => {
+    /* Provider reconnect should open as an overlay so the providers page stays compact behind the auth flow. */
+    renderSection({
+      oauthStart: {
+        provider: "codex",
+        state: "state-123",
+        url: "https://example.com/cliproxy",
+        instructions: "Откройте URL в браузере, завершите вход и вставьте сюда URL callback или отдельно code/state"
+      }
+    });
+
+    const dialog = screen.getByRole("dialog", { name: "Подключить Codex" });
+
+    expect(within(dialog).getByText(/завершите вход/i)).toBeTruthy();
+    expect(within(dialog).getByRole("link", { name: "Открыть авторизацию" })).toBeTruthy();
+    expect(within(dialog).getByLabelText("CLIProxy callback URL")).toBeTruthy();
+    expect(within(dialog).getByLabelText("CLIProxy OAuth code")).toBeTruthy();
+    expect((within(dialog).getByLabelText("CLIProxy OAuth state") as HTMLInputElement).value).toBe("state-123");
+    expect(screen.queryByText(/^Provider:/i)).toBeNull();
+  });
+
+  it("closes the CLIProxy OAuth modal after successful completion clears the active auth step", () => {
+    /* Successful completion should return the screen to its compact account list without leaving stale auth controls visible. */
+    const rendered = renderSection({
+      oauthStart: {
+        provider: "codex",
+        state: "state-123",
+        url: "https://example.com/cliproxy",
+        instructions: "Вставьте callback"
+      }
+    });
+
+    fireEvent.change(screen.getByLabelText("CLIProxy callback URL"), {
+      target: { value: "https://example.com/callback?code=abc" }
+    });
+    fireEvent.change(screen.getByLabelText("CLIProxy OAuth code"), {
+      target: { value: "abc" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Завершить подключение" }));
+
+    expect(rendered.props.onCompleteAuth).toHaveBeenCalledWith({
+      provider: "codex",
+      callbackUrl: "https://example.com/callback?code=abc",
+      code: "abc",
+      state: "state-123"
+    });
+
+    rendered.rerender(
+      <CliproxyAccountsSection
+        {...rendered.props}
+        oauthStart={null}
+      />
+    );
+
+    expect(screen.queryByRole("dialog", { name: "Подключить Codex" })).toBeNull();
+  });
+
+  it("lets the operator dismiss the CLIProxy OAuth modal without submitting", () => {
+    /* Accidental reconnect opens should be dismissible so the user can get back to the account list instantly. */
+    const { props } = renderSection({
+      oauthStart: {
+        provider: "codex",
+        state: "state-123",
+        url: "https://example.com/cliproxy",
+        instructions: "Вставьте callback"
+      }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть подключение CLIProxy" }));
+
+    expect(props.onCloseAuthModal).toHaveBeenCalledTimes(1);
   });
 
   it("expands and collapses the account card on repeated clicks", () => {

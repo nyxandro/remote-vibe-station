@@ -9,8 +9,8 @@ import { useEffect, useState } from "react";
 
 import { CliproxyAccountState, CliproxyOAuthStartPayload } from "../types";
 import { CliproxyAccountAccordion } from "./CliproxyAccountAccordion";
+import { CliproxyAuthModal } from "./CliproxyAuthModal";
 import { DangerConfirmModal } from "./DangerConfirmModal";
-import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 type Props = {
   accounts: CliproxyAccountState | null;
@@ -19,6 +19,7 @@ type Props = {
   isSubmitting: boolean;
   onReload?: () => void;
   onStartAuth: (provider: CliproxyAccountState["providers"][number]["id"]) => void;
+  onCloseAuthModal: () => void;
   onCompleteAuth: (input: {
     provider: CliproxyAccountState["providers"][number]["id"];
     callbackUrl?: string;
@@ -71,8 +72,24 @@ export const CliproxyAccountsSection = (props: Props) => {
   }, [props.accounts, pendingDeleteAccountId]);
 
   const selectedProvider = props.oauthStart?.provider;
+  const oauthProviderLabel =
+    props.accounts?.providers.find((provider) => provider.id === selectedProvider)?.label ?? selectedProvider ?? "CLIProxy";
   const pendingDeleteAccount =
     props.accounts?.accounts.find((account) => account.id === pendingDeleteAccountId) ?? null;
+
+  const completeActiveAuth = () => {
+    /* Submit only the current provider step so a stale local draft never leaks into a different provider flow. */
+    if (!selectedProvider) {
+      return;
+    }
+
+    props.onCompleteAuth({
+      provider: selectedProvider,
+      callbackUrl: callbackUrlDraft.trim() || undefined,
+      code: codeDraft.trim() || undefined,
+      state: stateDraft.trim() || undefined
+    });
+  };
 
   return (
     <div className="providers-auth-card">
@@ -139,64 +156,19 @@ export const CliproxyAccountsSection = (props: Props) => {
         ))}
       </div>
 
-      {props.oauthStart ? (
-        <>
-          {/* Completion accepts pasted callback URL or raw code/state for provider-specific OAuth flows. */}
-          <div className="project-create-note">Provider: {props.oauthStart.provider}</div>
-          <div className="project-create-note">{props.oauthStart.instructions}</div>
-          <a className="btn outline" href={props.oauthStart.url} target="_blank" rel="noreferrer">
-            Открыть авторизацию
-          </a>
-
-          <input
-            id={PROVIDERS_TAB_FIELD_IDS.cliproxyCallbackUrl}
-            name={PROVIDERS_TAB_FIELD_IDS.cliproxyCallbackUrl}
-            aria-label="CLIProxy callback URL"
-            className="input settings-input-compact"
-            placeholder="Вставьте callback URL целиком"
-            value={callbackUrlDraft}
-            onChange={(event) => setCallbackUrlDraft(event.target.value)}
-          />
-          <input
-            id={PROVIDERS_TAB_FIELD_IDS.cliproxyCode}
-            name={PROVIDERS_TAB_FIELD_IDS.cliproxyCode}
-            aria-label="CLIProxy OAuth code"
-            className="input settings-input-compact"
-            placeholder="Или отдельно code"
-            value={codeDraft}
-            onChange={(event) => setCodeDraft(event.target.value)}
-          />
-          <input
-            id={PROVIDERS_TAB_FIELD_IDS.cliproxyState}
-            name={PROVIDERS_TAB_FIELD_IDS.cliproxyState}
-            aria-label="CLIProxy OAuth state"
-            className="input settings-input-compact"
-            placeholder="state"
-            value={stateDraft}
-            onChange={(event) => setStateDraft(event.target.value)}
-          />
-
-          <button
-            className="btn primary"
-            type="button"
-            disabled={props.isSubmitting || !selectedProvider}
-            onClick={() => {
-              if (!selectedProvider) {
-                return;
-              }
-
-              props.onCompleteAuth({
-                provider: selectedProvider,
-                callbackUrl: callbackUrlDraft.trim() || undefined,
-                code: codeDraft.trim() || undefined,
-                state: stateDraft.trim() || undefined
-              });
-            }}
-          >
-            {props.isSubmitting ? "Submitting..." : "Завершить подключение"}
-          </button>
-        </>
-      ) : null}
+      <CliproxyAuthModal
+        oauthStart={props.oauthStart}
+        providerLabel={oauthProviderLabel}
+        isSubmitting={props.isSubmitting}
+        callbackUrlDraft={callbackUrlDraft}
+        codeDraft={codeDraft}
+        stateDraft={stateDraft}
+        onCallbackUrlChange={setCallbackUrlDraft}
+        onCodeChange={setCodeDraft}
+        onStateChange={setStateDraft}
+        onClose={props.onCloseAuthModal}
+        onSubmit={completeActiveAuth}
+      />
 
       {pendingDeleteAccount ? (
         <DangerConfirmModal

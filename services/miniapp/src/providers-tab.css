@@ -267,6 +267,92 @@
   gap: 8px;
 }
 
+/* Auth backdrop isolates the reconnect flow from the busy providers screen underneath. */
+.providers-auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(8, 12, 22, 0.36);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Modal body keeps the same visual language as provider cards but with clearer form spacing. */
+.providers-auth-modal {
+  width: min(460px, 100%);
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, #8db4ff 24%);
+  background:
+    radial-gradient(circle at top right, rgba(73, 130, 255, 0.12), transparent 42%),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, #f6f9ff 4%), var(--panel));
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+}
+
+/* Header aligns the reconnect copy with an explicit close affordance. */
+.providers-auth-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Title copy stays grouped so provider context and instruction text scan quickly. */
+.providers-auth-modal-copy {
+  display: grid;
+  gap: 6px;
+}
+
+/* Small eyebrow gives the overlay context without repeating the full section title. */
+.providers-auth-modal-eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Modal title stays compact because provider labels are short and action-oriented. */
+.providers-auth-modal-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+  color: #10213f;
+}
+
+/* Provider instructions are more readable in a dedicated paragraph than inline helper text. */
+.providers-auth-modal-description {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #4d5f80;
+}
+
+/* Fields stay in one stack so copy-paste auth steps are fast on mobile devices. */
+.providers-auth-modal-fields {
+  display: grid;
+  gap: 10px;
+}
+
+/* Link button spans full width to match the rest of the modal form rhythm. */
+.providers-auth-modal-link {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Footer keeps cancel and submit actions discoverable without crowding the inputs. */
+.providers-auth-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 /* Empty state keeps intent explicit when no providers are connected/found. */
 .providers-empty {
   border: 1px dashed var(--border);
@@ -281,7 +367,8 @@
 html[data-theme="dark"] .providers-auth-card,
 html[data-theme="dark"] .providers-item-card,
 html[data-theme="dark"] .providers-method-card,
-html[data-theme="dark"] .providers-empty {
+html[data-theme="dark"] .providers-empty,
+html[data-theme="dark"] .providers-auth-modal {
   background: #131d31;
   border-color: #233352;
   color: #d9e3f5;
@@ -296,6 +383,22 @@ html[data-theme="dark"] .providers-auth-card .project-create-note {
 html[data-theme="dark"] .providers-account-summary-identity,
 html[data-theme="dark"] .providers-account-quota-label {
   color: #b8c7e3;
+}
+
+/* Modal eyebrow and instructions need the same muted dark theme palette as helper notes. */
+html[data-theme="dark"] .providers-auth-modal-eyebrow,
+html[data-theme="dark"] .providers-auth-modal-description {
+  color: #b8c7e3;
+}
+
+/* Dark modal title keeps the auth step clear above the form fields. */
+html[data-theme="dark"] .providers-auth-modal-title {
+  color: #eef4ff;
+}
+
+/* Dark overlay uses a denser backdrop so the providers screen recedes cleanly behind the modal. */
+html[data-theme="dark"] .providers-auth-modal-backdrop {
+  background: rgba(2, 6, 18, 0.54);
 }
 
 /* Chevron stays legible against the darker account card background. */
@@ -351,4 +454,23 @@ html[data-theme="dark"] .providers-usage-meter-fill {
 html[data-theme="dark"] .providers-usage-meter-text {
   color: #eef4ff;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 640px) {
+  /* Small screens need tighter padding so the auth modal stays fully visible above the keyboard. */
+  .providers-auth-modal-backdrop {
+    padding: 14px;
+  }
+
+  /* Footer actions stack on narrow widths so both choices stay easy to tap. */
+  .providers-auth-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Full-width footer buttons remain easier to tap during copy-paste auth flows on phones. */
+  .providers-auth-modal-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }

@@ -194,8 +194,9 @@ type Props = {
      onReload?: () => void;
     onSave: (input: ProxySettingsInput) => void;
     onApply: () => void;
-     onReloadCliproxy?: () => void;
+    onReloadCliproxy?: () => void;
     onStartCliproxyAuth: (provider: CliproxyProviderState["id"]) => void;
+    onCloseCliproxyAuthModal: () => void;
     onCompleteCliproxyAuth: (input: {
       provider: CliproxyProviderState["id"];
       callbackUrl?: string;
@@ -319,6 +320,7 @@ export const WorkspaceTabsContent = (props: Props) => {
         proxyApplyResult={props.proxyState.applyResult}
          onReloadCliproxy={props.proxyState.onReloadCliproxy}
         onStartCliproxyAuth={props.proxyState.onStartCliproxyAuth}
+        onCloseCliproxyAuthModal={props.proxyState.onCloseCliproxyAuthModal}
         onCompleteCliproxyAuth={props.proxyState.onCompleteCliproxyAuth}
         onTestCliproxyAccount={props.proxyState.onTestCliproxyAccount}
         onActivateCliproxyAccount={props.proxyState.onActivateCliproxyAccount}
