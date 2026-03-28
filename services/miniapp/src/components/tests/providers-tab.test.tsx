@@ -1,10 +1,13 @@
 /**
- * @fileoverview UI tests for ProvidersTab direct auth and CLIProxy account management flows.
+ * @fileoverview UI tests for ProvidersTab provider picker flows and shared field wiring.
+ *
+ * Test suites:
+ * - ProvidersTab - Verifies connected provider rendering, add-provider flows, CLIProxy section mounting, and stable field ids.
  */
 
 /* @vitest-environment jsdom */
 
-import { cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PROVIDERS_TAB_FIELD_IDS } from "../providers-tab-field-ids";
@@ -21,8 +24,8 @@ describe("ProvidersTab", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders selected mode summary and opens add-provider panel", () => {
-    /* Providers section should expose current provider/model/thinking/agent at top. */
+  it("hides the legacy selected-provider summary and opens add-provider panel", () => {
+    /* Providers section should stay focused on actions and connected accounts without the extra summary block. */
     const { props } = renderProvidersTab({
       providers: [
         { id: "openai", name: "OpenAI", connected: true },
@@ -34,10 +37,10 @@ describe("ProvidersTab", () => {
       }
     });
 
-    expect(screen.getByText("Текущий провайдер: openai")).toBeTruthy();
-    expect(screen.getByText("Модель: gpt-5")).toBeTruthy();
-    expect(screen.getByText("Режим мышления: high")).toBeTruthy();
-    expect(screen.getByText("Агент: build")).toBeTruthy();
+    expect(screen.queryByText(/Текущий провайдер:/i)).toBeNull();
+    expect(screen.queryByText(/Модель:/i)).toBeNull();
+    expect(screen.queryByText(/Режим мышления:/i)).toBeNull();
+    expect(screen.queryByText(/Агент:/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Добавить провайдера" }));
     fireEvent.click(screen.getByRole("button", { name: "Anthropic" }));
@@ -77,11 +80,6 @@ describe("ProvidersTab", () => {
   it("filters provider search in add-provider panel", () => {
     /* Search should quickly narrow huge provider catalogs by prefix or substring. */
     renderProvidersTab({
-      selected: {
-        model: { providerID: "openai", modelID: "gpt-5" },
-        thinking: null,
-        agent: null
-      },
       providers: [
         { id: "openai", name: "OpenAI", connected: false },
         { id: "anthropic", name: "Anthropic", connected: false },
@@ -107,11 +105,6 @@ describe("ProvidersTab", () => {
   it("renders API key flow and submits credentials", () => {
     /* Manual key method should render secure input and submit button. */
     const { props } = renderProvidersTab({
-      selected: {
-        model: { providerID: "openai", modelID: "gpt-5" },
-        thinking: null,
-        agent: null
-      },
       providers: [{ id: "openai", name: "OpenAI", connected: false }],
       authMethods: { openai: [{ type: "api", label: "API key" }] },
       oauthState: {
@@ -132,276 +125,26 @@ describe("ProvidersTab", () => {
     expect(props.onSubmitApiKey).toHaveBeenCalledWith({ providerID: "openai", key: "sk-live" });
   });
 
-  it("renders CLIProxy accounts under providers and shows connected identities", () => {
-    /* CLIProxy accounts should be managed from Providers tab with usage and reconnect controls. */
+  it("mounts CLIProxy section under providers and forwards provider reconnect", () => {
+    /* Providers tab should still embed the dedicated CLIProxy section without duplicating its internal tests here. */
     const { props } = renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
       cliproxyAccounts: cliproxyAccountsFixture,
       proxySnapshot: proxySnapshotFixture
     });
 
     expect(screen.getByText("CLIProxy accounts")).toBeTruthy();
     expect(screen.getByText("codex-user@example.com")).toBeTruthy();
-    expect(screen.getByText("workspace-1")).toBeTruthy();
-    expect(screen.getByText("Запросы: 3")).toBeTruthy();
-    expect(screen.getByText("Токены: 1,450")).toBeTruthy();
-    expect(screen.getByText("Ошибки: 1")).toBeTruthy();
-    expect(screen.getByText("Квота: live")).toBeTruthy();
-    expect(screen.getByText("Тариф: plus")).toBeTruthy();
-    expect(screen.getByText(/5 часов: 65% осталось/i)).toBeTruthy();
-    expect(screen.getByText(/7 дней: 80% осталось/i)).toBeTruthy();
-    expect(screen.getByRole("progressbar", { name: /Quota 5 часов for codex-user@example.com/i })).toBeTruthy();
-    expect(screen.getByText("65% осталось")).toBeTruthy();
-    expect(screen.getByText("80% осталось")).toBeTruthy();
+    expect(screen.queryByText(/7 дней:/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Тест" })).toBeNull();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);
 
     expect(props.onStartCliproxyAuth).toHaveBeenCalledWith("codex");
   });
 
-  it("parses CLIProxy usage-limit JSON into readable status details", () => {
-    /* Raw upstream JSON errors should become actionable text with reset time in the user's local timezone. */
-    const longDetail =
-      '{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached","plan_type":"plus","resets_at":1773531611,"resets_in_seconds":438164}}';
-
-    renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: {
-        ...cliproxyAccountsFixture,
-        accounts: [
-          {
-            ...cliproxyAccountsFixture.accounts[0],
-            statusMessage: longDetail
-          }
-        ]
-      },
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    expect(screen.getByText("Ошибка: usage_limit_reached")).toBeTruthy();
-    expect(screen.getAllByText("Тариф: plus").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Лимит сбросится:/i)).toBeTruthy();
-    expect(screen.getByText(/Сброс через:/i)).toBeTruthy();
-  });
-
-  it("parses CLIProxy account deactivated JSON into readable status details", () => {
-    /* Account deactivation errors should expose the provider message instead of raw JSON noise. */
-    const detail =
-      '{"error":{"message":"Your OpenAI account has been deactivated, please check your email for more information.","type":"invalid_request_error","code":"account_deactivated","param":null},"status":401}';
-
-    renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: {
-        ...cliproxyAccountsFixture,
-        accounts: [
-          {
-            ...cliproxyAccountsFixture.accounts[0],
-            statusMessage: detail
-          }
-        ]
-      },
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    expect(screen.getByText("Ошибка: invalid_request_error")).toBeTruthy();
-    expect(screen.getByText("Код: account_deactivated")).toBeTruthy();
-    expect(screen.getByText("HTTP статус: 401")).toBeTruthy();
-    expect(screen.getByText(/аккаунт деактивирован/i)).toBeTruthy();
-  });
-
-  it("shows activate action for disabled CLIProxy account and forwards selection", () => {
-    /* Disabled or unavailable accounts must expose explicit recovery path in Mini App. */
-    const { props } = renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: {
-        ...cliproxyAccountsFixture,
-        accounts: [
-          {
-            ...cliproxyAccountsFixture.accounts[0],
-            disabled: true,
-            unavailable: true,
-            status: "error"
-          }
-        ]
-      },
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    expect(screen.getByText("Недоступен для запросов прямо сейчас.")).toBeTruthy();
-    expect(screen.getByText("Квота: Квота исчерпана")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Сделать активным" }));
-
-    expect(props.onActivateCliproxyAccount).toHaveBeenCalledWith("codex-user@example.com");
-  });
-
-  it("forwards manual CLIProxy account test action", () => {
-    /* Operators should be able to force a live check when status looks stale or delayed. */
-    const { props } = renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: cliproxyAccountsFixture,
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Тест" }));
-
-    expect(props.onTestCliproxyAccount).toHaveBeenCalledWith("codex-user@example.com");
-  });
-
-  it("deletes CLIProxy account only after explicit modal confirmation", () => {
-    /* Destructive account removal should stay inside the Mini App UI instead of falling back to the browser prompt. */
-    const { props } = renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: cliproxyAccountsFixture,
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
-    expect(props.onDeleteCliproxyAccount).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog", { name: "Удалить CLIProxy аккаунт?" });
-    expect(dialog).toBeTruthy();
-    expect(within(dialog).getByText("codex-user@example.com")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Удалить аккаунт" }));
-
-    expect(props.onDeleteCliproxyAccount).toHaveBeenCalledWith("codex-user@example.com");
-  });
-
-  it("lets the operator cancel CLIProxy account deletion from the modal", () => {
-    /* Operators should be able to back out of destructive CLIProxy actions without deleting auth state. */
-    const { props } = renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: cliproxyAccountsFixture,
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Удалить" }));
-    fireEvent.click(screen.getByRole("button", { name: "Оставить аккаунт" }));
-
-    expect(screen.queryByRole("dialog", { name: "Удалить CLIProxy аккаунт?" })).toBeNull();
-    expect(props.onDeleteCliproxyAccount).not.toHaveBeenCalled();
-  });
-
-  it("deduplicates repeated CLIProxy account details", () => {
-    /* CLIProxy may mirror the same identity into email, account and label, but UI should show one line per value. */
-    renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: {
-        usageTrackingEnabled: true,
-        providers: [{ id: "codex", label: "Codex", connected: true }],
-        accounts: [
-          {
-            id: "za.nyxa@gmail.com",
-            provider: "codex",
-            providerLabel: "Codex",
-            name: "za.nyxa@gmail.com",
-            email: "za.nyxa@gmail.com",
-            account: "za.nyxa@gmail.com",
-            label: "za.nyxa@gmail.com",
-            disabled: false,
-            unavailable: false,
-            canManage: true,
-            status: "active",
-            statusMessage: "za.nyxa@gmail.com",
-            quota: null,
-            usage: {
-              requestCount: 1,
-              tokenCount: 10,
-              failedRequestCount: 0,
-              models: ["gpt-5.4"],
-              lastUsedAt: null
-            }
-          }
-        ]
-      },
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    expect(screen.getAllByText("za.nyxa@gmail.com")).toHaveLength(1);
-  });
-
-  it("shows explicit message when CLIProxy usage tracking is disabled", () => {
-    /* Operators should see why metrics are empty instead of reading zeros as real usage. */
-    renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
-      cliproxyAccounts: {
-        usageTrackingEnabled: false,
-        providers: [{ id: "codex", label: "Codex", connected: true }],
-        accounts: [
-          {
-            id: "codex-user@example.com",
-            provider: "codex",
-            providerLabel: "Codex",
-            name: "codex-user@example.com",
-            email: "codex-user@example.com",
-            account: null,
-            label: null,
-            disabled: false,
-            unavailable: false,
-            canManage: true,
-            status: "ready",
-            statusMessage: null,
-            quota: null,
-            usage: {
-              requestCount: 0,
-              tokenCount: 0,
-              failedRequestCount: 0,
-              models: [],
-              lastUsedAt: null
-            }
-          }
-        ]
-      },
-      proxySnapshot: proxySnapshotFixture
-    });
-
-    expect(screen.getByText(/наблюдаемая статистика usage выключена/i)).toBeTruthy();
-  });
-
   it("assigns stable ids and names to Providers form fields", () => {
     /* Explicit ids and names remove a11y warnings and keep autofill deterministic. */
     renderProvidersTab({
-      selected: {
-        model: { providerID: "cliproxy", modelID: "gpt-5.4" },
-        thinking: "high",
-        agent: "build"
-      },
       providers: [{ id: "anthropic", name: "Anthropic", connected: false }],
       authMethods: { anthropic: [{ type: "oauth", label: "Claude Pro" }] },
       oauthState: {

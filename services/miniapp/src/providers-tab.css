@@ -9,18 +9,6 @@
   gap: 12px;
 }
 
-/* Surface current selected mode in a compact summary card. */
-.providers-selected-card {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #f8fbff;
-  color: #1c2230;
-  padding: 10px 12px;
-  display: grid;
-  gap: 4px;
-  font-size: 0.8125rem;
-}
-
 /* Render provider catalog as responsive cards. */
 .providers-list {
   display: grid;
@@ -60,6 +48,115 @@
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Account accordions drop internal gaps so the clickable summary and body feel like one compact card. */
+.providers-account-card {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Entire summary stays clickable and keyboard-focusable to match the requested accordion behavior. */
+.providers-account-summary {
+  width: 100%;
+  border: 0;
+  padding: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  font: inherit;
+}
+
+/* Visible focus ring keeps the compact cards accessible without adding persistent visual noise. */
+.providers-account-summary:focus-visible {
+  outline: 2px solid #2f7cff;
+  outline-offset: -2px;
+}
+
+/* Summary top row balances provider identity against status and chevron affordances. */
+.providers-account-summary-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+/* Provider label and account identity stay stacked to save horizontal space on small screens. */
+.providers-account-summary-heading {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+/* Secondary identity line uses muted color but still wraps long emails cleanly. */
+.providers-account-summary-identity {
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: #5d6c8a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Status chip and chevron stay aligned on one side so the collapsed card reads at a glance. */
+.providers-account-summary-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Chevron rotation is the only motion cue needed to signal accordion state changes. */
+.providers-account-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: #6a7b9e;
+  transition: transform 160ms ease;
+}
+
+/* Expanded cards rotate the chevron instead of adding extra labels or helper text. */
+.providers-account-card.expanded .providers-account-chevron {
+  transform: rotate(180deg);
+}
+
+/* Summary quota block keeps one primary window visible while the card is collapsed. */
+.providers-account-quota-summary {
+  display: grid;
+  gap: 6px;
+}
+
+/* Compact label clarifies which quota window the progress bar represents. */
+.providers-account-quota-label {
+  font-size: 0.75rem;
+  color: #5d6c8a;
+}
+
+/* Collapsed cards need a slightly shorter meter than the expanded diagnostics blocks. */
+.providers-account-summary-meter {
+  min-height: 38px;
+}
+
+/* Expanded body is visually separated from the summary without turning back into a giant card. */
+.providers-account-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+  border-top: 1px solid #dde7fb;
+}
+
+/* Usage counters stay grouped in the expanded body to preserve the compact collapsed summary. */
+.providers-account-metrics {
+  display: grid;
+  gap: 4px;
+}
+
+/* Action buttons wrap on narrow mobile widths instead of forcing the card wider. */
+.providers-action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* Usage block groups the explanatory line and the custom progress meter. */
@@ -121,6 +218,20 @@
   color: #0f5132;
 }
 
+/* Explicit error tone highlights exhausted or broken accounts without relying on body diagnostics. */
+.providers-badge.error {
+  border-color: #f3b4b4;
+  background: #fff1f1;
+  color: #b42323;
+}
+
+/* Warning tone covers transitional states that are neither healthy nor fully broken. */
+.providers-badge.warning {
+  border-color: #f4c36e;
+  background: #fff8e6;
+  color: #9a5b00;
+}
+
 /* Show available auth methods using the same card rhythm. */
 .providers-method-grid {
   display: grid;
@@ -167,7 +278,6 @@
 }
 
 /* Dark theme overrides for Providers tab surfaces and badges. */
-html[data-theme="dark"] .providers-selected-card,
 html[data-theme="dark"] .providers-auth-card,
 html[data-theme="dark"] .providers-item-card,
 html[data-theme="dark"] .providers-method-card,
@@ -178,9 +288,24 @@ html[data-theme="dark"] .providers-empty {
 }
 
 /* Keep muted helper text legible against dark cards. */
-html[data-theme="dark"] .providers-auth-card .project-create-note,
-html[data-theme="dark"] .providers-selected-card > div {
+html[data-theme="dark"] .providers-auth-card .project-create-note {
   color: #b8c7e3;
+}
+
+/* Muted identity and quota labels need the same dark-theme treatment as the helper text. */
+html[data-theme="dark"] .providers-account-summary-identity,
+html[data-theme="dark"] .providers-account-quota-label {
+  color: #b8c7e3;
+}
+
+/* Chevron stays legible against the darker account card background. */
+html[data-theme="dark"] .providers-account-chevron {
+  color: #a9bbdf;
+}
+
+/* Expanded body divider should match the darker card border palette. */
+html[data-theme="dark"] .providers-account-body {
+  border-top-color: #233352;
 }
 
 /* Adapt disconnected badge palette for dark backgrounds. */
@@ -195,6 +320,20 @@ html[data-theme="dark"] .providers-badge.connected {
   border-color: #1d5f4c;
   background: #113128;
   color: #9ff0ce;
+}
+
+/* Dark error badges keep the exhausted-account state obvious without oversaturating the card. */
+html[data-theme="dark"] .providers-badge.error {
+  border-color: #7f3a45;
+  background: #351d24;
+  color: #ffc4ce;
+}
+
+/* Dark warning badges distinguish caution states from both healthy and broken accounts. */
+html[data-theme="dark"] .providers-badge.warning {
+  border-color: #7c5d24;
+  background: #352912;
+  color: #ffd792;
 }
 
 /* Dark theme keeps the custom meter saturated and the label readable above the fill. */

@@ -91,11 +91,6 @@ export const buildProvidersTabProps = (
 ): ProvidersTabProps => {
   /* Keep test setup concise while preserving realistic defaults for every required callback. */
   return {
-    selected: {
-      model: { providerID: "openai", modelID: "gpt-5" },
-      thinking: "high",
-      agent: "build"
-    },
     providers: [],
     authMethods: {},
     isLoading: false,

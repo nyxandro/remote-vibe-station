@@ -15,11 +15,6 @@ import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 const CLIPROXY_PROVIDER_ID = "cliproxy";
 
 type Props = {
-  selected: {
-    model: { providerID: string; modelID: string };
-    thinking: string | null;
-    agent: string | null;
-  } | null;
   providers: Array<{ id: string; name: string; connected: boolean }>;
   authMethods: Record<string, ProviderAuthMethod[]>;
   isLoading: boolean;
@@ -122,13 +117,6 @@ export const ProvidersTab = (props: Props) => {
     <section className="providers-shell">
       <div className="settings-header-row">
         <h3 className="panel-title">Providers</h3>
-      </div>
-
-      <div className="providers-selected-card">
-        <div>Текущий провайдер: {props.selected?.model.providerID ?? "—"}</div>
-        <div>Модель: {props.selected?.model.modelID ?? "—"}</div>
-        <div>Режим мышления: {props.selected?.thinking ?? "default"}</div>
-        <div>Агент: {props.selected?.agent ?? "default"}</div>
       </div>
 
       <div className="providers-list">

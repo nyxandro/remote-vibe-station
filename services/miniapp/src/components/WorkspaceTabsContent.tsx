@@ -296,7 +296,6 @@ export const WorkspaceTabsContent = (props: Props) => {
   if (props.activeTab === "providers") {
     return renderLazyTab(
       <ProvidersTab
-        selected={props.providerOverview?.selected ?? null}
         providers={props.providerOverview?.providers ?? []}
         authMethods={props.providerOverview?.authMethods ?? {}}
         isLoading={props.providersState.isLoading}
