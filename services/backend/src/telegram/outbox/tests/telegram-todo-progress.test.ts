@@ -9,6 +9,7 @@
 import { TelegramOpenCodeRuntimeBridge } from "../telegram-opencode-runtime-bridge.service";
 import {
   extractTodoItemsFromToolPart,
+  formatTelegramTodoStatusNotification,
   formatTelegramTodoProgressMessage
 } from "../telegram-todo-progress";
 
@@ -72,8 +73,28 @@ describe("telegram todo progress helper", () => {
     expect(formatted).toContain("<b>📋 Задачи</b>");
     expect(formatted).toContain("<b>1 из 3 задач завершено</b>");
     expect(formatted).toContain("✅ <s>Проверить &lt;конфиг&gt;</s>");
-    expect(formatted).toContain("⏳ Обновить сервер");
-    expect(formatted).toContain("🔹 Проверить Telegram");
+    expect(formatted).toContain("✴️ Обновить сервер");
+    expect(formatted).toContain("▶️ Проверить Telegram");
+  });
+
+  it("formats one standalone notification line for an updated todo status", () => {
+    /* Per-task Telegram updates should use the same status icons as the checklist so progress reads consistently. */
+    expect(
+      formatTelegramTodoStatusNotification({
+        id: "pending",
+        content: "Ждет очереди",
+        status: "pending",
+        priority: null
+      })
+    ).toContain("▶️ Ждет очереди");
+    expect(
+      formatTelegramTodoStatusNotification({
+        id: "active",
+        content: "Уже в работе",
+        status: "in_progress",
+        priority: null
+      })
+    ).toContain("✴️ Уже в работе");
   });
 });
 
@@ -118,7 +139,31 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueAdminNotification).not.toHaveBeenCalled();
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(3);
+    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        adminId: 10,
+        parseMode: "HTML",
+        text: expect.stringContaining("✴️ Подключить сервер")
+      })
+    );
+    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        adminId: 10,
+        parseMode: "HTML",
+        text: expect.stringContaining("✅ <s>Подключить сервер</s>")
+      })
+    );
+    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        adminId: 10,
+        parseMode: "HTML",
+        text: expect.stringContaining("✴️ Обновить контейнеры")
+      })
+    );
     expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
     expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
       1,
@@ -231,12 +276,76 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
     });
 
     expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(1);
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(1);
     expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
       expect.objectContaining({
         progressKey: "todo:10:session-regress:1",
         text: expect.stringContaining("<b>2 из 3 задач завершено</b>")
       })
     );
+  });
+
+  it("emits a separate Telegram message for every todo that advances during one turn", () => {
+    /* Operators should see progress as a chronological message feed instead of decoding only one silently edited checklist bubble. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-part-seq-1",
+        sessionID: "session-separate-messages",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { id: "1", content: "Подготовить план", status: "in_progress", priority: "high" },
+              { id: "2", content: "Сделать проверку", status: "pending", priority: "medium" }
+            ]
+          }
+        }
+      }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-part-seq-2",
+        sessionID: "session-separate-messages",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { id: "1", content: "Подготовить план", status: "completed", priority: "high" },
+              { id: "2", content: "Сделать проверку", status: "in_progress", priority: "medium" }
+            ]
+          }
+        }
+      }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "tool",
+        id: "todo-part-seq-3",
+        sessionID: "session-separate-messages",
+        tool: "todowrite",
+        state: {
+          status: "completed",
+          metadata: {
+            todos: [
+              { id: "1", content: "Подготовить план", status: "completed", priority: "high" },
+              { id: "2", content: "Сделать проверку", status: "completed", priority: "medium" }
+            ]
+          }
+        }
+      }
+    });
+
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(4);
+    expect(outbox.enqueueAdminNotification.mock.calls[0][0].text).toContain("✴️ Подготовить план");
+    expect(outbox.enqueueAdminNotification.mock.calls[1][0].text).toContain("✅ <s>Подготовить план</s>");
+    expect(outbox.enqueueAdminNotification.mock.calls[2][0].text).toContain("✴️ Сделать проверку");
+    expect(outbox.enqueueAdminNotification.mock.calls[3][0].text).toContain("✅ <s>Сделать проверку</s>");
   });
 
   it("starts a new todo progress slot on the next turn so old completed items do not leak forever", () => {

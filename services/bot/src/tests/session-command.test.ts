@@ -162,4 +162,33 @@ describe("registerSessionCommands", () => {
       "✅ Активная сессия переключена (проект: arena).\nТекущая сессия: Greeting in Russian conversation"
     );
   });
+
+  it("handles stop callback button and reuses the same abort endpoint as /stop", async () => {
+    /* Inline stop button for cooldown notices must abort the active OpenCode run without asking the user to type /stop manually. */
+    jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, projectSlug: "arena", aborted: true })
+    } as Response);
+
+    const mock = createBotMock();
+    registerSessionCommands({ bot: mock.bot, config, isAdmin: (id: number | undefined) => id === 1 });
+    const callback = mock.getCallback();
+    expect(callback).toBeDefined();
+
+    const answerCbQuery = jest.fn(async () => undefined);
+    const editMessageReplyMarkup = jest.fn(async () => undefined);
+    const reply = jest.fn(async () => undefined);
+
+    await callback!({
+      from: { id: 1 },
+      callbackQuery: { data: "sess-stop|active" },
+      answerCbQuery,
+      editMessageReplyMarkup,
+      reply
+    });
+
+    expect(answerCbQuery).toHaveBeenCalledWith("Останавливаю...");
+    expect(editMessageReplyMarkup).toHaveBeenCalledWith({ inline_keyboard: [] });
+    expect(reply).toHaveBeenCalledWith("⏹ Остановил текущий запрос (проект: arena).");
+  });
 });

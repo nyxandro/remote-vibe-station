@@ -663,10 +663,39 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
       }
     });
 
-    expect(outbox.enqueueAdminNotification).toHaveBeenCalledWith(
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
       expect.objectContaining({
         adminId: 10,
-        text: expect.stringContaining("All credentials for model gpt-5.4 are cooling down")
+        progressKey: "runtime-notice:10:session-cooldown:cooldown",
+        text: expect.stringContaining("All credentials for model gpt-5.4 are cooling down"),
+        replyMarkup: {
+          inlineKeyboard: [[{ text: "⏹ Стоп", callback_data: "sess-stop|active" }]]
+        }
+      })
+    );
+  });
+
+  it("forwards cooldown notices from text-part snapshots without waiting for delta events", () => {
+    /* Some runtime reconnect paths replay the full text part snapshot only once, so Telegram notice extraction must not depend on delta events. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-cooldown-snapshot",
+        sessionID: "session-cooldown-snapshot",
+        text: "All credentials for model gemini-3.1-pro-high are cooling down\nповтор через 16с - попытка №4"
+      }
+    });
+
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 10,
+        progressKey: "runtime-notice:10:session-cooldown-snapshot:cooldown",
+        text: expect.stringContaining("gemini-3.1-pro-high"),
+        replyMarkup: {
+          inlineKeyboard: [[{ text: "⏹ Стоп", callback_data: "sess-stop|active" }]]
+        }
       })
     );
   });

@@ -4,6 +4,7 @@
  * Exports:
  * - TelegramTodoItem - normalized todo item shape extracted from OpenCode todowrite payloads.
  * - extractTodoItemsFromToolPart - extracts todo items from todowrite metadata/input/output payloads.
+ * - formatTelegramTodoStatusNotification - renders one standalone todo status update for Telegram chat.
  * - formatTelegramTodoProgressMessage - renders a compact checklist for Telegram chat updates.
  */
 
@@ -17,6 +18,10 @@ export type TelegramTodoItem = {
 };
 
 const MAX_TODO_LINES = 20;
+const PENDING_TODO_ICON = "▶️";
+const ACTIVE_TODO_ICON = "✴️";
+const COMPLETED_TODO_ICON = "✅";
+const CANCELLED_TODO_ICON = "🚫";
 
 const escapeHtml = (value: string): string => {
   /* Telegram HTML mode requires escaping dynamic todo content before wrapping it with markup tags. */
@@ -91,19 +96,24 @@ const formatTodoLine = (todo: TelegramTodoItem): string => {
   const escapedContent = escapeHtml(todo.content);
 
   if (todo.status === "completed") {
-    return `✅ <s>${escapedContent}</s>`;
+    return `${COMPLETED_TODO_ICON} <s>${escapedContent}</s>`;
   }
 
   if (todo.status === "in_progress") {
-    return `⏳ ${escapedContent}`;
+    return `${ACTIVE_TODO_ICON} ${escapedContent}`;
   }
 
   if (todo.status === "cancelled") {
-    return `🚫 <s>${escapedContent}</s>`;
+    return `${CANCELLED_TODO_ICON} <s>${escapedContent}</s>`;
   }
 
   /* Pending items should read as queued work, not an empty checkbox glyph that renders poorly in Telegram. */
-  return `🔹 ${escapedContent}`;
+  return `${PENDING_TODO_ICON} ${escapedContent}`;
+};
+
+export const formatTelegramTodoStatusNotification = (todo: TelegramTodoItem): string => {
+  /* Standalone task updates should stay short so each completed/in-progress transition is readable in Telegram history. */
+  return ["<b>📋 Обновление задачи</b>", "", formatTodoLine(todo)].join("\n");
 };
 
 export const extractTodoItemsFromToolPart = (part: { state?: Record<string, unknown> | null }): TelegramTodoItem[] => {

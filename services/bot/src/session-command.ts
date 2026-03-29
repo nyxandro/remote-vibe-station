@@ -25,6 +25,7 @@ type SessionListPayload = {
 };
 
 const SESSION_CALLBACK_PREFIX = "sess|";
+const SESSION_STOP_CALLBACK = "sess-stop|active";
 const SESSION_SWITCH_TIMEOUT_MS = 12_000;
 
 const formatSessionButton = (item: SessionListPayload["sessions"][number]): string => {
@@ -156,6 +157,38 @@ export const registerSessionCommands = (input: {
   input.bot.on("callback_query", async (ctx) => {
     try {
       const raw = "data" in ctx.callbackQuery ? String(ctx.callbackQuery.data ?? "") : "";
+      if (raw === SESSION_STOP_CALLBACK) {
+        /* Inline stop button must enforce the same admin gate as the /stop command itself. */
+        if (!input.isAdmin(ctx.from?.id)) {
+          await ctx.answerCbQuery("Access denied", { show_alert: true });
+          return;
+        }
+
+        await ctx.answerCbQuery("Останавливаю...");
+
+        const response = await fetch(`${input.config.backendUrl}/api/telegram/session/stop`, {
+          method: "POST",
+          headers: buildBotBackendHeaders(input.config, Number(ctx.from?.id))
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          await ctx.reply(buildBackendErrorMessage(response.status, body));
+          return;
+        }
+
+        const payload = (await response.json()) as { ok?: boolean; projectSlug?: string; aborted?: boolean };
+        const projectSlug = typeof payload.projectSlug === "string" ? payload.projectSlug : "unknown";
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+        if (payload.aborted === false) {
+          await ctx.reply(`⏹ В текущей сессии уже нет активной работы (проект: ${projectSlug}).`);
+          return;
+        }
+
+        await ctx.reply(`⏹ Остановил текущий запрос (проект: ${projectSlug}).`);
+        return;
+      }
+
       if (!raw.startsWith(SESSION_CALLBACK_PREFIX)) {
         return;
       }

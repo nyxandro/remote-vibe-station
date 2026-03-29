@@ -15,9 +15,13 @@ import { TelegramOpenCodeRuntimeFileOperations } from "./telegram-opencode-runti
 import { TelegramOpenCodeRuntimeInteractions } from "./telegram-opencode-runtime-interactions";
 import { TelegramOutboxService } from "./telegram-outbox.service";
 import { resolveTelegramBashProgressKey } from "./telegram-runtime-bash-progress";
-import { buildAssistantPartKey, extractPatternMatches } from "./telegram-runtime-bridge-utils";
+import { buildAssistantPartKey } from "./telegram-runtime-bridge-utils";
 import { TelegramRuntimeFinalReply } from "./telegram-runtime-final-reply";
 import { TelegramRuntimePartReplayGuard } from "./telegram-runtime-part-replay-guard";
+import {
+  buildCooldownReplyMarkup,
+  extractRuntimeNoticeMatches
+} from "./telegram-runtime-notice";
 import { TelegramRuntimeTodoProgress } from "./telegram-runtime-todo-progress";
 import { TelegramRuntimeTurnState } from "./telegram-runtime-turn-state";
 import { extractTodoItemsFromToolPart } from "./telegram-todo-progress";
@@ -28,8 +32,6 @@ type OpenCodeBusEvent = {
 const BASH_PROGRESS_MAX_CHARS = 2600;
 const BASH_PROGRESS_MIN_INTERVAL_MS = 1000;
 const BASH_NOISE_PROBE_COMMAND = /^(node|npm|pnpm|yarn|bun|python|python3)\s+(-v|--version)$/i;
-const COOLDOWN_MESSAGE_PATTERN = /All credentials for model[\s\S]*?(?:попытка №\d+|attempt #\d+)/gi;
-const SYSTEM_REMINDER_PATTERN = /<system-reminder>[\s\S]*?<\/system-reminder>/gi;
 const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
@@ -179,6 +181,15 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       this.setThinking(route.adminId, sessionID, false);
     }
 
+    if (partType === "text") {
+      /* Replay/full-snapshot text parts may carry cooldown notices without separate delta chunks, so inspect them eagerly. */
+      this.enqueueSystemNotifications({
+        sessionID,
+        adminId: route.adminId,
+        text: String(part.text ?? state?.text ?? state?.output ?? "")
+      });
+    }
+
     if (partType !== "tool") {
       return;
     }
@@ -257,6 +268,15 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
         progressKey: update.progressKey,
         text: update.text,
         parseMode: "HTML"
+      });
+
+      /* Keep a durable per-task message trail in addition to the live checklist bubble. */
+      update.notifications.forEach((text) => {
+        this.outbox.enqueueAdminNotification({
+          adminId: route.adminId,
+          text,
+          parseMode: "HTML"
+        });
       });
       return;
     }
@@ -441,21 +461,28 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private enqueueSystemNotifications(input: { sessionID: string; adminId: number; text: string }): void {
     /* Surface provider cooldowns and OpenCode system reminders in Telegram as operational notices. */
     const alreadyEmitted = this.emittedSystemNotificationsBySession.get(input.sessionID) ?? new Set<string>();
-    const matches = [
-      ...extractPatternMatches(input.text, COOLDOWN_MESSAGE_PATTERN),
-      ...extractPatternMatches(input.text, SYSTEM_REMINDER_PATTERN)
-    ];
+    const matches = extractRuntimeNoticeMatches(input.text);
 
     for (const match of matches) {
-      const normalized = match.trim();
+      const normalized = match.text.trim();
       if (!normalized || alreadyEmitted.has(normalized)) {
         continue;
       }
 
-      this.outbox.enqueueAdminNotification({
-        adminId: input.adminId,
-        text: `Служебное сообщение OpenCode:\n\n${normalized}`
-      });
+      if (match.kind === "cooldown") {
+        /* Reuse one replace-slot per session cooldown so repeated retries update one actionable message instead of spamming chat. */
+        this.outbox.enqueueProgressReplace({
+          adminId: input.adminId,
+          progressKey: `runtime-notice:${input.adminId}:${input.sessionID}:cooldown`,
+          text: `Служебное сообщение OpenCode:\n\n${normalized}`,
+          replyMarkup: buildCooldownReplyMarkup()
+        });
+      } else {
+        this.outbox.enqueueAdminNotification({
+          adminId: input.adminId,
+          text: `Служебное сообщение OpenCode:\n\n${normalized}`
+        });
+      }
       alreadyEmitted.add(normalized);
     }
 
