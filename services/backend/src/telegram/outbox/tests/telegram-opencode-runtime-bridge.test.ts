@@ -726,6 +726,32 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     );
   });
 
+  it("formats cooldown notice from bare retry-status message plus next/attempt fields", () => {
+    /* OpenCode retry events may keep the cooldown text separate from attempt metadata, so Telegram must reconstruct one readable notice. */
+    const { bridge, outbox } = makeBridge();
+
+    const nowMs = Date.now();
+    jest.spyOn(Date, "now").mockReturnValue(nowMs);
+
+    (bridge as any).handleSessionStatus({
+      sessionID: "session-cooldown-bare-retry",
+      status: {
+        type: "retry",
+        attempt: 2,
+        next: nowMs + 3000,
+        message: "All credentials for model gemini-3.1-pro-high are cooling down"
+      }
+    });
+
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 10,
+        progressKey: "runtime-notice:10:session-cooldown-bare-retry:cooldown",
+        text: expect.stringContaining("повтор через 3с - попытка №2")
+      })
+    );
+  });
+
   it("forwards system reminder blocks only once per session", () => {
     /* System reminders should reach Telegram, but duplicate deltas must not spam the admin chat. */
     const { bridge, outbox } = makeBridge();

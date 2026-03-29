@@ -20,7 +20,8 @@ import { TelegramRuntimeFinalReply } from "./telegram-runtime-final-reply";
 import { TelegramRuntimePartReplayGuard } from "./telegram-runtime-part-replay-guard";
 import {
   buildCooldownReplyMarkup,
-  extractRuntimeNoticeMatches
+  extractRuntimeNoticeMatches,
+  formatRetryStatusCooldownNotice
 } from "./telegram-runtime-notice";
 import { TelegramRuntimeTodoProgress } from "./telegram-runtime-todo-progress";
 import { TelegramRuntimeTurnState } from "./telegram-runtime-turn-state";
@@ -248,7 +249,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     }
 
     if (toolName === "todowrite") {
-      /* Todo list updates should rewrite one canonical checklist so stale or partial snapshots cannot confuse Telegram. */
+      /* Every todo snapshot should arrive as a fresh full checklist message so the latest state is visible at the bottom of chat. */
       if (status !== "completed") {
         return;
       }
@@ -263,20 +264,10 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
         return;
       }
 
-      this.outbox.enqueueProgressReplace({
+      this.outbox.enqueueAdminNotification({
         adminId: route.adminId,
-        progressKey: update.progressKey,
         text: update.text,
         parseMode: "HTML"
-      });
-
-      /* Keep a durable per-task message trail in addition to the live checklist bubble. */
-      update.notifications.forEach((text) => {
-        this.outbox.enqueueAdminNotification({
-          adminId: route.adminId,
-          text,
-          parseMode: "HTML"
-        });
       });
       return;
     }
@@ -356,10 +347,11 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     const status = (properties.status as any) ?? {};
     const statusType = String(status?.type ?? "");
     if (statusType === "retry") {
+      const retryNoticeText = formatRetryStatusCooldownNotice(status) ?? String(status?.message ?? "");
       this.enqueueSystemNotifications({
         sessionID,
         adminId: route.adminId,
-        text: String(status?.message ?? "")
+        text: retryNoticeText
       });
     }
 
