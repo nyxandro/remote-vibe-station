@@ -33,7 +33,6 @@ import {
   projectPayloadInvalidError,
   repositoryUrlRequiredError,
   sourceBranchRequiredError,
-  terminalInputRequiredError,
   unsupportedContainerActionError
 } from "./project-controller-errors";
 import { ProjectCreateRequest } from "./project.types";
@@ -360,17 +359,6 @@ export class ProjectsController {
       throw filePathRequiredError();
     }
     return this.projects.readFile(id, relativePath);
-  }
-
-  @Post(":id/terminal/input")
-  public async terminal(@Param("id") id: string, @Body() body: { input?: string }) {
-    /* Send input to a project-scoped terminal session. */
-    if (!body || typeof body.input !== "string") {
-      throw terminalInputRequiredError();
-    }
-
-    await this.projects.sendTerminalInput(id, body.input);
-    return { ok: true };
   }
 
   @Get(":id/logs")

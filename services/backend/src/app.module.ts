@@ -46,6 +46,7 @@ import { PromptController } from "./prompt/prompt.controller";
 import { PromptService } from "./prompt/prompt.service";
 import { ProjectsController } from "./projects/projects.controller";
 import { ProjectFilesController } from "./projects/project-files.controller";
+import { ProjectTerminalController } from "./projects/project-terminal.controller";
 import { ProjectsAdminController } from "./projects/projects-admin.controller";
 import { ProjectsService } from "./projects/projects.service";
 import { ProjectRegistry } from "./projects/project-registry";
@@ -102,6 +103,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     EventsController,
     ProjectsController,
     ProjectFilesController,
+    ProjectTerminalController,
     ProjectsAdminController,
     TerminalController,
     OpenCodeController,

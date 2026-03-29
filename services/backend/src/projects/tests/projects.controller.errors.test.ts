@@ -40,23 +40,6 @@ describe("ProjectsController structured errors", () => {
     }
   });
 
-  it("returns structured payload for missing terminal input", async () => {
-    /* Terminal endpoint should not accept malformed requests without explicit input text. */
-    const controller = createController();
-
-    await expect(controller.terminal("arena", {} as any)).rejects.toThrow(BadRequestException);
-
-    try {
-      await controller.terminal("arena", {} as any);
-    } catch (error) {
-      expect((error as BadRequestException).getResponse()).toMatchObject({
-        code: "APP_PROJECT_TERMINAL_INPUT_REQUIRED",
-        message: "Terminal input is required.",
-        hint: "Provide non-empty terminal input text and retry the request."
-      });
-    }
-  });
-
   it("returns structured payload for missing commit message", async () => {
     /* Git commit endpoint should fail fast before touching repository state when message is blank. */
     const controller = createController();

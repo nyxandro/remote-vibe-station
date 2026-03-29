@@ -82,4 +82,62 @@ describe("ProjectTerminalService", () => {
     expect(childProcess.execFile).toHaveBeenCalledTimes(1);
     expect(pty.spawn).toHaveBeenCalledTimes(1);
   });
+
+  test("stores terminal output so late UI subscribers can hydrate the initial prompt", async () => {
+    /* The terminal snapshot must retain early PTY output because the Mini App socket connects after project selection. */
+    let handleData: ((chunk: string) => void) | undefined;
+    const write = jest.fn();
+    pty.spawn.mockReturnValue({
+      onData: (listener: (chunk: string) => void) => {
+        handleData = listener;
+        return { dispose: jest.fn() };
+      },
+      write
+    } as Partial<IPty>);
+    childProcess.execFile.mockImplementation((command, args, options, callback) => {
+      callback(null, "remote-vibe-station-opencode-1\n", "");
+    });
+    const events = { publish: jest.fn() };
+    const service = new ProjectTerminalService(events as never);
+
+    const ensurePromise = service.ensure("auto-v-arendu", "/srv/projects/auto-v-arendu");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (!handleData) {
+      throw new Error("PTY data listener was not registered");
+    }
+    handleData("\u001b[?2004huser@host:/srv/projects/auto-v-arendu$ ");
+    await ensurePromise;
+
+    expect(service.readSnapshot("auto-v-arendu")).toContain("user@host:/srv/projects/auto-v-arendu$");
+  });
+
+  test("deduplicates concurrent ensure calls for the same project", async () => {
+    /* Project selection and terminal snapshot hydration can race, so both callers must share one PTY bootstrap. */
+    let handleData: ((chunk: string) => void) | undefined;
+    const write = jest.fn();
+    pty.spawn.mockReturnValue({
+      onData: (listener: (chunk: string) => void) => {
+        handleData = listener;
+        return { dispose: jest.fn() };
+      },
+      write
+    } as Partial<IPty>);
+    childProcess.execFile.mockImplementation((command, args, options, callback) => {
+      callback(null, "remote-vibe-station-opencode-1\n", "");
+    });
+    const service = new ProjectTerminalService({ publish: jest.fn() } as never);
+
+    const firstEnsure = service.ensure("auto-v-arendu", "/srv/projects/auto-v-arendu");
+    const secondEnsure = service.ensure("auto-v-arendu", "/srv/projects/auto-v-arendu");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (!handleData) {
+      throw new Error("PTY data listener was not registered");
+    }
+
+    handleData("user@host:/srv/projects/auto-v-arendu$ ");
+    await Promise.all([firstEnsure, secondEnsure]);
+
+    expect(childProcess.execFile).toHaveBeenCalledTimes(1);
+    expect(pty.spawn).toHaveBeenCalledTimes(1);
+  });
 });
