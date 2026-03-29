@@ -343,7 +343,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   }
 
   private handleSessionStatus(properties: Record<string, unknown>): void {
-    /* Stop indicator when session transitions to idle state. */
+    /* Session status events can also carry retry/cooldown notices that never appear as text-part deltas. */
     const sessionID = String(properties.sessionID ?? "");
     if (!sessionID) {
       return;
@@ -353,7 +353,16 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     if (!route) {
       return;
     }
-    const statusType = String((properties.status as any)?.type ?? "");
+    const status = (properties.status as any) ?? {};
+    const statusType = String(status?.type ?? "");
+    if (statusType === "retry") {
+      this.enqueueSystemNotifications({
+        sessionID,
+        adminId: route.adminId,
+        text: String(status?.message ?? "")
+      });
+    }
+
     if (statusType === "idle") {
       this.handleIdleSession(sessionID, route.adminId);
     }

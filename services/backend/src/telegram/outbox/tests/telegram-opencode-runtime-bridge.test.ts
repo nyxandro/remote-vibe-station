@@ -700,6 +700,32 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     );
   });
 
+  it("forwards cooldown notices from session retry status messages", () => {
+    /* OpenCode can surface provider cooldowns as session.status retry events, so Telegram delivery must not depend on text parts only. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).handleSessionStatus({
+      sessionID: "session-cooldown-retry",
+      status: {
+        type: "retry",
+        attempt: 3,
+        next: Date.now() + 5000,
+        message: "All credentials for model gemini-3.1-pro-high are cooling down\nповтор через 5с - попытка №3"
+      }
+    });
+
+    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adminId: 10,
+        progressKey: "runtime-notice:10:session-cooldown-retry:cooldown",
+        text: expect.stringContaining("gemini-3.1-pro-high"),
+        replyMarkup: {
+          inlineKeyboard: [[{ text: "⏹ Стоп", callback_data: "sess-stop|active" }]]
+        }
+      })
+    );
+  });
+
   it("forwards system reminder blocks only once per session", () => {
     /* System reminders should reach Telegram, but duplicate deltas must not spam the admin chat. */
     const { bridge, outbox } = makeBridge();
