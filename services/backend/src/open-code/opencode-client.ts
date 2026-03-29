@@ -50,6 +50,11 @@ type OpenCodeProvidersConfig = {
   default?: Record<string, string>;
 };
 
+type OpenCodeConfigUpdateResponse = {
+  model?: string;
+  default_agent?: string;
+};
+
 type OpenCodeProvidersResponse = {
   all?: Array<{
     id?: string;
@@ -420,6 +425,41 @@ export class OpenCodeClient {
         body: JSON.stringify({ response: input.response })
       }
     );
+  }
+
+  public async updateDefaultExecutionMode(input: {
+    model: { providerID: string; modelID: string };
+    agent: string | null;
+  }): Promise<void> {
+    /* Keep OpenCode Web/TUI defaults aligned with Telegram-selected execution mode for future requests and fresh page loads. */
+    const providerID = input.model.providerID.trim();
+    const modelID = input.model.modelID.trim();
+    if (!providerID || !modelID) {
+      throw new Error("providerID and modelID are required to update OpenCode config");
+    }
+
+    const response = await this.request<OpenCodeConfigUpdateResponse>("/config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: `${providerID}/${modelID}`,
+        default_agent: input.agent?.trim() || "build"
+      })
+    });
+
+    /* Mirror the updated defaults locally so subsequent backend reads do not stay stale until process restart. */
+    this.cachedDefaultModel = { providerID, modelID };
+    if (this.cachedProvidersResponse?.default) {
+      this.cachedProvidersResponse = {
+        ...this.cachedProvidersResponse,
+        default: {
+          ...this.cachedProvidersResponse.default,
+          [providerID]: modelID
+        }
+      };
+    }
+
+    void response;
   }
 
   public async repairStuckSessions(input: {

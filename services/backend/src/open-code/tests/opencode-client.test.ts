@@ -464,6 +464,48 @@ describe("OpenCodeClient command APIs", () => {
     );
   });
 
+  it("patches OpenCode config to sync Telegram-selected model and default agent", async () => {
+    /* Telegram mode picker should be able to align Web UI defaults with the exact execution mode used by backend prompts. */
+    const fetchMock = jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ model: "cliproxy/gpt-5.4", default_agent: "plan" })
+    } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await client.updateDefaultExecutionMode({
+      model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+      agent: "plan"
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://opencode:4096/config",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ model: "cliproxy/gpt-5.4", default_agent: "plan" })
+      })
+    );
+  });
+
+  it("syncs build as OpenCode default agent when Telegram agent falls back to default", async () => {
+    /* Web UI should open with the same effective agent even when Telegram stores null as the implicit build default. */
+    const fetchMock = jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ model: "cliproxy/gpt-5.4", default_agent: "build" })
+    } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await client.updateDefaultExecutionMode({
+      model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+      agent: null
+    });
+
+    const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(requestInit.body))).toEqual({
+      model: "cliproxy/gpt-5.4",
+      default_agent: "build"
+    });
+  });
+
   it("lists sessions with title and status merged from OpenCode endpoints", async () => {
     /* Session picker needs human-readable title plus runtime status per item. */
     const fetchMock = jest

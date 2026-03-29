@@ -199,6 +199,12 @@ export class TelegramPreferencesService {
     const nextAgent =
       typeof input.agent !== "undefined" ? this.validateAgent(input.agent, agents) : this.resolveAgent(prev.agent, agents);
 
+    /* Sync OpenCode defaults first so Telegram does not persist a mode that the browser surface failed to adopt. */
+    await this.opencode.updateDefaultExecutionMode({
+      model: nextModel,
+      agent: nextAgent
+    });
+
     this.store.set(adminId, {
       ...prev,
       model: nextModel,

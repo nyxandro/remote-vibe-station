@@ -1,5 +1,5 @@
 /**
- * @fileoverview Tests for TelegramPreferencesService voice-control settings.
+ * @fileoverview Tests for TelegramPreferencesService mode and voice-control settings.
  *
  * Exports:
  * - (none)
@@ -166,7 +166,8 @@ describe("TelegramPreferencesService voice control", () => {
           variants: ["low", "medium", "high"]
         }
       ]),
-      listAgents: jest.fn().mockResolvedValue([{ name: "build", mode: "primary" }])
+      listAgents: jest.fn().mockResolvedValue([{ name: "build", mode: "primary" }]),
+      updateDefaultExecutionMode: jest.fn().mockResolvedValue(undefined)
     };
     const opencodeSettings = {
       listCustomAgentNames: jest.fn().mockReturnValue([])
@@ -189,5 +190,83 @@ describe("TelegramPreferencesService voice control", () => {
         model: "whisper-large-v3"
       }
     });
+    expect(opencode.updateDefaultExecutionMode).toHaveBeenCalledWith({
+      model: { providerID: "opencode", modelID: "big-pickle" },
+      agent: "build"
+    });
+  });
+
+  it("syncs OpenCode default config when Telegram model and agent change", async () => {
+    /* Telegram mode changes should also update OpenCode Web default selection so both surfaces stay aligned. */
+    const store = {
+      get: jest.fn().mockReturnValue({}),
+      set: jest.fn()
+    };
+
+    const opencode = {
+      listProviders: jest.fn().mockResolvedValue([{ id: "cliproxy", name: "CLIProxy" }]),
+      listModels: jest.fn().mockResolvedValue([
+        {
+          id: "gpt-5.4",
+          name: "GPT-5.4",
+          variants: ["low", "medium", "high"]
+        }
+      ]),
+      listAgents: jest.fn().mockResolvedValue([{ name: "build", mode: "primary" }, { name: "plan", mode: "primary" }]),
+      updateDefaultExecutionMode: jest.fn().mockResolvedValue(undefined)
+    };
+    const opencodeSettings = {
+      listCustomAgentNames: jest.fn().mockReturnValue([])
+    };
+
+    const service = new TelegramPreferencesService(store as never, opencode as never, opencodeSettings as never);
+    await service.updateSettings(42, {
+      providerID: "cliproxy",
+      modelID: "gpt-5.4",
+      thinking: "high",
+      agent: "plan"
+    });
+
+    expect(opencode.updateDefaultExecutionMode).toHaveBeenCalledWith({
+      model: { providerID: "cliproxy", modelID: "gpt-5.4" },
+      agent: "plan"
+    });
+  });
+
+  it("does not persist Telegram mode when OpenCode config sync fails", async () => {
+    /* Failing browser-sync must abort the update so Telegram and Web UI do not drift silently. */
+    const store = {
+      get: jest.fn().mockReturnValue({}),
+      set: jest.fn()
+    };
+
+    const opencode = {
+      listProviders: jest.fn().mockResolvedValue([{ id: "cliproxy", name: "CLIProxy" }]),
+      listModels: jest.fn().mockResolvedValue([
+        {
+          id: "gpt-5.4",
+          name: "GPT-5.4",
+          variants: ["low", "medium", "high"]
+        }
+      ]),
+      listAgents: jest.fn().mockResolvedValue([{ name: "build", mode: "primary" }]),
+      updateDefaultExecutionMode: jest.fn().mockRejectedValue(new Error("APP_OPENCODE_CONFIG_SYNC_FAILED"))
+    };
+    const opencodeSettings = {
+      listCustomAgentNames: jest.fn().mockReturnValue([])
+    };
+
+    const service = new TelegramPreferencesService(store as never, opencode as never, opencodeSettings as never);
+
+    await expect(
+      service.updateSettings(42, {
+        providerID: "cliproxy",
+        modelID: "gpt-5.4",
+        thinking: "medium",
+        agent: "build"
+      })
+    ).rejects.toThrow("APP_OPENCODE_CONFIG_SYNC_FAILED");
+
+    expect(store.set).not.toHaveBeenCalled();
   });
 });
