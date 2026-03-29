@@ -53,6 +53,7 @@ type OpenCodeProvidersConfig = {
 type OpenCodeConfigUpdateResponse = {
   model?: string;
   default_agent?: string;
+  mcp?: Record<string, { enabled?: boolean }>;
 };
 
 type OpenCodeProvidersResponse = {
@@ -460,6 +461,15 @@ export class OpenCodeClient {
     }
 
     void response;
+  }
+
+  public async listActiveMcpServers(): Promise<string[]> {
+    /* Startup summary only needs enabled MCP server ids, so reuse OpenCode config endpoint instead of scanning runtime files. */
+    const response = await this.request<OpenCodeConfigUpdateResponse>("/config", { method: "GET" });
+    return Object.entries(response?.mcp ?? {})
+      .filter(([, config]) => config?.enabled !== false)
+      .map(([name]) => name)
+      .sort((a, b) => a.localeCompare(b));
   }
 
   public async repairStuckSessions(input: {

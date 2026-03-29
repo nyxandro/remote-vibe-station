@@ -3,7 +3,7 @@
  *
  * Exports:
  * - TelegramMenuCommand (L16) - Telegram API command item shape.
- * - TelegramCommandCatalog (L21) - Merged menu plus lookup map for bot routing.
+ * - TelegramCommandCatalog (L21) - Merged menu plus lookup map and active skill list for bot routing.
  * - TelegramCommandCatalogService (L31) - Builds normalized command catalog for admin/project context.
  */
 
@@ -19,11 +19,25 @@ export type TelegramMenuCommand = {
 export type TelegramCommandCatalog = {
   commands: TelegramMenuCommand[];
   lookup: Record<string, string>;
+  skills: string[];
 };
 
 const TELEGRAM_COMMAND_REGEX = /^[a-z0-9_]{1,32}$/;
 const TELEGRAM_DESCRIPTION_MAX = 256;
 const EXCLUDED_OPENCODE_COMMANDS = new Set(["init", "review"]);
+const SKILL_COMMAND_NAMES = new Set([
+  "cache_components",
+  "ccs_delegation",
+  "docx",
+  "frontend_skill",
+  "pdf",
+  "pptx",
+  "pretty_mermaid",
+  "seo_review",
+  "vercel_react_best_practices",
+  "xlsx",
+  "yandex_wordstat"
+]);
 
 const BOT_LOCAL_COMMANDS: TelegramMenuCommand[] = [
   { command: "start", description: "Запуск бота и справка" },
@@ -50,6 +64,7 @@ export class TelegramCommandCatalogService {
     /* Keep insertion order deterministic: local commands first, dynamic commands after. */
     const menuMap = new Map<string, TelegramMenuCommand>();
     const lookup = new Map<string, string>();
+    const skills = new Set<string>();
 
     BOT_LOCAL_COMMANDS.forEach((item) => {
       menuMap.set(item.command, item);
@@ -70,6 +85,12 @@ export class TelegramCommandCatalogService {
       }
 
       lookup.set(telegramName, item.name);
+      if (SKILL_COMMAND_NAMES.has(telegramName)) {
+        /* Skill slash commands stay callable via manual input, but should not appear in Telegram command menu. */
+        skills.add(telegramName);
+        return;
+      }
+
       if (!menuMap.has(telegramName)) {
         menuMap.set(telegramName, {
           command: telegramName,
@@ -80,7 +101,8 @@ export class TelegramCommandCatalogService {
 
     return {
       commands: Array.from(menuMap.values()),
-      lookup: Object.fromEntries(lookup.entries())
+      lookup: Object.fromEntries(lookup.entries()),
+      skills: Array.from(skills.values())
     };
   }
 

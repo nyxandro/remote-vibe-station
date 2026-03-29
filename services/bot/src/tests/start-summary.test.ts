@@ -29,6 +29,8 @@ describe("buildStartSummaryMessage", () => {
       session: {
         title: "Sprint planning"
       },
+      activeSkills: ["pdf", "pretty_mermaid"],
+      activeMcpServers: ["github", "filesystem"],
       commands: [
         { command: "mode", description: "Настроить model/agent" },
         { command: "sessions", description: "Выбрать сессию" }
@@ -42,6 +44,8 @@ describe("buildStartSummaryMessage", () => {
     expect(text).toContain("Режим: model=opencode/gpt-5-nano, agent=build, thinking=medium");
     expect(text).toContain("/mode - Настроить model/agent");
     expect(text).toContain("/sessions - Выбрать сессию");
+    expect(text).toContain("Активные скиллы:\npdf, pretty_mermaid");
+    expect(text).toContain("Активные MCP серверы:\ngithub, filesystem");
   });
 
   test("handles empty project and command list", () => {
@@ -56,6 +60,8 @@ describe("buildStartSummaryMessage", () => {
         agent: null
       },
       session: null,
+      activeSkills: [],
+      activeMcpServers: [],
       commands: []
     });
 
@@ -65,6 +71,8 @@ describe("buildStartSummaryMessage", () => {
     expect(text).toContain("Режим: model=opencode/big-pickle, agent=build (default), thinking=default");
     expect(text).toContain("Доступные команды: нет");
     expect(text).not.toContain("Доступные команды:\nДоступные команды: нет");
+    expect(text).toContain("Активные скиллы:\nнет");
+    expect(text).toContain("Активные MCP серверы:\nнет");
   });
 
   test("hides git line when selected project has no local changes", () => {
@@ -86,6 +94,8 @@ describe("buildStartSummaryMessage", () => {
         agent: "build"
       },
       session: null,
+      activeSkills: [],
+      activeMcpServers: [],
       commands: [{ command: "sessions", description: "Выбрать сессию" }]
     });
 

@@ -9,7 +9,6 @@
 import { TelegramOpenCodeRuntimeBridge } from "../telegram-opencode-runtime-bridge.service";
 import {
   extractTodoItemsFromToolPart,
-  formatTelegramTodoStatusNotification,
   formatTelegramTodoProgressMessage
 } from "../telegram-todo-progress";
 
@@ -77,30 +76,11 @@ describe("telegram todo progress helper", () => {
     expect(formatted).toContain("▶️ Проверить Telegram");
   });
 
-  it("formats one standalone notification line for an updated todo status", () => {
-    /* Per-task Telegram updates should use the same status icons as the checklist so progress reads consistently. */
-    expect(
-      formatTelegramTodoStatusNotification({
-        id: "pending",
-        content: "Ждет очереди",
-        status: "pending",
-        priority: null
-      })
-    ).toContain("▶️ Ждет очереди");
-    expect(
-      formatTelegramTodoStatusNotification({
-        id: "active",
-        content: "Уже в работе",
-        status: "in_progress",
-        priority: null
-      })
-    ).toContain("✴️ Уже в работе");
-  });
 });
 
 describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
-  it("updates one live Telegram todo checklist in place during the same turn", () => {
-    /* One stable replace slot is easier to follow than a burst of checklist snapshots at the end of chat. */
+  it("sends a fresh full Telegram checklist for every completed todowrite update", () => {
+    /* Each runtime todo snapshot should arrive as a new full message so the latest checklist stays visible at the bottom of chat. */
     const { bridge, outbox } = makeBridge();
 
     (bridge as any).handlePartUpdated({
@@ -139,46 +119,20 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(3);
+    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(2);
     expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         adminId: 10,
-        parseMode: "HTML",
-        text: expect.stringContaining("✴️ Подключить сервер")
-      })
-    );
-    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        adminId: 10,
-        parseMode: "HTML",
-        text: expect.stringContaining("✅ <s>Подключить сервер</s>")
-      })
-    );
-    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        adminId: 10,
-        parseMode: "HTML",
-        text: expect.stringContaining("✴️ Обновить контейнеры")
-      })
-    );
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
-    expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        adminId: 10,
-        progressKey: "todo:10:session-todo:1",
         parseMode: "HTML",
         text: expect.stringContaining("<b>0 из 2 задач завершено</b>")
       })
     );
-    expect(outbox.enqueueProgressReplace).toHaveBeenNthCalledWith(
+    expect(outbox.enqueueAdminNotification).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         adminId: 10,
-        progressKey: "todo:10:session-todo:1",
         parseMode: "HTML",
         text: expect.stringContaining("✅ <s>Подключить сервер</s>")
       })
@@ -226,9 +180,8 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
-    const secondCall = outbox.enqueueProgressReplace.mock.calls[1][0];
-    expect(secondCall.progressKey).toBe("todo:10:session-stable:1");
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(2);
+    const secondCall = outbox.enqueueAdminNotification.mock.calls[1][0];
     expect(secondCall.text).toContain("<b>1 из 3 задач завершено</b>");
     expect(secondCall.text).toContain("✅ <s>Подготовить runtime</s>");
   });
@@ -275,18 +228,17 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(1);
+    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
     expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(1);
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledWith(
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledWith(
       expect.objectContaining({
-        progressKey: "todo:10:session-regress:1",
         text: expect.stringContaining("<b>2 из 3 задач завершено</b>")
       })
     );
   });
 
-  it("emits a separate Telegram message for every todo that advances during one turn", () => {
-    /* Operators should see progress as a chronological message feed instead of decoding only one silently edited checklist bubble. */
+  it("sends a full checklist snapshot each time todo state advances during one turn", () => {
+    /* Every progress change should produce one complete checklist message instead of tiny per-task deltas. */
     const { bridge, outbox } = makeBridge();
 
     (bridge as any).handlePartUpdated({
@@ -341,11 +293,14 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(4);
+    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(3);
     expect(outbox.enqueueAdminNotification.mock.calls[0][0].text).toContain("✴️ Подготовить план");
+    expect(outbox.enqueueAdminNotification.mock.calls[0][0].text).toContain("▶️ Сделать проверку");
     expect(outbox.enqueueAdminNotification.mock.calls[1][0].text).toContain("✅ <s>Подготовить план</s>");
-    expect(outbox.enqueueAdminNotification.mock.calls[2][0].text).toContain("✴️ Сделать проверку");
-    expect(outbox.enqueueAdminNotification.mock.calls[3][0].text).toContain("✅ <s>Сделать проверку</s>");
+    expect(outbox.enqueueAdminNotification.mock.calls[1][0].text).toContain("✴️ Сделать проверку");
+    expect(outbox.enqueueAdminNotification.mock.calls[2][0].text).toContain("✅ <s>Подготовить план</s>");
+    expect(outbox.enqueueAdminNotification.mock.calls[2][0].text).toContain("✅ <s>Сделать проверку</s>");
   });
 
   it("starts a new todo progress slot on the next turn so old completed items do not leak forever", () => {
@@ -407,11 +362,11 @@ describe("TelegramOpenCodeRuntimeBridge todo progress", () => {
       }
     });
 
-    expect(outbox.enqueueProgressReplace).toHaveBeenCalledTimes(2);
-    const firstCall = outbox.enqueueProgressReplace.mock.calls[0][0];
-    const secondCall = outbox.enqueueProgressReplace.mock.calls[1][0];
-    expect(firstCall.progressKey).toBe("todo:10:session-reset:1");
-    expect(secondCall.progressKey).toBe("todo:10:session-reset:2");
+    expect(outbox.enqueueProgressReplace).not.toHaveBeenCalled();
+    expect(outbox.enqueueAdminNotification).toHaveBeenCalledTimes(2);
+    const firstCall = outbox.enqueueAdminNotification.mock.calls[0][0];
+    const secondCall = outbox.enqueueAdminNotification.mock.calls[1][0];
+    expect(firstCall.text).toContain("Старый шаг");
     expect(secondCall.text).toContain("Новый шаг");
     expect(secondCall.text).not.toContain("Старый шаг");
   });

@@ -81,4 +81,25 @@ describe("TelegramCommandCatalogService", () => {
     expect(catalog.lookup.review).toBeUndefined();
     expect(catalog.lookup.deploy).toBe("deploy");
   });
+
+  it("keeps skill slash commands out of Telegram menu but exposes them as active skills", async () => {
+    /* Skill commands should stay callable through lookup, but they should not pollute Telegram command suggestions. */
+    const prompts = {
+      listAvailableCommands: jest.fn().mockResolvedValue([
+        { name: "pdf", description: "PDF skill" },
+        { name: "pretty-mermaid", description: "Mermaid skill" },
+        { name: "deploy", description: "deploy release" }
+      ])
+    };
+    const service = new TelegramCommandCatalogService(prompts as never);
+
+    const catalog = await service.listForAdmin(42);
+
+    expect(catalog.commands.map((item) => item.command)).toContain("deploy");
+    expect(catalog.commands.map((item) => item.command)).not.toContain("pdf");
+    expect(catalog.commands.map((item) => item.command)).not.toContain("pretty_mermaid");
+    expect(catalog.skills).toEqual(["pdf", "pretty_mermaid"]);
+    expect(catalog.lookup.pdf).toBe("pdf");
+    expect(catalog.lookup.pretty_mermaid).toBe("pretty-mermaid");
+  });
 });

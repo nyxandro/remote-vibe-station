@@ -85,6 +85,7 @@ export class TelegramController {
       this.preferences.getSettings(adminId),
       this.commandCatalog.listForAdmin(adminId)
     ]);
+    const activeMcpServers = await this.opencode.listActiveMcpServers();
 
     /* Git summary is project-scoped; without project we return explicit null. */
     const git = project ? await this.gitSummary.summaryForProjectRoot(project.rootPath) : null;
@@ -103,7 +104,9 @@ export class TelegramController {
         thinking: settings.selected.thinking,
         agent: settings.selected.agent
       },
-      commands: catalog.commands
+      commands: catalog.commands,
+      activeSkills: catalog.skills,
+      activeMcpServers
     };
   }
 
@@ -280,8 +283,12 @@ export class TelegramController {
   public async listCommands(@Req() req: Request) {
     /* Return merged Telegram command catalog (menu + alias lookup) for bot sync. */
     const adminId = requireTelegramAdminId(req);
+    const catalog = await this.commandCatalog.listForAdmin(adminId);
 
-    return this.commandCatalog.listForAdmin(adminId);
+    return {
+      commands: catalog.commands,
+      lookup: catalog.lookup
+    };
   }
 
   @UseGuards(AdminHeaderGuard)

@@ -16,7 +16,8 @@ const buildController = () => {
   const commandCatalog = {
     listForAdmin: jest.fn().mockResolvedValue({
       commands: [{ command: "start", description: "Запуск бота и справка" }],
-      lookup: { start: "start", review_changes: "review-changes" }
+      lookup: { start: "start", review_changes: "review-changes" },
+      skills: ["pdf"]
     })
   };
 
@@ -40,6 +41,7 @@ const buildController = () => {
     summaryForProjectRoot: jest.fn().mockResolvedValue(null)
   };
   const opencode = {
+    listActiveMcpServers: jest.fn().mockResolvedValue(["github", "filesystem"]),
     listQuestions: jest.fn(),
     replyQuestion: jest.fn(),
     replyPermission: jest.fn()
@@ -149,7 +151,8 @@ describe("TelegramController.getStartupSummary", () => {
         { command: "mode", description: "Настроить model/agent" },
         { command: "chat", description: "Включить стрим ответов" }
       ],
-      lookup: { mode: "mode", chat: "chat" }
+      lookup: { mode: "mode", chat: "chat" },
+      skills: ["pdf", "pretty_mermaid"]
     });
 
     const result = await controller.getStartupSummary({ authAdminId: 649624756 } as unknown as Request);
@@ -171,7 +174,9 @@ describe("TelegramController.getStartupSummary", () => {
       commands: [
         { command: "mode", description: "Настроить model/agent" },
         { command: "chat", description: "Включить стрим ответов" }
-      ]
+      ],
+      activeSkills: ["pdf", "pretty_mermaid"],
+      activeMcpServers: ["github", "filesystem"]
     });
   });
 

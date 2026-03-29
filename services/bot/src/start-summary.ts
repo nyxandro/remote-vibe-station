@@ -29,6 +29,8 @@ export type StartupSummary = {
   session?: {
     title: string;
   } | null;
+  activeSkills: string[];
+  activeMcpServers: string[];
   commands: Array<{
     command: string;
     description: string;
@@ -84,8 +86,16 @@ export const buildStartSummaryMessage = (summary: StartupSummary): string => {
       : ["Доступные команды: нет"];
   const commandSection =
     visibleCommands.length > 0 ? ["Доступные команды:", ...commandLines] : ["Доступные команды: нет"];
+  const skillsSection = [
+    "Активные скиллы:",
+    summary.activeSkills.length > 0 ? summary.activeSkills.join(", ") : "нет"
+  ];
+  const mcpSection = [
+    "Активные MCP серверы:",
+    summary.activeMcpServers.length > 0 ? summary.activeMcpServers.join(", ") : "нет"
+  ];
 
-  const lines = ["Привет!", projectLine, sessionLine, modeLine, "", ...commandSection];
+  const lines = ["Привет!", projectLine, sessionLine, modeLine, "", ...commandSection, "", ...skillsSection, "", ...mcpSection];
   if (gitLine) {
     /* Show git status only when there are real uncommitted changes. */
     lines.splice(2, 0, gitLine);

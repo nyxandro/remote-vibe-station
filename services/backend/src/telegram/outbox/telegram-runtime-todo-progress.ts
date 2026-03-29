@@ -2,25 +2,18 @@
  * @fileoverview Monotonic todo-progress tracker for Telegram runtime updates.
  *
  * Exports:
- * - TelegramRuntimeTodoProgressUpdate - Render payload for one live Telegram todo checklist update.
+ * - TelegramRuntimeTodoProgressUpdate - Render payload for one Telegram todo checklist snapshot.
  * - TelegramRuntimeTodoProgress - Tracks one canonical todo list per OpenCode turn and suppresses regressions.
  */
 
-import {
-  TelegramTodoItem,
-  formatTelegramTodoProgressMessage,
-  formatTelegramTodoStatusNotification
-} from "./telegram-todo-progress";
+import { TelegramTodoItem, formatTelegramTodoProgressMessage } from "./telegram-todo-progress";
 
 export type TelegramRuntimeTodoProgressUpdate = {
-  progressKey: string;
   text: string;
-  notifications: string[];
 };
 
 type TrackedTodoSession = {
   adminId: number;
-  progressKey: string;
   items: TelegramTodoItem[];
   lastRenderedText: string | null;
 };
@@ -116,29 +109,6 @@ const mergeTodoSnapshots = (existing: TelegramTodoItem[], incoming: TelegramTodo
   return order.map((id) => mergedById.get(id)).filter((todo): todo is TelegramTodoItem => Boolean(todo));
 };
 
-const shouldNotifyTodoStatus = (previous: TelegramTodoItem | undefined, next: TelegramTodoItem): boolean => {
-  /* Emit separate Telegram messages only for real forward progress so repeated snapshots stay quiet. */
-  if (!previous) {
-    return next.status === "in_progress";
-  }
-
-  return previous.status !== next.status && getTodoStatusRank(next.status) > getTodoStatusRank(previous.status);
-};
-
-const buildTodoNotifications = (existing: TelegramTodoItem[], merged: TelegramTodoItem[]): string[] => {
-  /* Render one chronological message per task transition so the operator can follow progress without watching one edited card. */
-  const previousById = new Map(existing.map((todo) => [todo.id, todo]));
-
-  return merged.flatMap((todo) => {
-    const previous = previousById.get(todo.id);
-    if (!shouldNotifyTodoStatus(previous, todo)) {
-      return [];
-    }
-
-    return [formatTelegramTodoStatusNotification(todo)];
-  });
-};
-
 export class TelegramRuntimeTodoProgress {
   private readonly turnSeqBySession = new Map<string, number>();
   private readonly stateBySession = new Map<string, TrackedTodoSession>();
@@ -179,7 +149,6 @@ export class TelegramRuntimeTodoProgress {
     const dedupedTodos = dedupeTodoItems(input.todos);
     const state = this.getOrCreateSessionState({ adminId: input.adminId, sessionID: normalizedSessionID });
     const mergedTodos = mergeTodoSnapshots(state.items, dedupedTodos);
-    const notifications = buildTodoNotifications(state.items, mergedTodos);
     const nextText = formatTelegramTodoProgressMessage(mergedTodos);
     if (state.lastRenderedText === nextText) {
       return null;
@@ -189,9 +158,7 @@ export class TelegramRuntimeTodoProgress {
     state.lastRenderedText = nextText;
 
     return {
-      progressKey: state.progressKey,
-      text: nextText,
-      notifications
+      text: nextText
     };
   }
 
@@ -207,7 +174,6 @@ export class TelegramRuntimeTodoProgress {
 
     const state: TrackedTodoSession = {
       adminId: input.adminId,
-      progressKey: `todo:${input.adminId}:${input.sessionID}:${turnSeq}`,
       items: [],
       lastRenderedText: null
     };

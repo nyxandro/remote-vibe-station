@@ -37,7 +37,8 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
     commandCatalog = {
       listForAdmin: jest.fn().mockResolvedValue({
         commands: [{ command: "start", description: "Запуск бота и справка" }],
-        lookup: { start: "start", review_changes: "review-changes" }
+        lookup: { start: "start", review_changes: "review-changes" },
+        skills: ["pdf"]
       })
     };
     projects = {
@@ -78,7 +79,7 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
         { provide: TelegramPreferencesService, useValue: preferences },
         { provide: ProjectsService, useValue: projects },
         { provide: ProjectGitService, useValue: gitSummary },
-        { provide: OpenCodeClient, useValue: {} },
+        { provide: OpenCodeClient, useValue: { listActiveMcpServers: jest.fn().mockResolvedValue(["github"]) } },
         { provide: OpenCodeRuntimeService, useValue: { checkVersionStatus: jest.fn() } },
         { provide: OpenCodeSessionRoutingStore, useValue: {} },
         { provide: TelegramDiffPreviewStore, useValue: {} },
@@ -158,6 +159,8 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
       git: { filesChanged: number; additions: number; deletions: number } | null;
       mode: { providerID: string; modelID: string; thinking: string | null; agent: string | null };
       commands: Array<{ command: string; description: string }>;
+      activeSkills: string[];
+      activeMcpServers: string[];
     };
 
     expect(body).toEqual({
@@ -172,7 +175,9 @@ describe("TelegramController /api/telegram/commands (e2e)", () => {
         thinking: null,
         agent: null
       },
-      commands: [{ command: "start", description: "Запуск бота и справка" }]
+      commands: [{ command: "start", description: "Запуск бота и справка" }],
+      activeSkills: ["pdf"],
+      activeMcpServers: ["github"]
     });
   });
 });

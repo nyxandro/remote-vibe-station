@@ -506,6 +506,24 @@ describe("OpenCodeClient command APIs", () => {
     });
   });
 
+  it("lists only enabled MCP servers from OpenCode config", async () => {
+    /* Startup summary should show only active MCP integrations instead of every disabled stub in config. */
+    jest.spyOn(global, "fetch" as any).mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          mcp: {
+            github: { type: "remote", url: "https://example.com/github", enabled: true },
+            filesystem: { type: "local", command: ["npx", "fs-server"] },
+            disabledOne: { type: "remote", url: "https://example.com/off", enabled: false }
+          }
+        })
+    } as Response);
+
+    const client = new OpenCodeClient(baseConfig);
+    await expect(client.listActiveMcpServers()).resolves.toEqual(["filesystem", "github"]);
+  });
+
   it("lists sessions with title and status merged from OpenCode endpoints", async () => {
     /* Session picker needs human-readable title plus runtime status per item. */
     const fetchMock = jest
