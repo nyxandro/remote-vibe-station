@@ -116,10 +116,6 @@ export const ProvidersTab = (props: Props) => {
 
   return (
     <section className="providers-shell">
-      <div className="settings-header-row">
-        <h3 className="panel-title">Providers</h3>
-      </div>
-
       <div className="providers-list">
         {connectedProviders.map((provider) => (
           <div key={provider.id} className="providers-item-card">

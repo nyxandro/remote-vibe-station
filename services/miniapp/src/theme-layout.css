@@ -703,9 +703,7 @@ html[data-theme="dark"] .project-card,
 html[data-theme="dark"] .files-toolbar,
 html[data-theme="dark"] .settings-accordion-item,
 html[data-theme="dark"] .settings-editor-card,
-html[data-theme="dark"] .settings-editor-modal,
-html[data-theme="dark"] .project-create-panel,
-html[data-theme="dark"] .project-create-menu {
+html[data-theme="dark"] .settings-editor-modal {
   background: #131d31;
   border-color: #233352;
   color: #d9e3f5;
@@ -790,6 +788,23 @@ html[data-theme="dark"] .stream-toggle-on {
 
 html[data-theme="dark"] .btn.ghost {
   color: #a2b0c8;
+}
+
+html[data-theme="dark"] .project-add-modal-mode-row {
+  border-bottom-color: #233352;
+}
+
+html[data-theme="dark"] .project-add-modal-mode-btn {
+  color: #8fa1c2;
+}
+
+html[data-theme="dark"] .project-add-modal-mode-btn:hover:not(:disabled) {
+  color: #dbe7ff;
+}
+
+html[data-theme="dark"] .project-add-modal-mode-btn-active {
+  border-bottom-color: #5f8dff;
+  color: #eef4ff;
 }
 
 html[data-theme="dark"] .file-item:hover {

@@ -146,7 +146,6 @@ body {
 }
 
 .project-create-menu-shell {
-  position: relative;
   width: 100%;
 }
 
@@ -156,51 +155,58 @@ body {
   min-height: 40px;
 }
 
-.project-create-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: min(260px, 90vw);
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #ffffff;
-}
-
-.project-create-panel {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: #ffffff;
-  padding: 16px;
-  margin-bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
-}
-
-html[data-theme="dark"] .project-create-panel {
-  background: #1e293b;
-  border-color: rgba(255, 255, 255, 0.05);
-}
-
-.project-create-title {
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .project-create-note {
   font-size: 11px;
   color: var(--text-muted);
 }
 
-.project-create-actions {
+.project-add-modal-mode-row {
   display: flex;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 86%, rgba(27, 108, 255, 0.14) 14%);
+}
+
+.project-add-modal-mode-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 12px 14px 14px;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s,
+    box-shadow 0.2s;
+}
+
+.project-add-modal-mode-btn svg {
+  flex: 0 0 auto;
+}
+
+.project-add-modal-mode-btn:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.project-add-modal-mode-btn-active {
+  border-bottom-color: var(--accent);
+  background: transparent;
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.project-add-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .input {
@@ -1037,18 +1043,6 @@ html[data-theme="dark"] .project-deploy-link-url {
   html[data-theme="dark"] .input {
     background: rgba(255, 255, 255, 0.05);
     border-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .project-create-menu {
-    border-radius: 24px;
-    padding: 16px;
-    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.15);
-    width: min(320px, 90vw);
-  }
-
-  html[data-theme="dark"] .project-create-menu {
-    background: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   .status-card {

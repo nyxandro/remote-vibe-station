@@ -41,6 +41,7 @@ describe("ProvidersTab", () => {
     expect(screen.queryByText(/Модель:/i)).toBeNull();
     expect(screen.queryByText(/Режим мышления:/i)).toBeNull();
     expect(screen.queryByText(/Агент:/i)).toBeNull();
+    expect(screen.queryByText("Providers")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Добавить провайдера" }));
     fireEvent.click(screen.getByRole("button", { name: "Anthropic" }));

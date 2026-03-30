@@ -5,8 +5,10 @@
  * - FileUploadModal - Supports local device upload and external URL import flows.
  */
 
-import { useEffect, useId, useState } from "react";
-import { File, Upload, X } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { File, Link2, Upload, X } from "lucide-react";
+
+import { ActionModal } from "./ActionModal";
 
 type UploadMode = "device" | "url";
 
@@ -23,7 +25,8 @@ const URL_MODE: UploadMode = "url";
 const EMPTY_VALUE = "";
 
 export const FileUploadModal = (props: Props) => {
-  const titleId = useId();
+  const tabPanelId = useId();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [mode, setMode] = useState<UploadMode>(DEVICE_MODE);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [urlDraft, setUrlDraft] = useState<string>(EMPTY_VALUE);
@@ -43,40 +46,19 @@ export const FileUploadModal = (props: Props) => {
     setSubmitError(null);
   }, [props.isOpen]);
 
-  useEffect(() => {
-    /* Keep background fixed while the upload dialog is open on mobile. */
-    if (!props.isOpen) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [props.isOpen]);
-
-  useEffect(() => {
-    /* Escape closes the modal for keyboard users without forcing pointer interaction. */
-    if (!props.isOpen) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-
-      props.onClose();
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.isOpen, props.onClose]);
-
   if (!props.isOpen) {
     return null;
   }
+
+  const switchMode = (nextMode: UploadMode): void => {
+    /* Shared modal tabs should switch instantly but never while a submit is still running. */
+    if (isSubmitting) {
+      return;
+    }
+
+    setMode(nextMode);
+    setSubmitError(null);
+  };
 
   const submit = async (): Promise<void> => {
     /* Each mode validates its own required input and keeps errors visible inside the dialog. */
@@ -118,80 +100,100 @@ export const FileUploadModal = (props: Props) => {
 
   const currentFolderLabel = props.currentPath.trim() || "/";
 
+  const openLocalFilePicker = (): void => {
+    /* Mobile layout replaces the dropzone with a plain button, both backed by the same hidden input. */
+    fileInputRef.current?.click();
+  };
+
   return (
-    <div className="files-upload-modal-backdrop" onClick={props.onClose} role="presentation">
-      <div
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className="files-upload-modal"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
-      >
-        <div className="files-upload-modal-header">
-          <div>
-            <h2 id={titleId} className="files-upload-modal-title">
-              Add file
-            </h2>
-            <div className="files-upload-target">Current folder: {currentFolderLabel}</div>
-          </div>
+    <ActionModal
+      isOpen={props.isOpen}
+      title="Add file"
+      description={`Current folder: ${currentFolderLabel}`}
+      tone="primary"
+      closeLabel="Close add file"
+      isBusy={isSubmitting}
+      onClose={props.onClose}
+      footer={
+        <button className="btn primary" disabled={isSubmitting} onClick={() => void submit()} type="button">
+          {isSubmitting ? "Working..." : mode === DEVICE_MODE ? "Upload file" : "Import file"}
+        </button>
+      }
+    >
+      <div className="project-add-modal-mode-row" role="tablist" aria-label="File add mode">
+        <button
+          className={mode === DEVICE_MODE ? "project-add-modal-mode-btn project-add-modal-mode-btn-active" : "project-add-modal-mode-btn"}
+          role="tab"
+          aria-selected={mode === DEVICE_MODE}
+          aria-controls={tabPanelId}
+          disabled={isSubmitting}
+          onClick={() => switchMode(DEVICE_MODE)}
+          type="button"
+        >
+          <Upload size={16} aria-hidden="true" />
+          <span>Local</span>
+        </button>
+        <button
+          className={mode === URL_MODE ? "project-add-modal-mode-btn project-add-modal-mode-btn-active" : "project-add-modal-mode-btn"}
+          role="tab"
+          aria-selected={mode === URL_MODE}
+          aria-controls={tabPanelId}
+          disabled={isSubmitting}
+          onClick={() => switchMode(URL_MODE)}
+          type="button"
+        >
+          <Link2 size={16} aria-hidden="true" />
+          <span>Link</span>
+        </button>
+      </div>
 
-          <button className="btn ghost btn-icon files-upload-close-btn" onClick={props.onClose} type="button" aria-label="Close">
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="files-upload-mode-row">
-          <button
-            className={mode === DEVICE_MODE ? "files-upload-mode-btn files-upload-mode-btn-active" : "files-upload-mode-btn"}
-            onClick={() => setMode(DEVICE_MODE)}
-            type="button"
-          >
-            From device
-          </button>
-          <button
-            className={mode === URL_MODE ? "files-upload-mode-btn files-upload-mode-btn-active" : "files-upload-mode-btn"}
-            onClick={() => setMode(URL_MODE)}
-            type="button"
-          >
-            From link
-          </button>
-        </div>
-
+      <div className="project-add-modal-form" id={tabPanelId} role="tabpanel">
         {mode === DEVICE_MODE ? (
           <div key="device" className="files-upload-field">
-            <span className="files-upload-field-label">Choose file from device</span>
-            <label className="files-upload-dropzone">
-              <input
-                aria-label="Choose file from device"
-                className="files-upload-hidden-input"
-                onChange={(event) => {
-                  const nextFile = event.target.files?.[0] ?? null;
-                  setSelectedFile(nextFile);
-                }}
-                type="file"
-              />
-              {!selectedFile ? (
-                <div className="files-upload-dropzone-prompt">
-                  <Upload size={24} className="files-upload-dropzone-icon" />
-                  <span>Click to select or drag and drop</span>
-                </div>
-              ) : (
-                <div className="files-upload-selected-file">
-                  <File size={20} className="files-upload-selected-icon" />
-                  <span className="files-upload-selected-name">{selectedFile.name}</span>
-                  <button
-                    className="files-upload-selected-remove"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setSelectedFile(null);
-                    }}
-                    type="button"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              )}
-            </label>
+            <input
+              ref={fileInputRef}
+              aria-label="Choose file from device"
+              className="files-upload-device-input"
+              onChange={(event) => {
+                /* Reset the native input after each pick so selecting the same file again still emits a change event. */
+                const nextFile = event.target.files?.[0] ?? null;
+                setSelectedFile(nextFile);
+                event.target.value = EMPTY_VALUE;
+              }}
+              type="file"
+            />
+
+            {!selectedFile ? (
+              <>
+                <button className="files-upload-dropzone" onClick={openLocalFilePicker} type="button">
+                  <div className="files-upload-dropzone-prompt files-upload-dropzone-prompt-desktop">
+                    <Upload size={24} className="files-upload-dropzone-icon" />
+                    <span>Click to select a file</span>
+                  </div>
+                </button>
+
+                <button className="btn outline files-upload-mobile-picker" onClick={openLocalFilePicker} type="button">
+                  Choose files
+                </button>
+              </>
+            ) : (
+              <div className="files-upload-selected-file">
+                <File size={20} className="files-upload-selected-icon" />
+                <span className="files-upload-selected-name">{selectedFile.name}</span>
+                <button
+                  className="files-upload-selected-remove"
+                  aria-label="Remove selected file"
+                  onClick={() => {
+                    /* Clearing the selected file should return the modal to the same picker UI without reopening it. */
+                    setSelectedFile(null);
+                  }}
+                  type="button"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <span className="files-upload-note">The file is uploaded directly into the folder that is currently open in Files.</span>
           </div>
         ) : (
@@ -210,16 +212,7 @@ export const FileUploadModal = (props: Props) => {
         )}
 
         {submitError ? <div className="alert">{submitError}</div> : null}
-
-        <div className="files-upload-modal-actions">
-          <button className="btn ghost" onClick={props.onClose} type="button">
-            Cancel
-          </button>
-          <button className="btn primary" disabled={isSubmitting} onClick={() => void submit()} type="button">
-            {isSubmitting ? "Working..." : mode === DEVICE_MODE ? "Upload file" : "Import file"}
-          </button>
-        </div>
       </div>
-    </div>
+    </ActionModal>
   );
 };

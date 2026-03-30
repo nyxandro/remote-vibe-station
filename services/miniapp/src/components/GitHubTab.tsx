@@ -60,8 +60,6 @@ export const GitHubTab = (props: Props) => {
 
   return (
     <section className="git-tab-shell">
-      <div className="panel-title">GitHub</div>
-
       {!props.activeId ? (
         <div className="placeholder">Select a project first.</div>
       ) : null}

@@ -28,6 +28,7 @@ describe("ContainersTab", () => {
       />
     );
 
+    expect(screen.queryByText("Containers")).toBeNull();
     expect(screen.getByRole("button", { name: "Start All" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Restart All" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Stop All" })).toBeTruthy();

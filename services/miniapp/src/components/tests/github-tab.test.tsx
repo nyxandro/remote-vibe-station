@@ -61,6 +61,7 @@ describe("GitHubTab", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+    expect(screen.queryByText("GitHub")).toBeNull();
     expect(screen.getByText("src/app.ts")).toBeTruthy();
     expect(screen.getByText("+12")).toBeTruthy();
     expect(screen.getByText("-4")).toBeTruthy();

@@ -73,102 +73,10 @@
   background: #fbfdff;
 }
 
-.files-upload-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 420;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(3, 8, 20, 0.62);
-}
-
-.files-upload-modal {
-  width: min(560px, 100%);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--panel);
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.18);
-}
-
-.files-upload-modal-header,
-.files-upload-modal-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.files-upload-modal-title {
-  margin: 0;
-  font-size: 20px;
-  color: #0f172a;
-}
-
-.files-upload-close-btn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 !important;
-  border-radius: 50% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-html[data-theme="dark"] .files-upload-close-btn {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-html[data-theme="dark"] .files-upload-modal-title {
-  color: #ffffff;
-}
-
-.files-upload-target,
 .files-upload-note {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
-}
-
-.files-upload-mode-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  background: color-mix(in srgb, var(--panel) 90%, #dbe8ff 10%);
-  padding: 6px;
-  border-radius: 14px;
-}
-
-.files-upload-mode-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 10px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.files-upload-mode-btn:hover {
-  color: #1b6cff;
-}
-
-.files-upload-mode-btn-active {
-  background: var(--panel);
-  color: #1b6cff;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
 .files-upload-field {
@@ -184,6 +92,8 @@ html[data-theme="dark"] .files-upload-modal-title {
 }
 
 .files-upload-dropzone {
+  width: 100%;
+  padding: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -204,11 +114,12 @@ html[data-theme="dark"] .files-upload-modal-title {
   transform: translateY(-1px);
 }
 
-.files-upload-hidden-input {
+.files-upload-device-input {
   position: absolute;
-  inset: 0;
+  width: 1px;
+  height: 1px;
   opacity: 0;
-  cursor: pointer;
+  pointer-events: none;
 }
 
 .files-upload-dropzone-prompt {
@@ -227,6 +138,11 @@ html[data-theme="dark"] .files-upload-modal-title {
   opacity: 0.8;
 }
 
+.files-upload-mobile-picker {
+  display: none;
+  width: 100%;
+}
+
 .files-upload-selected-file {
   display: flex;
   align-items: center;
@@ -235,7 +151,8 @@ html[data-theme="dark"] .files-upload-modal-title {
   background: var(--panel);
   border: 1px solid var(--accent);
   border-radius: 14px;
-  width: calc(100% - 24px);
+  width: 100%;
+  box-sizing: border-box;
   position: relative;
   z-index: 2;
   box-shadow: 0 4px 12px rgba(27, 108, 255, 0.08);
@@ -288,7 +205,6 @@ html[data-theme="dark"] .files-location-strip {
 }
 
 html[data-theme="dark"] .files-list,
-html[data-theme="dark"] .files-upload-modal,
 html[data-theme="dark"] .file-item,
 html[data-theme="dark"] .file-item.dir {
   background: #131d31;
@@ -296,7 +212,6 @@ html[data-theme="dark"] .file-item.dir {
   color: #d9e3f5;
 }
 
-html[data-theme="dark"] .files-upload-modal-title,
 html[data-theme="dark"] .files-upload-field-label {
   color: #eef4ff;
 }
@@ -343,28 +258,6 @@ html[data-theme="dark"] .file-item.dir {
   background: #18243b;
 }
 
-html[data-theme="dark"] .files-upload-modal-backdrop {
-  background: rgba(3, 8, 20, 0.82);
-}
-
-html[data-theme="dark"] .files-upload-mode-row {
-  background: #0f172a;
-}
-
-html[data-theme="dark"] .files-upload-mode-btn {
-  color: #64748b;
-}
-
-html[data-theme="dark"] .files-upload-mode-btn:hover {
-  color: #e2e8f0;
-}
-
-html[data-theme="dark"] .files-upload-mode-btn-active {
-  background: #1e293b;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
 @media (max-width: 640px) {
   .files-location-strip {
     border-radius: 18px;
@@ -375,22 +268,12 @@ html[data-theme="dark"] .files-upload-mode-btn-active {
     width: 100%;
   }
 
-  .files-upload-modal-backdrop {
-    padding: 0;
-    align-items: stretch;
+  .files-upload-dropzone {
+    display: none;
   }
 
-  .files-upload-modal {
-    width: 100vw;
-    min-height: 100vh;
-    border-radius: 0;
-    border: 0;
-    box-shadow: none;
-    padding: 18px 14px calc(18px + env(safe-area-inset-bottom, 0px));
-  }
-
-  .files-upload-modal-actions {
-    flex-direction: column;
-    align-items: stretch;
+  .files-upload-mobile-picker {
+    display: inline-flex;
+    width: 100%;
   }
 }

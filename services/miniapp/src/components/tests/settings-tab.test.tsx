@@ -39,6 +39,7 @@ describe("SettingsTab", () => {
       />
     );
 
+    expect(screen.queryByText("Settings")).toBeNull();
     fireEvent.click(screen.getByText("3. OpenCode config"));
     fireEvent.click(screen.getByRole("button", { name: "Refresh project list" }));
     expect(onRefreshProjects).toHaveBeenCalledTimes(1);

@@ -4,7 +4,7 @@
 
 /* @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ProjectsTab } from "../ProjectsTab";
@@ -183,8 +183,8 @@ describe("ProjectsTab", () => {
     expect(screen.getByText("0 files")).toBeTruthy();
   });
 
-  it("supports create/clone project actions from plus menu", () => {
-    /* Toolbar should expose plus action with folder-create and git-clone flows. */
+  it("supports create and clone project actions from one add-project modal", async () => {
+    /* Project creation should stay inside one centered modal instead of expanding inline panels under the toolbar. */
     const onCreateProjectFolder = vi.fn();
     const onCloneRepository = vi.fn();
     const onDeployProject = vi.fn();
@@ -207,23 +207,71 @@ describe("ProjectsTab", () => {
     );
 
     fireEvent.click(screen.getByLabelText("Create project"));
-    fireEvent.click(screen.getByRole("button", { name: "Create project folder" }));
+    expect(screen.getByRole("dialog", { name: "Add project" })).toBeTruthy();
+    expect(screen.queryByText("PROJECTS")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Local" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Git" }).getAttribute("aria-selected")).toBe("false");
+
     fireEvent.change(screen.getByPlaceholderText("project-name"), { target: { value: "new-project" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
-    expect(onCreateProjectFolder).toHaveBeenCalledWith("new-project");
+    fireEvent.click(screen.getByRole("button", { name: "Create project folder" }));
+    await waitFor(() => {
+      expect(onCreateProjectFolder).toHaveBeenCalledWith("new-project");
+      expect(screen.queryByRole("dialog", { name: "Add project" })).toBeNull();
+    });
 
     fireEvent.click(screen.getByLabelText("Create project"));
-    fireEvent.click(screen.getByRole("button", { name: "Clone git repository" }));
+    expect(screen.getByRole("dialog", { name: "Add project" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Git" }));
     fireEvent.change(screen.getByPlaceholderText("https://github.com/org/repo.git"), {
       target: { value: "https://github.com/acme/repo.git" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Clone" }));
-    expect(onCloneRepository).toHaveBeenCalledWith("https://github.com/acme/repo.git", undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Clone repository now" }));
+    await waitFor(() => {
+      expect(onCloneRepository).toHaveBeenCalledWith("https://github.com/acme/repo.git", undefined);
+      expect(screen.queryByRole("dialog", { name: "Add project" })).toBeNull();
+    });
 
     fireEvent.click(screen.getByText("tvoc"));
     fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
     expect(onDeployProject).toHaveBeenCalledWith("tvoc");
     expect(onStopProjectDeploy).not.toHaveBeenCalled();
+  });
+
+  it("closes the add-project modal from the top-right close control without mutating projects", async () => {
+    /* One explicit close affordance in the modal header is enough; footer should stay focused on the primary action only. */
+    const onCreateProjectFolder = vi.fn();
+    const onCloneRepository = vi.fn();
+
+    render(
+      <ProjectsTab
+        visibleProjects={[buildProject()]}
+        activeId={null}
+        query=""
+        telegramStreamEnabled={false}
+        statusMap={{}}
+        gitSummaryMap={{}}
+        onQueryChange={vi.fn()}
+        onSelectProject={vi.fn()}
+        onDeployProject={vi.fn()}
+        onStopProjectDeploy={vi.fn()}
+        onCreateProjectFolder={onCreateProjectFolder}
+        onCloneRepository={onCloneRepository}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText("Create project"));
+    expect(screen.getByRole("dialog", { name: "Add project" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel add project" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Local" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: "Git" }).getAttribute("aria-selected")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close add project" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Add project" })).toBeNull();
+    });
+    expect(onCreateProjectFolder).not.toHaveBeenCalled();
+    expect(onCloneRepository).not.toHaveBeenCalled();
   });
 
   it("renders deploy route links inside expanded project card", () => {

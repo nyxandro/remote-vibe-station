@@ -8,6 +8,7 @@
 import { ChangeEvent, useState } from "react";
 import { Container, GitCommitHorizontal, Plus } from "lucide-react";
 
+import { ProjectAddModal } from "./ProjectAddModal";
 import { ProjectGitSummary, ProjectRecord, ProjectStatus } from "../types";
 import { deriveProjectContainerHealth } from "../utils/project-container-health";
 
@@ -38,18 +39,13 @@ type Props = {
   onSelectProject: (projectId: string) => void;
   onDeployProject: (projectId: string) => void;
   onStopProjectDeploy: (projectId: string) => void;
-  onCreateProjectFolder: (name: string) => void;
-  onCloneRepository: (repositoryUrl: string, folderName?: string) => void;
+  onCreateProjectFolder: (name: string) => Promise<void> | void;
+  onCloneRepository: (repositoryUrl: string, folderName?: string) => Promise<void> | void;
 };
 
 export const ProjectsTab = (props: Props) => {
-  /* Projects listing + creation actions. */
-  const [menuOpen, setMenuOpen] = useState<boolean>(false);
-  const [createOpen, setCreateOpen] = useState<boolean>(false);
-  const [cloneOpen, setCloneOpen] = useState<boolean>(false);
-  const [folderName, setFolderName] = useState<string>("");
-  const [repoUrl, setRepoUrl] = useState<string>("");
-  const [cloneFolderName, setCloneFolderName] = useState<string>("");
+  /* Projects list keeps only local view state; add-project inputs now live in a dedicated modal component. */
+  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   const toggleCardExpansion = (id: string) => {
@@ -71,120 +67,21 @@ export const ProjectsTab = (props: Props) => {
         <div className="project-create-menu-shell">
           <button
             className="btn outline project-create-btn"
-            onClick={() => setMenuOpen((prev) => !prev)}
+            onClick={() => setIsAddModalOpen(true)}
             type="button"
             aria-label="Create project"
           >
             <Plus size={16} />
           </button>
-
-          {menuOpen ? (
-            <div className="project-create-menu">
-              <button
-                className="btn outline"
-                onClick={() => {
-                  setCreateOpen(true);
-                  setCloneOpen(false);
-                  setMenuOpen(false);
-                }}
-                type="button"
-              >
-                Create project folder
-              </button>
-              <button
-                className="btn outline"
-                onClick={() => {
-                  setCloneOpen(true);
-                  setCreateOpen(false);
-                  setMenuOpen(false);
-                }}
-                type="button"
-              >
-                Clone git repository
-              </button>
-            </div>
-          ) : null}
         </div>
       </div>
 
-      {createOpen ? (
-        <div className="project-create-panel">
-          <div className="project-create-title">Create project folder</div>
-          <input
-            className="input"
-            placeholder="project-name"
-            value={folderName}
-            onChange={(event) => setFolderName(event.target.value)}
-          />
-          <div className="project-create-actions">
-            <button
-              className="btn"
-              disabled={!folderName.trim()}
-              onClick={() => {
-                props.onCreateProjectFolder(folderName.trim());
-                setFolderName("");
-                setCreateOpen(false);
-              }}
-              type="button"
-            >
-              Create
-            </button>
-            <button
-              className="btn ghost"
-              onClick={() => setCreateOpen(false)}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {cloneOpen ? (
-        <div className="project-create-panel">
-          <div className="project-create-title">Clone git repository</div>
-          <input
-            className="input"
-            placeholder="https://github.com/org/repo.git"
-            value={repoUrl}
-            onChange={(event) => setRepoUrl(event.target.value)}
-          />
-          <input
-            className="input"
-            placeholder="folder name (optional)"
-            value={cloneFolderName}
-            onChange={(event) => setCloneFolderName(event.target.value)}
-          />
-          <div className="project-create-note">
-            Uses git credentials configured in backend runtime/container.
-          </div>
-          <div className="project-create-actions">
-            <button
-              className="btn"
-              disabled={!repoUrl.trim()}
-              onClick={() => {
-                props.onCloneRepository(
-                  repoUrl.trim(),
-                  cloneFolderName.trim() || undefined,
-                );
-                setRepoUrl("");
-                setCloneFolderName("");
-                setCloneOpen(false);
-              }}
-              type="button"
-            >
-              Clone
-            </button>
-            <button
-              className="btn ghost"
-              onClick={() => setCloneOpen(false)}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <ProjectAddModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onCreateProjectFolder={props.onCreateProjectFolder}
+        onCloneRepository={props.onCloneRepository}
+      />
 
       <div className="project-grid">
         {props.visibleProjects.map((project) => {

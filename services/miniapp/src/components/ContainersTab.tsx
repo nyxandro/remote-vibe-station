@@ -44,8 +44,6 @@ export const ContainersTab = (props: Props) => {
 
   return (
     <>
-      <div className="panel-title">Containers</div>
-
       <div className="compose-controls">
         <span className="compose-controls-label">Compose Controls</span>
         <div className="compose-controls-actions">

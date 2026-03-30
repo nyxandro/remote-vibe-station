@@ -264,10 +264,6 @@ export const SettingsTab = (props: Props) => {
 
   return (
     <section className="settings-shell">
-      <div className="settings-header-row">
-        <h3 className="panel-title">Settings</h3>
-      </div>
-
       {props.runtimeServices ? (
         <SettingsRuntimeDashboard
           overview={props.overview}
