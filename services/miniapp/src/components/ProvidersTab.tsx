@@ -7,12 +7,29 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { CliproxyAccountState, CliproxyOAuthStartPayload, ProviderAuthMethod, ProxyApplyResult, ProxySettingsInput, ProxySettingsMode, ProxySettingsSnapshot } from "../types";
+import {
+  CliproxyAccountState,
+  CliproxyOAuthStartPayload,
+  ProviderAuthMethod,
+  ProxyApplyResult,
+  ProxyEnabledService,
+  ProxySettingsInput,
+  ProxySettingsMode,
+  ProxySettingsSnapshot,
+  ProxySettingsTestResult
+} from "../types";
 import { ProviderOAuthState } from "../hooks/use-provider-auth";
 import { CliproxyAccountsSection } from "./CliproxyAccountsSection";
 import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 const CLIPROXY_PROVIDER_ID = "cliproxy";
+const PROXY_SERVICE_OPTIONS: Array<{ id: ProxyEnabledService; label: string }> = [
+  { id: "backend", label: "Backend" },
+  { id: "bot", label: "Telegram bot" },
+  { id: "miniapp", label: "Mini App" },
+  { id: "opencode", label: "OpenCode" },
+  { id: "cliproxy", label: "CLIProxy" }
+];
 
 type Props = {
   providers: Array<{ id: string; name: string; connected: boolean }>;
@@ -28,7 +45,9 @@ type Props = {
   isProxyLoading: boolean;
   isProxySaving: boolean;
   isProxyApplying: boolean;
+  isProxyTesting: boolean;
   proxyApplyResult: ProxyApplyResult | null;
+  proxyTestResult: ProxySettingsTestResult | null;
   onRefresh?: () => void;
   onStartConnect: (input: { providerID: string; methodIndex: number }) => void;
   onSubmitApiKey: (input: { providerID: string; key: string }) => void;
@@ -51,6 +70,7 @@ type Props = {
   onDeleteCliproxyAccount: (accountId: string) => Promise<void> | void;
   onReloadProxy?: () => void;
   onSaveProxy: (input: ProxySettingsInput) => void;
+  onTestProxy: (input: { vlessConfigUrl: string }) => void;
   onApplyProxy: () => void;
 };
 
@@ -60,7 +80,9 @@ export const ProvidersTab = (props: Props) => {
   const [localCodeDraft, setLocalCodeDraft] = useState<string>(props.oauthState?.codeDraft ?? "");
   const [providerSearch, setProviderSearch] = useState<string>("");
   const [proxyMode, setProxyMode] = useState<ProxySettingsMode>("direct");
+  const [vlessConfigUrl, setVlessConfigUrl] = useState<string>("");
   const [vlessProxyUrl, setVlessProxyUrl] = useState<string>("");
+  const [enabledServices, setEnabledServices] = useState<ProxyEnabledService[]>(PROXY_SERVICE_OPTIONS.map((option) => option.id));
   const [noProxy, setNoProxy] = useState<string>("localhost,127.0.0.1,backend,opencode,cliproxy");
   const providerMap = useMemo(() => {
     /* Keep O(1) lookup for provider labels in connect modal and oauth forms. */
@@ -92,8 +114,13 @@ export const ProvidersTab = (props: Props) => {
   }, [connectableProviders, providerSearch]);
 
   const isApiFlow = props.oauthState?.instructions === "api";
+  const hasSuccessfulProxyTest =
+    proxyMode !== "vless"
+      ? true
+      : props.proxyTestResult?.ok === true && props.proxyTestResult.vlessProxyUrl === vlessProxyUrl && vlessConfigUrl.trim().length > 0;
   const isProxySaveDisabled =
-    props.isProxySaving || (proxyMode === "vless" && vlessProxyUrl.trim().length === 0);
+    props.isProxySaving ||
+    (proxyMode === "vless" && (vlessConfigUrl.trim().length === 0 || vlessProxyUrl.trim().length === 0 || !hasSuccessfulProxyTest));
 
   useEffect(() => {
     /* Mirror persisted proxy runtime profile into local draft controls after every reload. */
@@ -101,9 +128,29 @@ export const ProvidersTab = (props: Props) => {
       return;
     }
     setProxyMode(props.proxySnapshot.mode);
+    setVlessConfigUrl(props.proxySnapshot.vlessConfigUrl ?? "");
     setVlessProxyUrl(props.proxySnapshot.vlessProxyUrl ?? "");
+    setEnabledServices(props.proxySnapshot.enabledServices);
     setNoProxy(props.proxySnapshot.noProxy);
   }, [props.proxySnapshot]);
+
+  useEffect(() => {
+    /* Successful test derives the local proxy URL used by saved env preview and compose override. */
+    if (!props.proxyTestResult) {
+      return;
+    }
+    setVlessProxyUrl(props.proxyTestResult.vlessProxyUrl);
+  }, [props.proxyTestResult]);
+
+  const toggleEnabledService = (serviceId: ProxyEnabledService) => {
+    /* Preserve explicit service selection instead of inferring hidden defaults from runtime. */
+    setEnabledServices((current) => {
+      if (current.includes(serviceId)) {
+        return current.filter((entry) => entry !== serviceId);
+      }
+      return [...current, serviceId].sort();
+    });
+  };
 
   const cliproxyUpdatedAtLabel = useMemo(() => {
     /* Keep runtime metadata readable even when backend has not loaded snapshot yet. */
@@ -231,18 +278,52 @@ export const ProvidersTab = (props: Props) => {
 
         {proxyMode === "vless" ? (
           <>
-            <label className="project-create-note" htmlFor={PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl}>
-              VLESS proxy URL
+            <label className="project-create-note" htmlFor={PROVIDERS_TAB_FIELD_IDS.vlessConfigUrl}>
+              VLESS config URL
             </label>
             <input
-              id={PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl}
-              name={PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl}
-              aria-label="VLESS proxy URL"
+              id={PROVIDERS_TAB_FIELD_IDS.vlessConfigUrl}
+              name={PROVIDERS_TAB_FIELD_IDS.vlessConfigUrl}
+              aria-label="VLESS config URL"
               className="input settings-input-compact"
-              placeholder="http://vless-proxy:8080"
-              value={vlessProxyUrl}
-              onChange={(event) => setVlessProxyUrl(event.target.value)}
+              placeholder="vless://uuid@example.com:443?..."
+              value={vlessConfigUrl}
+              onChange={(event) => {
+                setVlessConfigUrl(event.target.value);
+                setVlessProxyUrl("");
+              }}
             />
+            <div className="settings-actions-grid">
+              <button
+                className="btn outline"
+                onClick={() => props.onTestProxy({ vlessConfigUrl: vlessConfigUrl.trim() })}
+                disabled={props.isProxyTesting || vlessConfigUrl.trim().length === 0}
+                type="button"
+              >
+                {props.isProxyTesting ? "Testing..." : "Test config"}
+              </button>
+            </div>
+            <div className="project-create-note">
+              Derived local proxy URL: {vlessProxyUrl || "(run test first)"}
+            </div>
+            {props.proxyTestResult ? <div className="project-create-note">Test result: {props.proxyTestResult.summary}</div> : null}
+            <div className="providers-list">
+              {PROXY_SERVICE_OPTIONS.map((service) => {
+                const checked = enabledServices.includes(service.id);
+                return (
+                  <label key={service.id} className="project-create-note" htmlFor={`proxy-service-${service.id}`}>
+                    <input
+                      id={`proxy-service-${service.id}`}
+                      aria-label={`Use VLESS for ${service.label}`}
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleEnabledService(service.id)}
+                    />{" "}
+                    {service.label}
+                  </label>
+                );
+              })}
+            </div>
           </>
         ) : null}
 
@@ -265,6 +346,8 @@ export const ProvidersTab = (props: Props) => {
               props.onSaveProxy({
                 mode: proxyMode,
                 vlessProxyUrl: proxyMode === "vless" ? vlessProxyUrl.trim() : null,
+                vlessConfigUrl: proxyMode === "vless" ? vlessConfigUrl.trim() : null,
+                enabledServices: proxyMode === "vless" ? enabledServices : PROXY_SERVICE_OPTIONS.map((option) => option.id),
                 noProxy: noProxy.trim()
               })
             }
@@ -291,6 +374,9 @@ export const ProvidersTab = (props: Props) => {
             ) : null}
             {props.proxySnapshot.runtimeFiles.overridePath ? (
               <div className="project-create-note">Generated override: {props.proxySnapshot.runtimeFiles.overridePath}</div>
+            ) : null}
+            {props.proxySnapshot.runtimeFiles.xrayConfigPath ? (
+              <div className="project-create-note">Generated xray.json: {props.proxySnapshot.runtimeFiles.xrayConfigPath}</div>
             ) : null}
             {props.proxySnapshot.runtimeFiles.recommendedApplyCommand ? (
               <div className="project-create-note">Apply command: {props.proxySnapshot.runtimeFiles.recommendedApplyCommand}</div>

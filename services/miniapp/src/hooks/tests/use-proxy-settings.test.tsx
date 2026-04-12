@@ -21,6 +21,8 @@ vi.mock("../../api/client", () => ({
 const proxySnapshot = {
   mode: "direct" as const,
   vlessProxyUrl: null,
+  vlessConfigUrl: null,
+  enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
   noProxy: "localhost,127.0.0.1",
   updatedAt: "2026-03-22T12:00:00.000Z",
   envPreview: {
@@ -57,5 +59,27 @@ describe("useProxySettings", () => {
     expect(apiPost).toHaveBeenCalledWith("/api/telegram/proxy/settings/apply", {});
     expect(apiGet).toHaveBeenCalledWith("/api/telegram/proxy/settings");
     expect(result.current.snapshot?.runtimeFiles.proxyEnvPath).toBe("/srv/runtime/proxy.env");
+  });
+
+  it("tests vless config url before saving", async () => {
+    /* Mini App should expose explicit pre-save validation for pasted config URLs. */
+    vi.mocked(apiPost).mockResolvedValueOnce({
+      ok: true,
+      vlessProxyUrl: "http://vless-proxy:8080",
+      summary: "example.com:443 via reality"
+    });
+
+    const { result } = renderHook(() => useProxySettings(vi.fn()));
+
+    await act(async () => {
+      await result.current.testSettings({
+        vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo"
+      });
+    });
+
+    expect(apiPost).toHaveBeenCalledWith("/api/telegram/proxy/settings/test", {
+      vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo"
+    });
+    expect(result.current.testResult?.vlessProxyUrl).toBe("http://vless-proxy:8080");
   });
 });

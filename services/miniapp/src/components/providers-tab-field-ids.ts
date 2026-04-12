@@ -11,6 +11,7 @@ export const PROVIDERS_TAB_FIELD_IDS = {
   cliproxyCode: "providers-tab-cliproxy-code",
   cliproxyState: "providers-tab-cliproxy-state",
   proxyMode: "providers-tab-proxy-mode",
+  vlessConfigUrl: "providers-tab-vless-config-url",
   vlessProxyUrl: "providers-tab-vless-proxy-url",
   noProxy: "providers-tab-no-proxy",
   apiKey: "providers-tab-api-key",

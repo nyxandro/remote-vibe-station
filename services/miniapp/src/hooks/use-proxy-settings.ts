@@ -8,14 +8,22 @@
 import { useCallback, useState } from "react";
 
 import { apiGet, apiPost } from "../api/client";
-import { ProxyApplyResult, ProxySettingsInput, ProxySettingsSnapshot } from "../types";
+import {
+  ProxyApplyResult,
+  ProxySettingsInput,
+  ProxySettingsSnapshot,
+  ProxySettingsTestInput,
+  ProxySettingsTestResult
+} from "../types";
 
 export const useProxySettings = (setError: (value: string | null) => void) => {
   const [snapshot, setSnapshot] = useState<ProxySettingsSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isApplying, setIsApplying] = useState<boolean>(false);
+  const [isTesting, setIsTesting] = useState<boolean>(false);
   const [applyResult, setApplyResult] = useState<ProxyApplyResult | null>(null);
+  const [testResult, setTestResult] = useState<ProxySettingsTestResult | null>(null);
 
   const loadSettings = useCallback(async (): Promise<void> => {
     /* Keep dedicated tab state fresh from backend persisted profile. */
@@ -39,6 +47,7 @@ export const useProxySettings = (setError: (value: string | null) => void) => {
         setIsSaving(true);
         const data = await apiPost<ProxySettingsSnapshot>("/api/telegram/proxy/settings", input);
         setSnapshot(data);
+        setTestResult(null);
       } catch (error) {
         setError(error instanceof Error ? error.message : "Failed to save proxy settings");
       } finally {
@@ -63,14 +72,34 @@ export const useProxySettings = (setError: (value: string | null) => void) => {
     }
   }, [loadSettings, setError]);
 
+  const testSettings = useCallback(
+    async (input: ProxySettingsTestInput): Promise<void> => {
+      /* Keep test flow explicit so save can remain gated on the latest validated VLESS URL. */
+      try {
+        setError(null);
+        setIsTesting(true);
+        const data = await apiPost<ProxySettingsTestResult>("/api/telegram/proxy/settings/test", input);
+        setTestResult(data);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Failed to test proxy settings");
+      } finally {
+        setIsTesting(false);
+      }
+    },
+    [setError]
+  );
+
   return {
     snapshot,
     isLoading,
     isSaving,
     isApplying,
+    isTesting,
     applyResult,
+    testResult,
     loadSettings,
     saveSettings,
-    applySettings
+    applySettings,
+    testSettings
   };
 };

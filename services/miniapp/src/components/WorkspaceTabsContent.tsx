@@ -186,13 +186,16 @@ type Props = {
     isLoading: boolean;
     isSaving: boolean;
     isApplying: boolean;
+    isTesting: boolean;
     applyResult: ProxyApplyResult | null;
+    testResult: import("../types").ProxySettingsTestResult | null;
     cliproxyAccounts: CliproxyAccountState | null;
     cliproxyOAuthStart: CliproxyOAuthStartPayload | null;
     isCliproxyLoading: boolean;
     isCliproxySubmitting: boolean;
      onReload?: () => void;
     onSave: (input: ProxySettingsInput) => void;
+    onTest: (input: import("../types").ProxySettingsTestInput) => void;
     onApply: () => void;
     onReloadCliproxy?: () => void;
     onStartCliproxyAuth: (provider: CliproxyProviderState["id"]) => void;
@@ -317,7 +320,9 @@ export const WorkspaceTabsContent = (props: Props) => {
         isProxyLoading={props.proxyState.isLoading}
         isProxySaving={props.proxyState.isSaving}
         isProxyApplying={props.proxyState.isApplying}
+        isProxyTesting={props.proxyState.isTesting}
         proxyApplyResult={props.proxyState.applyResult}
+        proxyTestResult={props.proxyState.testResult}
          onReloadCliproxy={props.proxyState.onReloadCliproxy}
         onStartCliproxyAuth={props.proxyState.onStartCliproxyAuth}
         onCloseCliproxyAuthModal={props.proxyState.onCloseCliproxyAuthModal}
@@ -327,6 +332,7 @@ export const WorkspaceTabsContent = (props: Props) => {
         onDeleteCliproxyAccount={props.proxyState.onDeleteCliproxyAccount}
          onReloadProxy={props.proxyState.onReload}
         onSaveProxy={props.proxyState.onSave}
+        onTestProxy={props.proxyState.onTest}
         onApplyProxy={props.proxyState.onApply}
       />
     );

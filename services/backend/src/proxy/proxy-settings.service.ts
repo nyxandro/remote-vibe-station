@@ -11,7 +11,15 @@ import * as path from "node:path";
 
 import { ProxySettingsStore } from "./proxy-settings.store";
 import { DockerComposeService } from "../projects/docker-compose.service";
-import { ProxyApplyResult, ProxySettingsInput, ProxySettingsSnapshot } from "./proxy-settings.types";
+import {
+  ProxyApplyResult,
+  ProxyEnabledService,
+  ProxySettingsInput,
+  ProxySettingsSnapshot,
+  ProxySettingsTestInput,
+  ProxySettingsTestResult
+} from "./proxy-settings.types";
+import { parseVlessConfigUrl, renderDisabledXrayConfig, renderXrayConfig } from "./proxy-vless-config";
 
 const URL_PROTOCOL_SEPARATOR = "://";
 const RUNTIME_CONFIG_DIR_ENV = "RUNTIME_CONFIG_DIR";
@@ -19,57 +27,18 @@ const VLESS_OVERRIDE_FILE = "docker-compose.vless.yml";
 const PRIMARY_COMPOSE_FILE = "docker-compose.yml";
 const ENV_FILE = ".env";
 const VLESS_PROXY_ENV_FILE = path.join("infra", "vless", "proxy.env");
+const VLESS_XRAY_CONFIG_FILE = path.join("infra", "vless", "xray.json");
+const LOCAL_VLESS_PROXY_URL = "http://vless-proxy:8080";
+const DEFAULT_VLESS_ENABLED_SERVICES: ProxyEnabledService[] = ["backend", "bot", "miniapp", "opencode", "cliproxy"];
 
 const DIRECT_OVERRIDE_CONTENT = `services: {}\n`;
-
-const VLESS_OVERRIDE_CONTENT = `x-logging-defaults: &logging_defaults
-  driver: json-file
-  options:
-    max-size: "10m"
-    max-file: "5"
-
-services:
-  vless-proxy:
-    image: ghcr.io/xtls/xray-core:latest
-    command: ["run", "-c", "/etc/xray/config.json"]
-    volumes:
-      - ./infra/vless/xray.json:/etc/xray/config.json:ro
-    networks:
-      - ai_proxy
-    logging: *logging_defaults
-    restart: unless-stopped
-
-  backend:
-    # Route backend validation calls for external AI providers through VLESS too.
-    env_file:
-      - ./infra/vless/proxy.env
-    depends_on:
-      - vless-proxy
-    networks:
-      - ai_proxy
-
-  bot:
-    # Route bot external AI calls through VLESS while keeping internal calls direct.
-    env_file:
-      - ./infra/vless/proxy.env
-    depends_on:
-      - vless-proxy
-    networks:
-      - ai_proxy
-
-  cliproxy:
-    # Route CLIProxy external provider traffic through VLESS.
-    env_file:
-      - ./infra/vless/proxy.env
-    depends_on:
-      - vless-proxy
-    networks:
-      - ai_proxy
-
-networks:
-  ai_proxy:
-    driver: bridge
-`;
+const SERVICE_COMMENTS: Record<ProxyEnabledService, string> = {
+  backend: "Route backend validation calls for external providers through VLESS too.",
+  bot: "Route bot Telegram and provider traffic through VLESS.",
+  miniapp: "Route Mini App browser-facing backend fetches through VLESS.",
+  opencode: "Route OpenCode runtime provider traffic through VLESS.",
+  cliproxy: "Route CLIProxy external provider traffic through VLESS."
+};
 
 @Injectable()
 export class ProxySettingsService {
@@ -81,7 +50,7 @@ export class ProxySettingsService {
   public async getSettings(): Promise<ProxySettingsSnapshot> {
     /* Expose current profile together with env values expected by runtime services. */
     const record = await this.store.get();
-    await this.syncRuntimeFiles(record.mode, record.vlessProxyUrl, record.noProxy);
+    await this.syncRuntimeFiles(record);
     return {
       ...record,
       envPreview: this.toEnvPreview(record.mode, record.vlessProxyUrl, record.noProxy),
@@ -95,11 +64,22 @@ export class ProxySettingsService {
     this.assertInput(normalized);
 
     const saved = await this.store.set(normalized);
-    await this.syncRuntimeFiles(saved.mode, saved.vlessProxyUrl, saved.noProxy);
+    await this.syncRuntimeFiles(saved);
     return {
       ...saved,
       envPreview: this.toEnvPreview(saved.mode, saved.vlessProxyUrl, saved.noProxy),
       runtimeFiles: this.getRuntimeFilesMeta()
+    };
+  }
+
+  public async testVlessConfigUrl(input: ProxySettingsTestInput): Promise<ProxySettingsTestResult> {
+    /* Validate the pasted VLESS URL before the operator can persist and apply runtime changes. */
+    const normalizedConfigUrl = input.vlessConfigUrl.trim();
+    const parsed = parseVlessConfigUrl(normalizedConfigUrl);
+    return {
+      ok: true,
+      vlessProxyUrl: LOCAL_VLESS_PROXY_URL,
+      summary: `${parsed.hostname}:${parsed.port} via ${parsed.type}/${parsed.security}`
     };
   }
 
@@ -125,7 +105,7 @@ export class ProxySettingsService {
     };
   }
 
-  private async syncRuntimeFiles(mode: "direct" | "vless", vlessProxyUrl: string | null, noProxy: string): Promise<void> {
+  private async syncRuntimeFiles(record: ProxySettingsInput): Promise<void> {
     /* Persist generated runtime override/env files when backend has runtime config mount. */
     const runtimeConfigDir = process.env[RUNTIME_CONFIG_DIR_ENV]?.trim() || "";
     if (!runtimeConfigDir) {
@@ -134,12 +114,20 @@ export class ProxySettingsService {
 
     const overridePath = path.join(runtimeConfigDir, VLESS_OVERRIDE_FILE);
     const proxyEnvPath = path.join(runtimeConfigDir, VLESS_PROXY_ENV_FILE);
+    const xrayConfigPath = path.join(runtimeConfigDir, VLESS_XRAY_CONFIG_FILE);
 
     await fs.mkdir(path.dirname(proxyEnvPath), { recursive: true });
-    await fs.writeFile(proxyEnvPath, this.renderProxyEnv(mode, vlessProxyUrl, noProxy), "utf-8");
+    await fs.writeFile(proxyEnvPath, this.renderProxyEnv(record.mode, record.vlessProxyUrl, record.noProxy), "utf-8");
 
-    const overrideContent = mode === "vless" ? VLESS_OVERRIDE_CONTENT : DIRECT_OVERRIDE_CONTENT;
+    const overrideContent = record.mode === "vless" ? this.renderVlessOverride(record.enabledServices) : DIRECT_OVERRIDE_CONTENT;
     await fs.writeFile(overridePath, overrideContent, "utf-8");
+
+    const xrayContent =
+      record.mode === "vless" && record.vlessConfigUrl
+        ? renderXrayConfig(parseVlessConfigUrl(record.vlessConfigUrl))
+        : renderDisabledXrayConfig();
+    await fs.mkdir(path.dirname(xrayConfigPath), { recursive: true });
+    await fs.writeFile(xrayConfigPath, xrayContent, "utf-8");
   }
 
   private renderProxyEnv(mode: "direct" | "vless", vlessProxyUrl: string | null, noProxy: string): string {
@@ -163,16 +151,19 @@ export class ProxySettingsService {
         runtimeConfigDir: null,
         proxyEnvPath: null,
         overridePath: null,
+        xrayConfigPath: null,
         recommendedApplyCommand: null
       };
     }
 
     const proxyEnvPath = path.join(runtimeConfigDir, VLESS_PROXY_ENV_FILE);
     const overridePath = path.join(runtimeConfigDir, VLESS_OVERRIDE_FILE);
+    const xrayConfigPath = path.join(runtimeConfigDir, VLESS_XRAY_CONFIG_FILE);
     return {
       runtimeConfigDir,
       proxyEnvPath,
       overridePath,
+      xrayConfigPath,
       recommendedApplyCommand: this.toApplyCommand()
     };
   }
@@ -199,6 +190,14 @@ export class ProxySettingsService {
         typeof input.vlessProxyUrl === "string" && input.vlessProxyUrl.trim().length > 0
           ? input.vlessProxyUrl.trim()
           : null,
+      vlessConfigUrl:
+        typeof input.vlessConfigUrl === "string" && input.vlessConfigUrl.trim().length > 0
+          ? input.vlessConfigUrl.trim()
+          : null,
+      enabledServices:
+        input.mode === "vless"
+          ? ([...new Set(input.enabledServices)].sort() as ProxyEnabledService[])
+          : [...DEFAULT_VLESS_ENABLED_SERVICES],
       noProxy:
         typeof input.noProxy === "string" && input.noProxy.trim().length > 0 ? input.noProxy.trim() : ""
     };
@@ -211,13 +210,23 @@ export class ProxySettingsService {
         throw new BadRequestException("vlessProxyUrl is required for vless mode");
       }
 
+      if (!input.vlessConfigUrl) {
+        throw new BadRequestException("vlessConfigUrl is required for vless mode");
+      }
+
       if (!this.isProxyUrl(input.vlessProxyUrl)) {
         throw new BadRequestException("vlessProxyUrl must include protocol (socks5/http/https)");
       }
+
+      parseVlessConfigUrl(input.vlessConfigUrl);
+
+      if (input.enabledServices.length === 0) {
+        throw new BadRequestException("enabledServices must include at least one service");
+      }
     }
 
-    if (input.mode === "direct" && input.vlessProxyUrl) {
-      throw new BadRequestException("vlessProxyUrl must be empty in direct mode");
+    if (input.mode === "direct" && (input.vlessProxyUrl || input.vlessConfigUrl)) {
+      throw new BadRequestException("vlessProxyUrl and vlessConfigUrl must be empty in direct mode");
     }
 
     if (!input.noProxy) {
@@ -252,4 +261,50 @@ export class ProxySettingsService {
       NO_PROXY: noProxy
     };
   }
+
+  private renderVlessOverride(enabledServices: ProxyEnabledService[]): string {
+    /* Compose override should wire only the services explicitly selected in Mini App. */
+    const serviceBlocks = enabledServices
+      .map((serviceId) => {
+        return [
+          `  ${serviceId}:`,
+          `    # ${SERVICE_COMMENTS[serviceId]}`,
+          "    env_file:",
+          "      - ./infra/vless/proxy.env",
+          "    depends_on:",
+          "      - vless-proxy",
+          "    networks:",
+          "      - ai_proxy"
+        ].join("\n");
+      })
+      .join("\n\n");
+
+    return [
+      "x-logging-defaults: &logging_defaults",
+      "  driver: json-file",
+      "  options:",
+      '    max-size: "10m"',
+      '    max-file: "5"',
+      "",
+      "services:",
+      "  vless-proxy:",
+      '    image: ghcr.io/xtls/xray-core:latest',
+      '    command: ["run", "-c", "/etc/xray/config.json"]',
+      "    volumes:",
+      '      - ./infra/vless/xray.json:/etc/xray/config.json:ro',
+      '    ports:',
+      '      - "8080:8080"',
+      '    networks:',
+      '      - ai_proxy',
+      '    logging: *logging_defaults',
+      '    restart: unless-stopped',
+      serviceBlocks ? `\n${serviceBlocks}` : "",
+      "",
+      "networks:",
+      "  ai_proxy:",
+      "    driver: bridge",
+      ""
+    ].join("\n");
+  }
+
 }

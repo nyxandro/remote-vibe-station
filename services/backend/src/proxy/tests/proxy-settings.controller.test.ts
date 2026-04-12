@@ -14,6 +14,8 @@ describe("ProxySettingsController", () => {
       getSettings: jest.fn().mockResolvedValue({
         mode: "direct",
         vlessProxyUrl: null,
+        vlessConfigUrl: null,
+        enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
         noProxy: "localhost,127.0.0.1,backend",
         updatedAt: "2026-03-06T10:40:00.000Z",
         envPreview: {
@@ -41,6 +43,8 @@ describe("ProxySettingsController", () => {
       updateSettings: jest.fn().mockResolvedValue({
         mode: "vless",
         vlessProxyUrl: "socks5://vless-proxy:1080",
+        vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
+        enabledServices: ["backend", "bot"],
         noProxy: "localhost,127.0.0.1,backend",
         updatedAt: "2026-03-06T10:41:00.000Z",
         envPreview: {
@@ -57,6 +61,8 @@ describe("ProxySettingsController", () => {
       {
         mode: "vless",
         vlessProxyUrl: "socks5://vless-proxy:1080",
+        vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
+        enabledServices: ["backend", "bot"],
         noProxy: "localhost,127.0.0.1,backend"
       },
       { authAdminId: 649624756 } as unknown as Request
@@ -65,9 +71,36 @@ describe("ProxySettingsController", () => {
     expect(service.updateSettings).toHaveBeenCalledWith({
       mode: "vless",
       vlessProxyUrl: "socks5://vless-proxy:1080",
+      vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
+      enabledServices: ["backend", "bot"],
       noProxy: "localhost,127.0.0.1,backend"
     });
     expect(result.mode).toBe("vless");
+  });
+
+  test("tests vless config url through controller", async () => {
+    /* Test action should stay separate from save so operators can validate before persisting. */
+    const service = {
+      getSettings: jest.fn(),
+      applyRuntimeStack: jest.fn(),
+      updateSettings: jest.fn(),
+      testVlessConfigUrl: jest.fn().mockResolvedValue({
+        ok: true,
+        vlessProxyUrl: "http://vless-proxy:8080",
+        summary: "example.com:443 via reality"
+      })
+    };
+
+    const controller = new ProxySettingsController(service as never, { publish: jest.fn() } as never);
+    const result = await controller.testSettings(
+      { vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo" },
+      { authAdminId: 649624756 } as unknown as Request
+    );
+
+    expect(service.testVlessConfigUrl).toHaveBeenCalledWith({
+      vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo"
+    });
+    expect(result.ok).toBe(true);
   });
 
   test("applies runtime compose command", async () => {

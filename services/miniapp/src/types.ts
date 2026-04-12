@@ -244,10 +244,24 @@ export type SystemMetricsSnapshot = {
 
 export type ProxySettingsMode = "direct" | "vless";
 
+export type ProxyEnabledService = "backend" | "bot" | "miniapp" | "opencode" | "cliproxy";
+
 export type ProxySettingsInput = {
   mode: ProxySettingsMode;
   vlessProxyUrl: string | null;
+  vlessConfigUrl: string | null;
+  enabledServices: ProxyEnabledService[];
   noProxy: string;
+};
+
+export type ProxySettingsTestInput = {
+  vlessConfigUrl: string;
+};
+
+export type ProxySettingsTestResult = {
+  ok: true;
+  vlessProxyUrl: string;
+  summary: string;
 };
 
 export type ProxySettingsSnapshot = ProxySettingsInput & {
@@ -262,6 +276,7 @@ export type ProxySettingsSnapshot = ProxySettingsInput & {
     runtimeConfigDir: string | null;
     proxyEnvPath: string | null;
     overridePath: string | null;
+    xrayConfigPath: string | null;
     recommendedApplyCommand: string | null;
   };
 };

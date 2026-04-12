@@ -156,10 +156,13 @@ export const App = () => {
     isLoading: isProxySettingsLoading,
     isSaving: isProxySettingsSaving,
     isApplying: isProxySettingsApplying,
+    isTesting: isProxySettingsTesting,
     applyResult: proxyApplyResult,
+    testResult: proxyTestResult,
     loadSettings: loadProxySettings,
     saveSettings: saveProxySettings,
-    applySettings: applyProxySettings
+    applySettings: applyProxySettings,
+    testSettings: testProxySettings
   } = useProxySettings(setError);
   const {
     state: cliproxyAccounts,
@@ -460,12 +463,15 @@ export const App = () => {
             isLoading: isProxySettingsLoading,
             isSaving: isProxySettingsSaving,
             isApplying: isProxySettingsApplying,
+            isTesting: isProxySettingsTesting,
             applyResult: proxyApplyResult,
+            testResult: proxyTestResult,
             cliproxyAccounts,
             cliproxyOAuthStart,
             isCliproxyLoading: isCliproxyAccountsLoading,
             isCliproxySubmitting: isCliproxyAccountsSubmitting,
             onSave: (input) => void saveProxySettings(input),
+            onTest: (input) => void testProxySettings(input),
             onApply: () => void applyProxySettings(),
             onStartCliproxyAuth: (provider) => void startCliproxyOAuth(provider),
             onCloseCliproxyAuthModal: () => clearCliproxyOAuth(),

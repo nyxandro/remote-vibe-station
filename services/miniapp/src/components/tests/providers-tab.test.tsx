@@ -166,7 +166,8 @@ describe("ProvidersTab", () => {
       proxySnapshot: {
         ...proxySnapshotFixture,
         mode: "vless",
-        vlessProxyUrl: "http://vless-proxy:8080"
+        vlessProxyUrl: "http://vless-proxy:8080",
+        vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo"
       }
     });
 
@@ -190,8 +191,8 @@ describe("ProvidersTab", () => {
     expect(screen.getByLabelText("Outbound mode").getAttribute("name")).toBe(
       PROVIDERS_TAB_FIELD_IDS.proxyMode
     );
-    expect(screen.getByLabelText("VLESS proxy URL").getAttribute("id")).toBe(
-      PROVIDERS_TAB_FIELD_IDS.vlessProxyUrl
+    expect(screen.getByLabelText("VLESS config URL").getAttribute("id")).toBe(
+      PROVIDERS_TAB_FIELD_IDS.vlessConfigUrl
     );
     expect(screen.getByLabelText("NO_PROXY").getAttribute("name")).toBe(
       PROVIDERS_TAB_FIELD_IDS.noProxy
@@ -199,5 +200,28 @@ describe("ProvidersTab", () => {
     expect(screen.getByPlaceholderText("Введите OAuth code").getAttribute("id")).toBe(
       PROVIDERS_TAB_FIELD_IDS.oauthCode
     );
+  });
+
+  it("requires a successful config test before saving vless settings", () => {
+    /* Operators should not persist a raw VLESS URL before the runtime parser validates it. */
+    const { props } = renderProvidersTab({
+      proxySnapshot: {
+        ...proxySnapshotFixture,
+        mode: "vless",
+        vlessProxyUrl: "http://vless-proxy:8080",
+        vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo"
+      }
+    });
+
+    fireEvent.change(screen.getByLabelText("VLESS config URL"), {
+      target: { value: "vless://uuid@example.com:443?type=tcp&security=reality#demo" }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Test config" }));
+
+    expect(props.onTestProxy).toHaveBeenCalledWith({
+      vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo"
+    });
+    expect(screen.getByRole("button", { name: "Save proxy settings" }).hasAttribute("disabled")).toBe(true);
   });
 });

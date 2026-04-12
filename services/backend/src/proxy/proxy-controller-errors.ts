@@ -10,6 +10,8 @@
  * - proxyModeInvalidError - Unsupported proxy mode error.
  * - proxyNoProxyRequiredError - Missing noProxy field error.
  * - proxyVlessUrlRequiredError - Missing vless URL error.
+ * - proxyTestUrlRequiredError - Missing VLESS config URL for test/save in vless mode.
+ * - proxyEnabledServicesRequiredError - Missing runtime target services.
  */
 
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
@@ -106,6 +108,28 @@ export const proxyVlessUrlRequiredError = (): BadRequestException => {
       code: "APP_PROXY_VLESS_URL_REQUIRED",
       message: "vlessProxyUrl is required for vless mode.",
       hint: "Provide a valid socks5/http/https proxy URL and retry saving proxy settings."
+    })
+  );
+};
+
+export const proxyTestUrlRequiredError = (): BadRequestException => {
+  /* Pasted VLESS link is required because runtime xray config is derived from it. */
+  return new BadRequestException(
+    createAppErrorBody({
+      code: "APP_PROXY_VLESS_CONFIG_URL_REQUIRED",
+      message: "vlessConfigUrl is required for vless mode.",
+      hint: "Paste the full VLESS config URL and retry the test or save action."
+    })
+  );
+};
+
+export const proxyEnabledServicesRequiredError = (): BadRequestException => {
+  /* Runtime override must know at least one concrete target service to wire through the proxy. */
+  return new BadRequestException(
+    createAppErrorBody({
+      code: "APP_PROXY_ENABLED_SERVICES_REQUIRED",
+      message: "enabledServices must include at least one runtime service.",
+      hint: "Choose one or more services that should use the VLESS config and retry saving proxy settings."
     })
   );
 };

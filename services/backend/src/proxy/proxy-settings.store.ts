@@ -16,10 +16,14 @@ import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-fil
 const DATA_DIR = "data";
 const SETTINGS_FILE = "proxy.settings.json";
 const DEFAULT_NO_PROXY = "localhost,127.0.0.1,backend,opencode,cliproxy";
+const DEFAULT_ENABLED_SERVICES = ["backend", "bot", "miniapp", "opencode", "cliproxy"] as const;
 
 const storedSchema = z.object({
   mode: z.enum(["direct", "vless"]),
   vlessProxyUrl: z.string().nullable(),
+  /* Existing persisted files may not have the new URL/service fields yet, so migrate them explicitly. */
+  vlessConfigUrl: z.string().nullable().optional().default(null),
+  enabledServices: z.array(z.enum(["backend", "bot", "miniapp", "opencode", "cliproxy"])).optional().default([...DEFAULT_ENABLED_SERVICES]),
   noProxy: z.string().min(1),
   updatedAt: z.string().min(1)
 });
@@ -39,12 +43,14 @@ export class ProxySettingsStore {
     await this.writeQueue;
     const saved = await this.readRaw();
     if (!saved) {
-      return {
-        mode: "direct",
-        vlessProxyUrl: null,
-        noProxy: DEFAULT_NO_PROXY,
-        updatedAt: new Date().toISOString()
-      };
+        return {
+          mode: "direct",
+          vlessProxyUrl: null,
+          vlessConfigUrl: null,
+          enabledServices: [...DEFAULT_ENABLED_SERVICES],
+          noProxy: DEFAULT_NO_PROXY,
+          updatedAt: new Date().toISOString()
+        };
     }
     return saved;
   }
@@ -54,6 +60,8 @@ export class ProxySettingsStore {
     const record: ProxySettingsRecord = {
       mode: input.mode,
       vlessProxyUrl: input.vlessProxyUrl,
+      vlessConfigUrl: input.vlessConfigUrl,
+      enabledServices: [...input.enabledServices],
       noProxy: input.noProxy,
       updatedAt: new Date().toISOString()
     };

@@ -20,12 +20,16 @@ describe("ProxySettingsService", () => {
         get: jest.fn().mockResolvedValue({
           mode: "direct",
           vlessProxyUrl: null,
+          vlessConfigUrl: null,
+          enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
           noProxy: "localhost,127.0.0.1,backend",
           updatedAt: "2026-03-06T00:00:00.000Z"
         }),
         set: jest.fn().mockResolvedValue({
           mode: "vless",
           vlessProxyUrl: "socks5://vless-proxy:1080",
+          vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality&pbk=test-key&sni=example.com&fp=chrome#demo",
+          enabledServices: ["backend", "bot", "cliproxy"],
           noProxy: "localhost,127.0.0.1,backend",
           updatedAt: "2026-03-06T00:01:00.000Z"
         })
@@ -36,19 +40,28 @@ describe("ProxySettingsService", () => {
       const snapshot = await service.updateSettings({
         mode: "vless",
         vlessProxyUrl: "socks5://vless-proxy:1080",
+        vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality&pbk=test-key&sni=example.com&fp=chrome#demo",
+        enabledServices: ["backend", "bot", "cliproxy"],
         noProxy: "localhost,127.0.0.1,backend"
       });
 
       const proxyEnvPath = path.join(runtimeDir, "infra", "vless", "proxy.env");
       const overridePath = path.join(runtimeDir, "docker-compose.vless.yml");
+      const xrayPath = path.join(runtimeDir, "infra", "vless", "xray.json");
       const proxyEnvContent = await fs.readFile(proxyEnvPath, "utf-8");
       const overrideContent = await fs.readFile(overridePath, "utf-8");
+      const xrayContent = await fs.readFile(xrayPath, "utf-8");
 
       expect(proxyEnvContent).toContain("HTTP_PROXY=socks5://vless-proxy:1080");
       expect(proxyEnvContent).toContain("NO_PROXY=localhost,127.0.0.1,backend");
       expect(overrideContent).toContain("vless-proxy");
       expect(overrideContent).toContain("backend:");
       expect(overrideContent).toContain("bot:");
+      expect(overrideContent).toContain("cliproxy:");
+      expect(overrideContent).not.toContain("miniapp:");
+      expect(overrideContent).not.toContain("opencode:");
+      expect(xrayContent).toContain('"protocol": "vless"');
+      expect(xrayContent).toContain('"serverName": "example.com"');
       expect(snapshot.runtimeFiles.runtimeConfigDir).toBe(runtimeDir);
     } finally {
       if (prevRuntimeDir === undefined) {
@@ -71,6 +84,8 @@ describe("ProxySettingsService", () => {
         get: jest.fn().mockResolvedValue({
           mode: "direct",
           vlessProxyUrl: null,
+          vlessConfigUrl: null,
+          enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
           noProxy: "localhost",
           updatedAt: "2026-03-06T00:00:00.000Z"
         }),
@@ -101,5 +116,30 @@ describe("ProxySettingsService", () => {
       }
       await fs.rm(runtimeDir, { recursive: true, force: true });
     }
+  });
+
+  test("tests vless config url and returns derived local proxy url", async () => {
+    /* Mini App test action should validate operator input before it can be saved. */
+    const store = {
+      get: jest.fn().mockResolvedValue({
+        mode: "direct",
+        vlessProxyUrl: null,
+        vlessConfigUrl: null,
+        enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
+        noProxy: "localhost",
+        updatedAt: "2026-03-06T00:00:00.000Z"
+      }),
+      set: jest.fn()
+    };
+    const docker = { run: jest.fn() };
+    const service = new ProxySettingsService(store as never, docker as never);
+
+    const result = await service.testVlessConfigUrl({
+      vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality&pbk=test-key&sni=example.com&fp=chrome#demo"
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.vlessProxyUrl).toBe("http://vless-proxy:8080");
+    expect(result.summary).toContain("example.com:443");
   });
 });

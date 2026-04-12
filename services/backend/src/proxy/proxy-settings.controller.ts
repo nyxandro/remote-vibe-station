@@ -12,13 +12,17 @@ import { EventsService } from "../events/events.service";
 import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { ProxySettingsService } from "./proxy-settings.service";
-import { ProxySettingsInput } from "./proxy-settings.types";
+import { ProxyEnabledService, ProxySettingsInput, ProxySettingsTestInput } from "./proxy-settings.types";
 import {
   proxyModeInvalidError,
   proxyNoProxyRequiredError,
+  proxyTestUrlRequiredError,
+  proxyEnabledServicesRequiredError,
   proxyVlessUrlRequiredError,
   requireProxyAdminId
 } from "./proxy-controller-errors";
+
+const PROXY_SERVICE_IDS: ProxyEnabledService[] = ["backend", "bot", "miniapp", "opencode", "cliproxy"];
 
 @Controller("api/telegram/proxy")
 export class ProxySettingsController {
@@ -51,6 +55,10 @@ export class ProxySettingsController {
       throw proxyNoProxyRequiredError();
     }
 
+    if (!Array.isArray(body.enabledServices) || body.enabledServices.length === 0) {
+      throw proxyEnabledServicesRequiredError();
+    }
+
     /* Keep vless input strict at boundary layer before service normalization/validation. */
     if (
       body.mode === "vless" &&
@@ -59,9 +67,20 @@ export class ProxySettingsController {
       throw proxyVlessUrlRequiredError();
     }
 
+    if (
+      body.mode === "vless" &&
+      (typeof body.vlessConfigUrl !== "string" || body.vlessConfigUrl.trim().length === 0)
+    ) {
+      throw proxyTestUrlRequiredError();
+    }
+
     const payload: ProxySettingsInput = {
       mode: body.mode,
       vlessProxyUrl: typeof body.vlessProxyUrl === "string" ? body.vlessProxyUrl.trim() : null,
+      vlessConfigUrl: typeof body.vlessConfigUrl === "string" ? body.vlessConfigUrl.trim() : null,
+      enabledServices: body.enabledServices.filter((serviceId): serviceId is ProxyEnabledService => {
+        return PROXY_SERVICE_IDS.includes(serviceId as ProxyEnabledService);
+      }),
       noProxy: body.noProxy.trim()
     };
 
@@ -73,6 +92,20 @@ export class ProxySettingsController {
       reason: "proxy.settings.save"
     });
     return result;
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Post("settings/test")
+  @HttpCode(HttpStatus.OK)
+  public async testSettings(@Body() body: Partial<ProxySettingsTestInput>, @Req() req: Request) {
+    /* Separate test endpoint lets UI validate pasted config before enabling save. */
+    requireProxyAdminId(req);
+
+    if (typeof body.vlessConfigUrl !== "string" || body.vlessConfigUrl.trim().length === 0) {
+      throw proxyTestUrlRequiredError();
+    }
+
+    return this.proxySettings.testVlessConfigUrl({ vlessConfigUrl: body.vlessConfigUrl.trim() });
   }
 
   @UseGuards(AppAuthGuard)

@@ -70,6 +70,8 @@ export const cliproxyAccountsFixture: CliproxyAccountState = {
 export const proxySnapshotFixture: ProxySettingsSnapshot = {
   mode: "direct",
   vlessProxyUrl: null,
+  vlessConfigUrl: null,
+  enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
   noProxy: "localhost,127.0.0.1,backend,opencode,cliproxy",
   updatedAt: "2026-03-06T10:00:00.000Z",
   envPreview: {
@@ -82,6 +84,7 @@ export const proxySnapshotFixture: ProxySettingsSnapshot = {
     runtimeConfigDir: "/runtime",
     proxyEnvPath: "/runtime/proxy.env",
     overridePath: "/runtime/docker-compose.override.yml",
+    xrayConfigPath: "/runtime/infra/vless/xray.json",
     recommendedApplyCommand: "docker compose up -d"
   }
 };
@@ -104,7 +107,9 @@ export const buildProvidersTabProps = (
     isProxyLoading: false,
     isProxySaving: false,
     isProxyApplying: false,
+    isProxyTesting: false,
     proxyApplyResult: null,
+    proxyTestResult: null,
     onRefresh: vi.fn(),
     onStartConnect: vi.fn(),
     onSubmitApiKey: vi.fn(),
@@ -121,6 +126,7 @@ export const buildProvidersTabProps = (
     onDeleteCliproxyAccount: vi.fn(),
     onReloadProxy: vi.fn(),
     onSaveProxy: vi.fn(),
+    onTestProxy: vi.fn(),
     onApplyProxy: vi.fn(),
     ...overrides
   };
