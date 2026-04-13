@@ -29,6 +29,7 @@ import { OpenCodeWebAuthService } from "./opencode-web-auth";
 import { registerRepairCommand } from "./repair-command";
 import { registerSessionCommands } from "./session-command";
 import { OutboxWorker } from "./outbox-worker";
+import { createTelegramProxyAgent } from "./telegram-proxy-agent";
 import { ThinkingIndicator } from "./thinking-indicator";
 
 const OPENCODE_WEB_AUTH_STORAGE_FILE = "/app/data/opencode-web-auth.json";
@@ -40,6 +41,8 @@ export const bootstrap = async (): Promise<void> => {
   /* Load configuration and initialize bot. */
   const config = loadConfig();
   const bot = new Telegraf(config.telegramBotToken);
+  /* Telegraf uses its own HTTPS agent, so Telegram API traffic must receive the runtime proxy agent explicitly. */
+  bot.telegram.options.agent = createTelegramProxyAgent();
   const webAuth = new OpenCodeWebAuthService({
     storageFilePath: OPENCODE_WEB_AUTH_STORAGE_FILE,
     linkTtlMs: OPENCODE_WEB_AUTH_LINK_TTL_MS,
