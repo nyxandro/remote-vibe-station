@@ -41,7 +41,8 @@ const createService = () => {
     deleteFiles: jest.fn().mockResolvedValue(undefined)
   };
   const outbox = {
-    enqueueAdminNotification: jest.fn()
+    enqueueAdminNotification: jest.fn(),
+    enqueueThinkingControl: jest.fn()
   };
 
   const service = new TelegramPromptQueueService(
@@ -71,7 +72,7 @@ describe("TelegramPromptQueueService", () => {
 
   it("keeps consecutive plain text messages as separate queued prompts", async () => {
     /* Distinct user messages should remain distinct OpenCode turns so Telegram history matches agent history. */
-    const { service, promptService, attachments } = createService();
+    const { service, promptService, attachments, outbox } = createService();
 
     const first = await service.enqueueIncomingPrompt({ adminId: 7, chatId: 70, text: "Первая часть", messageId: 1 });
     jest.advanceTimersByTime(1_000);
@@ -83,6 +84,7 @@ describe("TelegramPromptQueueService", () => {
     expect(second).toEqual(expect.objectContaining({ position: 1, buffered: true, merged: false, queueDepth: 0 }));
     expect(attachments.materializeAttachments).not.toHaveBeenCalled();
     expect(promptService.dispatchPromptParts).toHaveBeenCalledTimes(2);
+    expect(outbox.enqueueThinkingControl).toHaveBeenCalledWith({ adminId: 7, action: "start" });
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         adminId: 7,
@@ -112,7 +114,7 @@ describe("TelegramPromptQueueService", () => {
       releaseFirst = () => resolve({ sessionId: "session-1", responseText: "ok" });
     });
 
-    const { service, promptService } = createService();
+    const { service, promptService, outbox } = createService();
     promptService.dispatchPromptParts
       .mockImplementationOnce(() => firstDispatch)
       .mockResolvedValueOnce({ sessionId: "session-1", responseText: "second" });
@@ -133,6 +135,7 @@ describe("TelegramPromptQueueService", () => {
     await Promise.resolve();
 
     expect(promptService.dispatchPromptParts).toHaveBeenCalledTimes(2);
+    expect(outbox.enqueueThinkingControl).toHaveBeenCalledWith({ adminId: 7, action: "start" });
     expect(promptService.dispatchPromptParts).toHaveBeenLastCalledWith(
       expect.objectContaining({
         traceId: expect.any(String),
@@ -144,7 +147,7 @@ describe("TelegramPromptQueueService", () => {
 
   it("enqueues an internal system prompt immediately for the bound admin chat", async () => {
     /* Backend automation should be able to nudge the same Telegram project queue without waiting for a user message chunk. */
-    const { service, streamStore, promptService } = createService();
+    const { service, streamStore, promptService, outbox } = createService();
     streamStore.bindAdminChat(7, 70);
 
     const result = await service.enqueueSystemPrompt({
@@ -157,6 +160,7 @@ describe("TelegramPromptQueueService", () => {
     await Promise.resolve();
 
     expect(result).toEqual({ position: 1 });
+    expect(outbox.enqueueThinkingControl).toHaveBeenCalledWith({ adminId: 7, action: "start" });
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         adminId: 7,
@@ -171,7 +175,7 @@ describe("TelegramPromptQueueService", () => {
 
   it("sends plain photo without caption as file-only prompt", async () => {
     /* Users must be able to send just a photo and let the model infer from visual context alone. */
-    const { service, promptService, attachments } = createService();
+    const { service, promptService, attachments, outbox } = createService();
     attachments.materializeAttachments.mockResolvedValue([
       {
         id: "att-1",
@@ -203,6 +207,7 @@ describe("TelegramPromptQueueService", () => {
 
     expect(result).toEqual(expect.objectContaining({ position: 1, buffered: true, merged: false, queueDepth: 0 }));
     expect(attachments.materializeAttachments).toHaveBeenCalledTimes(1);
+    expect(outbox.enqueueThinkingControl).toHaveBeenCalledWith({ adminId: 7, action: "start" });
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         traceId: expect.any(String),
@@ -221,7 +226,7 @@ describe("TelegramPromptQueueService", () => {
 
   it("merges photo caption and later text into one prompt with file", async () => {
     /* A photo caption and the immediate follow-up message should still become one logical request. */
-    const { service, promptService, attachments } = createService();
+    const { service, promptService, attachments, outbox } = createService();
     attachments.materializeAttachments.mockResolvedValue([
       {
         id: "att-1",
@@ -254,6 +259,7 @@ describe("TelegramPromptQueueService", () => {
     jest.advanceTimersByTime(2_000);
     await flushTimers();
 
+    expect(outbox.enqueueThinkingControl).toHaveBeenCalledWith({ adminId: 7, action: "start" });
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         traceId: expect.any(String),
@@ -273,7 +279,7 @@ describe("TelegramPromptQueueService", () => {
 
   it("sends PDF documents as file prompt parts", async () => {
     /* PDF uploads should preserve application/pdf MIME so OpenCode receives a real document attachment. */
-    const { service, promptService, attachments } = createService();
+    const { service, promptService, attachments, outbox } = createService();
     attachments.materializeAttachments.mockResolvedValue([
       {
         id: "att-pdf-1",
@@ -304,6 +310,7 @@ describe("TelegramPromptQueueService", () => {
     jest.advanceTimersByTime(2_000);
     await flushTimers();
 
+    expect(outbox.enqueueThinkingControl).toHaveBeenCalledWith({ adminId: 7, action: "start" });
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         traceId: expect.any(String),
@@ -323,7 +330,7 @@ describe("TelegramPromptQueueService", () => {
 
   it("merges album messages from one media group into one prompt with multiple files", async () => {
     /* Telegram media groups should stay together so the agent sees the whole album in one turn. */
-    const { service, promptService, attachments } = createService();
+    const { service, promptService, attachments, outbox } = createService();
     attachments.materializeAttachments.mockResolvedValue([
       {
         id: "att-1",
@@ -378,6 +385,7 @@ describe("TelegramPromptQueueService", () => {
     jest.advanceTimersByTime(2_000);
     await flushTimers();
 
+    expect(outbox.enqueueThinkingControl).toHaveBeenCalledWith({ adminId: 7, action: "start" });
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         traceId: expect.any(String),

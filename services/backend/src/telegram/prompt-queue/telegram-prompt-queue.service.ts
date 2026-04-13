@@ -327,6 +327,13 @@ export class TelegramPromptQueueService implements OnModuleInit {
             textLength: item.text.length,
             attachmentCount: item.attachments.length
           });
+
+          /* Start Telegram typing immediately for queued prompts so users see activity even before runtime bridge emits commentary events. */
+          this.outbox.enqueueThinkingControl({
+            adminId: item.adminId,
+            action: "start"
+          });
+
           const parts = this.buildPromptParts(item.text, item.attachments);
           await this.prompts.dispatchPromptParts({
             adminId: item.adminId,
@@ -348,6 +355,11 @@ export class TelegramPromptQueueService implements OnModuleInit {
         } catch (error) {
           const message = normalizeOpenCodeTransportErrorMessage(error);
           this.store.markFailed(item.id, new Date().toISOString(), message);
+          /* Failed turns must explicitly clear typing because there may be no final reply event to stop it. */
+          this.outbox.enqueueThinkingControl({
+            adminId: item.adminId,
+            action: "stop"
+          });
           // eslint-disable-next-line no-console
           console.error("[telegram-trace] backend.dispatch.failed", {
             traceId: item.traceId,
