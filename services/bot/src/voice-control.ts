@@ -103,7 +103,7 @@ export const transcribeTelegramAudioWithGroq = async (input: {
   mimeType: string | null;
 }): Promise<string> => {
   /* Download audio from Telegram first because Groq requires file/url payload. */
-  const audioResponse = await fetch(input.telegramFileUrl);
+  const audioResponse = await fetchWithOptionalProxy(input.telegramFileUrl);
   if (!audioResponse.ok) {
     throw new Error(`Failed to download Telegram file: ${audioResponse.status}`);
   }

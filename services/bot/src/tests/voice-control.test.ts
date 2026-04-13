@@ -67,7 +67,13 @@ describe("transcribeTelegramAudioWithGroq", () => {
     expect(text).toBe("ready");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "https://api.telegram.org/file/bot/voice.ogg"
+      "https://api.telegram.org/file/bot/voice.ogg",
+      expect.objectContaining({
+        dispatcher: expect.objectContaining({
+          kind: "proxy-agent",
+          uri: "http://vless-proxy:8080"
+        })
+      })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
