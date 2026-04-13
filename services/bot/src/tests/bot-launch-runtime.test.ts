@@ -97,7 +97,8 @@ describe("launchBotRuntime", () => {
 
     expect(checkOpenCodeVersionOnBoot).toHaveBeenCalledWith({ ...baseConfig, publicBaseUrl: "https://example.com" }, 1);
     expect(webhookCallback).toHaveBeenCalledWith("/bot/webhook");
-    expect(app.use).toHaveBeenCalledWith(webhookHandler);
+    expect(app.use).toHaveBeenCalledTimes(2);
+    expect(app.use).toHaveBeenNthCalledWith(2, webhookHandler);
     expect(setWebhook).toHaveBeenCalledWith("https://example.com/bot/webhook");
     expect(syncMiniAppMenuButton).toHaveBeenCalledWith((bot as any).telegram, "https://example.com");
     expect(commandSyncRuntime.syncSlashCommands).toHaveBeenCalledWith(1);
@@ -135,7 +136,8 @@ describe("launchBotRuntime", () => {
 
     expect(checkOpenCodeVersionOnBoot).toHaveBeenCalledWith({ ...baseConfig, publicBaseUrl: "https://example.com" }, 1);
     expect(webhookCallback).toHaveBeenCalledWith("/bot/webhook");
-    expect(app.use).toHaveBeenCalledWith(webhookHandler);
+    expect(app.use).toHaveBeenCalledTimes(2);
+    expect(app.use).toHaveBeenNthCalledWith(2, webhookHandler);
     expect(setWebhook).toHaveBeenCalledWith("https://example.com/bot/webhook");
     expect(syncMiniAppMenuButton).toHaveBeenCalledWith((bot as any).telegram, "https://example.com");
     expect(commandSyncRuntime.syncSlashCommands).toHaveBeenCalledWith(1);
