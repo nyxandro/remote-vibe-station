@@ -56,6 +56,7 @@ describe("ProxySettingsService", () => {
       expect(overrideContent).toContain("vless-proxy");
       expect(overrideContent).toContain("cat /runtime-config/infra/vless/xray.json > /tmp/xray.json");
       expect(overrideContent).not.toContain("./infra/vless/xray.json:/etc/xray/config.json:ro");
+      expect(overrideContent).not.toContain('"8080:8080"');
       expect(overrideContent).toContain("bot:");
       expect(overrideContent).toContain("cliproxy:");
       expect(overrideContent).toContain("opencode:");
