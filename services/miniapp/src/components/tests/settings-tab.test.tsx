@@ -410,7 +410,8 @@ describe("SettingsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(onSaveActiveFile).toHaveBeenCalledWith("HELLO=WORLD\n");
 
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    /* Fullscreen editor now uses a single Cancel action for consistent unsaved-edit dismissal. */
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByText("/home/nyx/projects/demo/.env")).toBeNull();
   });
 

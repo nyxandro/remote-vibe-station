@@ -135,7 +135,8 @@ describe("ProvidersTab", () => {
 
     expect(screen.getByText("CLIProxy accounts")).toBeTruthy();
     expect(screen.getByText("codex-user@example.com")).toBeTruthy();
-    expect(screen.queryByText(/7 дней:/i)).toBeNull();
+    expect(screen.getByText("Лимит: 24 часа")).toBeTruthy();
+    expect(screen.queryByText("Лимит: 7 дней")).toBeNull();
     expect(screen.queryByRole("button", { name: "Тест" })).toBeNull();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Подключить / обновить" })[0]);

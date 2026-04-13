@@ -31,6 +31,8 @@ type CliproxyQuotaSummary = {
 export type CliproxyAccountViewModel = {
   primaryIdentity: string;
   extraDetails: string[];
+  collapsedQuotas: CliproxyQuotaSummary[];
+  expandedQuotas: CliproxyQuotaSummary[];
   quota: CliproxyQuotaSummary;
   statusBadge: {
     label: string;
@@ -47,6 +49,7 @@ const TRIVIAL_STATUS_DETAILS = new Set(["ok", "ready", "connected", "active", "s
 const ERROR_STATUS_PATTERN = /error|failed|quota|limit|invalid|deactivated|blocked/i;
 const WARNING_STATUS_PATTERN = /pending|paused|warning|degraded|retry/i;
 const WEEK_WINDOW_PATTERN = /week|нед/i;
+const DAY_WINDOW_PATTERN = /day|сут|дн|24\s*час/i;
 
 const formatDuration = (seconds: number): string => {
   /* Relative reset counters must stay compact because they are rendered inside dense mobile cards. */
@@ -200,7 +203,7 @@ const getQuotaResetText = (window: CliproxyQuotaWindow): string | null => {
 };
 
 const getPreferredQuotaWindow = (account: CliproxyAccount): CliproxyQuotaWindow | null => {
-  /* Compact cards keep only one primary quota window and intentionally skip weekly summaries when a shorter one exists. */
+  /* The primary meter should stay the shortest actionable window so the card headline remains immediately useful. */
   if (account.quota?.mode !== "live" || account.quota.windows.length === 0) {
     return null;
   }
@@ -222,6 +225,61 @@ const getPreferredQuotaWindow = (account: CliproxyAccount): CliproxyQuotaWindow 
     rankedWindows.find((window) => !WEEK_WINDOW_PATTERN.test(window.label) && !WEEK_WINDOW_PATTERN.test(window.id)) ??
     rankedWindows[0]
   );
+};
+
+const buildQuotaSummary = (account: CliproxyAccount, window: CliproxyQuotaWindow): CliproxyQuotaSummary => {
+  /* Every quota window uses the same meter contract so summary and expanded sections stay visually consistent. */
+  const value = Math.min(MAX_PERCENT, Math.max(MIN_PERCENT, Math.trunc(window.remainingPercent)));
+  const meterText = `${value}% осталось`;
+
+  return {
+    label: window.label,
+    value,
+    meterText,
+    resetText: getQuotaResetText(window),
+    ariaLabel: `Лимит ${window.label} для ${account.providerLabel}`,
+    ariaValueText: `${window.label}: ${meterText}`
+  };
+};
+
+const getQuotaWindows = (account: CliproxyAccount): CliproxyQuotaWindow[] => {
+  /* Window ordering should stay deterministic so operators always read quotas from shortest to longest. */
+  if (account.quota?.mode !== "live" || account.quota.windows.length === 0) {
+    return [];
+  }
+
+  return [...account.quota.windows].sort((left, right) => {
+    const leftDuration =
+      typeof left.resetAfterSeconds === "number" && Number.isFinite(left.resetAfterSeconds)
+        ? left.resetAfterSeconds
+        : Number.MAX_SAFE_INTEGER;
+    const rightDuration =
+      typeof right.resetAfterSeconds === "number" && Number.isFinite(right.resetAfterSeconds)
+        ? right.resetAfterSeconds
+        : Number.MAX_SAFE_INTEGER;
+
+    return leftDuration - rightDuration;
+  });
+};
+
+const getCollapsedQuotaWindows = (account: CliproxyAccount): CliproxyQuotaWindow[] => {
+  /* Collapsed cards should show the shortest getQuotaWindows result plus dailyWindow when it exists, never the weekly-only summary. */
+  const rankedWindows = getQuotaWindows(account);
+  if (rankedWindows.length === 0) {
+    return [];
+  }
+
+  const shortestWindow = rankedWindows[0] ?? null;
+  const dailyWindow =
+    rankedWindows.find((window) => DAY_WINDOW_PATTERN.test(window.label) || DAY_WINDOW_PATTERN.test(window.id)) ?? null;
+  const windows = [shortestWindow, dailyWindow].filter((window): window is CliproxyQuotaWindow => window !== null);
+
+  return windows.filter((window, index, collection) => collection.findIndex((candidate) => candidate.id === window.id) === index);
+};
+
+const getExpandedQuotaWindows = (account: CliproxyAccount): CliproxyQuotaWindow[] => {
+  /* Expanded cards should surface all non-duplicate quota windows, including the weekly summary. */
+  return getQuotaWindows(account);
 };
 
 const getQuotaSummary = (
@@ -252,17 +310,7 @@ const getQuotaSummary = (
     };
   }
 
-  const value = Math.min(MAX_PERCENT, Math.max(MIN_PERCENT, Math.trunc(preferredWindow.remainingPercent)));
-  const meterText = `${value}% осталось`;
-
-  return {
-    label: preferredWindow.label,
-    value,
-    meterText,
-    resetText: getQuotaResetText(preferredWindow),
-    ariaLabel: `Лимит ${preferredWindow.label} для ${account.providerLabel}`,
-    ariaValueText: `${preferredWindow.label}: ${meterText}`
-  };
+  return buildQuotaSummary(account, preferredWindow);
 };
 
 const getExtraDetails = (
@@ -321,11 +369,16 @@ export const buildCliproxyAccountViewModel = (account: CliproxyAccount): Cliprox
   /* Build one view model so the accordion component stays focused on markup and interactions. */
   const parsedStatus = normalizeCliproxyStatusMessage(account.statusMessage);
   const primaryIdentity = getPrimaryIdentity(account);
+  const collapsedQuotas = getCollapsedQuotaWindows(account).map((window) => buildQuotaSummary(account, window));
+  const expandedQuotas = getExpandedQuotaWindows(account).map((window) => buildQuotaSummary(account, window));
+  const quota = getQuotaSummary(account, parsedStatus);
 
   return {
     primaryIdentity,
     extraDetails: getExtraDetails(account, primaryIdentity, parsedStatus),
-    quota: getQuotaSummary(account, parsedStatus),
+    collapsedQuotas: collapsedQuotas.length > 0 ? collapsedQuotas : [quota],
+    expandedQuotas: expandedQuotas.length > 0 ? expandedQuotas : [quota],
+    quota,
     statusBadge: getStatusBadge(account, parsedStatus)
   };
 };

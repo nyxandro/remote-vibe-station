@@ -48,6 +48,13 @@ export const cliproxyAccountsFixture: CliproxyAccountState = {
             resetAfterSeconds: 3600
           },
           {
+            id: "daily",
+            label: "24 часа",
+            remainingPercent: 72,
+            resetAt: null,
+            resetAfterSeconds: 28800
+          },
+          {
             id: "weekly",
             label: "7 дней",
             remainingPercent: 80,

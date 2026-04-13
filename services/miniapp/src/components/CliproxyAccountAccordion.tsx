@@ -30,6 +30,9 @@ export const CliproxyAccountAccordion = (props: Props) => {
   const view = buildCliproxyAccountViewModel(props.account);
   const detailsId = `cliproxy-account-details:${props.account.id}`;
   const toggleLabel = `${props.isExpanded ? "Свернуть" : "Развернуть"} аккаунт ${props.account.providerLabel}`;
+  const expandedQuotaResetTexts = view.expandedQuotas
+    .map((quota) => ({ label: quota.label, resetText: quota.resetText }))
+    .filter((quota): quota is { label: string; resetText: string } => quota.resetText !== null);
 
   return (
     <div className={`providers-item-card providers-account-card${props.isExpanded ? " expanded" : ""}`}>
@@ -57,19 +60,24 @@ export const CliproxyAccountAccordion = (props: Props) => {
         </span>
 
         <span className="providers-account-quota-summary">
-          <span className="providers-account-quota-label">Лимит: {view.quota.label}</span>
-          <span
-            className="providers-usage-meter providers-account-summary-meter"
-            role="progressbar"
-            aria-label={view.quota.ariaLabel}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={view.quota.value}
-            aria-valuetext={view.quota.ariaValueText}
-          >
-            <span className="providers-usage-meter-fill" style={{ width: `${view.quota.value}%` }} />
-            <span className="providers-usage-meter-text">{view.quota.meterText}</span>
-          </span>
+          {/* Collapsed cards keep the short and daily windows visible so quota pressure is readable without opening details. */}
+          {view.collapsedQuotas.map((quota) => (
+            <span key={`${props.account.id}:summary:${quota.label}`}>
+              <span className="providers-account-quota-label">Лимит: {quota.label}</span>
+              <span
+                className="providers-usage-meter providers-account-summary-meter"
+                role="progressbar"
+                aria-label={quota.ariaLabel}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={quota.value}
+                aria-valuetext={quota.ariaValueText}
+              >
+                <span className="providers-usage-meter-fill" style={{ width: `${quota.value}%` }} />
+                <span className="providers-usage-meter-text">{quota.meterText}</span>
+              </span>
+            </span>
+          ))}
         </span>
       </button>
 
@@ -85,7 +93,33 @@ export const CliproxyAccountAccordion = (props: Props) => {
           {props.account.unavailable ? (
             <div className="project-create-note">Недоступен для запросов прямо сейчас.</div>
           ) : null}
-          {view.quota.resetText ? <div className="project-create-note">{view.quota.resetText}</div> : null}
+
+          {/* Expanded cards reveal every available quota window, including the weekly summary removed from collapsed cards. */}
+          <div className="providers-account-metrics">
+            {view.expandedQuotas.map((quota) => (
+              <div key={`${props.account.id}:expanded:${quota.label}`} className="providers-account-quota-summary">
+                <div className="project-create-note">Лимит: {quota.label}</div>
+                <span
+                  className="providers-usage-meter providers-account-summary-meter"
+                  role="progressbar"
+                  aria-label={quota.ariaLabel}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={quota.value}
+                  aria-valuetext={quota.ariaValueText}
+                >
+                  <span className="providers-usage-meter-fill" style={{ width: `${quota.value}%` }} />
+                  <span className="providers-usage-meter-text">{quota.meterText}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {expandedQuotaResetTexts.map((quota) => (
+            <div key={`${props.account.id}:reset:${quota.label}`} className="project-create-note">
+              {quota.label}: {quota.resetText}
+            </div>
+          ))}
 
           <div className="providers-account-metrics">
             <div className="project-create-note">Запросы: {formatCliproxyUsageNumber(props.account.usage.requestCount)}</div>

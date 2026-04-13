@@ -57,8 +57,8 @@ describe("CliproxyAccountsSection", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders collapsed account summary with only the short quota window by default", () => {
-    /* Operators should see the provider, identity, status, and one primary limit without the verbose diagnostics wall. */
+  it("renders collapsed account summary with five-hour and daily limits by default", () => {
+    /* Operators should always see the short and daily windows before they open the full account diagnostics. */
     renderSection();
 
     expect(screen.getByText("CLIProxy accounts")).toBeTruthy();
@@ -67,6 +67,8 @@ describe("CliproxyAccountsSection", () => {
     expect(screen.getByText("ready")).toBeTruthy();
     expect(screen.getByText("Лимит: 5 часов")).toBeTruthy();
     expect(screen.getByText("65% осталось")).toBeTruthy();
+    expect(screen.getByText("Лимит: 24 часа")).toBeTruthy();
+    expect(screen.getByText("72% осталось")).toBeTruthy();
     expect(getAccountToggle().getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText(/7 дней/i)).toBeNull();
     expect(screen.queryByText("Запросы: 3")).toBeNull();
@@ -158,6 +160,10 @@ describe("CliproxyAccountsSection", () => {
     expect(screen.getByText("Запросы: 3")).toBeTruthy();
     expect(screen.getByText("Токены: 1,450")).toBeTruthy();
     expect(screen.getByText("Ошибки: 1")).toBeTruthy();
+    expect(screen.getAllByText("Лимит: 5 часов").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Лимит: 24 часа").length).toBeGreaterThan(0);
+    expect(screen.getByText("Лимит: 7 дней")).toBeTruthy();
+    expect(screen.getByText("80% осталось")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Тест" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Свернуть аккаунт Codex" }));
@@ -229,7 +235,7 @@ describe("CliproxyAccountsSection", () => {
     fireEvent.click(getAccountToggle());
 
     expect(screen.getByText("Недоступен для запросов прямо сейчас.")).toBeTruthy();
-    expect(screen.getByText("Квота исчерпана")).toBeTruthy();
+    expect(screen.getAllByText("Квота исчерпана").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Сделать активным" }));
 
