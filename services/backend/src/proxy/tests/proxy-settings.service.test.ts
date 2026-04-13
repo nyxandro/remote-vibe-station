@@ -46,7 +46,7 @@ describe("ProxySettingsService", () => {
 
       const proxyEnvPath = path.join(runtimeDir, "infra", "vless", "proxy.env");
       const overridePath = path.join(runtimeDir, "docker-compose.vless.yml");
-      const xrayPath = path.join(runtimeDir, "infra", "vless", "xray.json");
+       const xrayPath = path.join(runtimeDir, "infra", "vless", "xray.json");
       const proxyEnvContent = await fs.readFile(proxyEnvPath, "utf-8");
       const overrideContent = await fs.readFile(overridePath, "utf-8");
       const xrayContent = await fs.readFile(xrayPath, "utf-8");
@@ -54,6 +54,8 @@ describe("ProxySettingsService", () => {
       expect(proxyEnvContent).toContain("HTTP_PROXY=socks5://vless-proxy:1080");
       expect(proxyEnvContent).toContain("NO_PROXY=127.0.0.1,backend,bot,cliproxy,localhost,miniapp,opencode,proxy,vless-proxy");
       expect(overrideContent).toContain("vless-proxy");
+      expect(overrideContent).toContain("cat /runtime-config/infra/vless/xray.json > /tmp/xray.json");
+      expect(overrideContent).not.toContain("./infra/vless/xray.json:/etc/xray/config.json:ro");
       expect(overrideContent).toContain("bot:");
       expect(overrideContent).toContain("cliproxy:");
       expect(overrideContent).toContain("opencode:");
