@@ -3,6 +3,7 @@
  *
  * Exports:
  * - BotConfig (L15) - Validated configuration shape.
+ * - TelegramTransportMode (L24) - Supported inbound Telegram delivery modes.
  * - HTTPS_PREFIX (L22) - HTTPS scheme prefix.
  * - CSV_SEPARATOR (L23) - CSV delimiter for admin ids.
  * - parseAdminIds (L32) - Parse and validate admin id list.
@@ -19,7 +20,10 @@ export type BotConfig = {
   botBackendAuthToken: string;
   publicBaseUrl: string;
   opencodePublicBaseUrl: string;
+  transportMode: TelegramTransportMode;
 };
+
+export type TelegramTransportMode = "auto" | "webhook" | "polling";
 
 const HTTPS_PREFIX = "https://";
 const LOCALHOST_PREFIXES = ["http://localhost", "http://127.0.0.1"];
@@ -31,7 +35,8 @@ const envSchema = z.object({
   BACKEND_URL: z.string().min(1),
   BOT_BACKEND_AUTH_TOKEN: z.string().min(1),
   PUBLIC_BASE_URL: z.string().min(1),
-  OPENCODE_PUBLIC_BASE_URL: z.string().min(1)
+  OPENCODE_PUBLIC_BASE_URL: z.string().min(1),
+  TELEGRAM_TRANSPORT_MODE: z.enum(["auto", "webhook", "polling"]).optional()
 });
 
 const parseAdminIds = (value: string): number[] => {
@@ -95,6 +100,7 @@ export const loadConfig = (): BotConfig => {
     opencodePublicBaseUrl: requirePublicBaseUrl(
       env.OPENCODE_PUBLIC_BASE_URL,
       "OPENCODE_PUBLIC_BASE_URL"
-    )
+    ),
+    transportMode: env.TELEGRAM_TRANSPORT_MODE ?? "auto"
   };
 };

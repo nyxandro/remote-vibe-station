@@ -20,7 +20,8 @@ describe("registerBotPromptHandlers", () => {
     backendUrl: "http://backend:3000",
     botBackendAuthToken: "secret-token",
     publicBaseUrl: "http://localhost:4173",
-    opencodePublicBaseUrl: "http://localhost:4096"
+    opencodePublicBaseUrl: "http://localhost:4096",
+    transportMode: "auto"
   };
 
   const createBotMock = (): {

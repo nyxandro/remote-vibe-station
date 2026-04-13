@@ -41,6 +41,19 @@ export const isLocalBotRuntime = (publicBaseUrl: string): boolean => {
   return publicBaseUrl.startsWith("http://localhost") || publicBaseUrl.startsWith("http://127.0.0.1");
 };
 
+const resolvePollingMode = (config: BotConfig): boolean => {
+  /* Explicit transport override wins; otherwise preserve existing localhost auto-detection. */
+  if (config.transportMode === "polling") {
+    return true;
+  }
+
+  if (config.transportMode === "webhook") {
+    return false;
+  }
+
+  return isLocalBotRuntime(config.publicBaseUrl);
+};
+
 export const resolvePrimaryAdminId = (adminIds: number[]): number | null => {
   /* Startup sync/warmup uses the first configured admin because those endpoints are admin-scoped. */
   return Array.isArray(adminIds) && typeof adminIds[0] === "number" ? adminIds[0] : null;
@@ -63,12 +76,18 @@ export const launchBotRuntime = async (input: {
     ...(input.checkOpenCodeVersionOnBoot ? { checkOpenCodeVersionOnBoot: input.checkOpenCodeVersionOnBoot } : {}),
     ...(input.registerShutdownHandlers ? { registerShutdownHandlers: input.registerShutdownHandlers } : {})
   };
-  const localRuntime = isLocalBotRuntime(input.config.publicBaseUrl);
+  const localRuntime = resolvePollingMode(input.config);
   const primaryAdminId = resolvePrimaryAdminId(input.config.adminIds);
 
   if (localRuntime) {
     /* Polling mode still needs menu sync and warmup so operator UX matches webhook deployments. */
-    await dependencies.syncMiniAppMenuButton(input.bot.telegram, input.config.publicBaseUrl);
+    try {
+      await dependencies.syncMiniAppMenuButton(input.bot.telegram, input.config.publicBaseUrl);
+    } catch (error) {
+      /* Telegram network instability must not block polling startup, otherwise the bot never begins consuming updates. */
+      // eslint-disable-next-line no-console
+      console.warn("Mini App menu sync failed during polling boot; continuing startup", error);
+    }
 
     if (primaryAdminId !== null) {
       try {
@@ -79,7 +98,13 @@ export const launchBotRuntime = async (input: {
         console.warn(`syncSlashCommands failed during polling boot for admin ${primaryAdminId}`, error);
       }
 
-      await dependencies.checkOpenCodeVersionOnBoot(input.config, primaryAdminId);
+      try {
+        await dependencies.checkOpenCodeVersionOnBoot(input.config, primaryAdminId);
+      } catch (error) {
+        /* Polling mode should still start consuming Telegram updates even if warmup endpoints are flaky. */
+        // eslint-disable-next-line no-console
+        console.warn("OpenCode version warmup failed during polling boot; continuing startup", error);
+      }
       input.commandSyncRuntime.startPeriodicCommandSync(primaryAdminId);
     }
 

@@ -60,6 +60,7 @@ describe("loadConfig", () => {
     expect(config.backendUrl).toBe("http://backend:3000");
     expect(config.botBackendAuthToken).toBe("secret-token");
     expect(config.opencodePublicBaseUrl).toBe("https://code.example.com");
+    expect(config.transportMode).toBe("auto");
   });
 
   it("allows localhost http PUBLIC_BASE_URL for dev", () => {
@@ -72,5 +73,15 @@ describe("loadConfig", () => {
     const config = loadConfig();
     expect(config.publicBaseUrl).toBe("http://localhost:4173");
     expect(config.opencodePublicBaseUrl).toBe("http://localhost:4096");
+  });
+
+  it("parses explicit transport mode override", () => {
+    setEnv({
+      ...baseEnv,
+      TELEGRAM_TRANSPORT_MODE: "polling"
+    });
+
+    const config = loadConfig();
+    expect(config.transportMode).toBe("polling");
   });
 });

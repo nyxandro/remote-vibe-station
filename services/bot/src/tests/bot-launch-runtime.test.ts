@@ -15,7 +15,8 @@ describe("launchBotRuntime", () => {
     backendUrl: "http://backend:3000",
     botBackendAuthToken: "secret-token",
     publicBaseUrl: "http://localhost:4173",
-    opencodePublicBaseUrl: "http://localhost:4096"
+    opencodePublicBaseUrl: "http://localhost:4096",
+    transportMode: "auto"
   };
 
   const createBotMock = () => {
@@ -68,6 +69,69 @@ describe("launchBotRuntime", () => {
     expect(launch).toHaveBeenCalledTimes(1);
     expect(app.use).not.toHaveBeenCalled();
     expect(registerShutdownHandlers).toHaveBeenCalledTimes(1);
+  });
+
+  it("boots forced polling mode even with public HTTPS base url", async () => {
+    /* Production runtime must be able to bypass webhook delivery when Telegram cannot reliably reach the public endpoint. */
+    const { bot, launch } = createBotMock();
+    const app = { use: jest.fn() } as any;
+    const syncMiniAppMenuButton = jest.fn(async () => undefined);
+    const checkOpenCodeVersionOnBoot = jest.fn(async () => undefined);
+    const registerShutdownHandlers = jest.fn();
+    const commandSyncRuntime = {
+      syncSlashCommands: jest.fn(async () => undefined),
+      startPeriodicCommandSync: jest.fn(),
+      stopPeriodicCommandSync: jest.fn()
+    };
+
+    await launchBotRuntime({
+      app,
+      bot,
+      config: { ...baseConfig, publicBaseUrl: "https://example.com", transportMode: "polling" },
+      commandSyncRuntime,
+      closeHttpServer: jest.fn(async () => undefined),
+      syncMiniAppMenuButton,
+      checkOpenCodeVersionOnBoot,
+      registerShutdownHandlers
+    });
+
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(app.use).not.toHaveBeenCalled();
+    expect(commandSyncRuntime.startPeriodicCommandSync).toHaveBeenCalledWith(1);
+  });
+
+  it("keeps polling startup alive when Telegram menu sync times out", async () => {
+    /* Telegram API reachability is flaky in production, but polling must still come up and consume updates. */
+    const { bot, launch } = createBotMock();
+    const app = { use: jest.fn() } as any;
+    const syncMiniAppMenuButton = jest.fn(async () => {
+      throw new Error("telegram timeout");
+    });
+    const checkOpenCodeVersionOnBoot = jest.fn(async () => undefined);
+    const registerShutdownHandlers = jest.fn();
+    const commandSyncRuntime = {
+      syncSlashCommands: jest.fn(async () => undefined),
+      startPeriodicCommandSync: jest.fn(),
+      stopPeriodicCommandSync: jest.fn()
+    };
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await launchBotRuntime({
+      app,
+      bot,
+      config: { ...baseConfig, transportMode: "polling" },
+      commandSyncRuntime,
+      closeHttpServer: jest.fn(async () => undefined),
+      syncMiniAppMenuButton,
+      checkOpenCodeVersionOnBoot,
+      registerShutdownHandlers
+    });
+
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Mini App menu sync failed during polling boot; continuing startup",
+      expect.any(Error)
+    );
   });
 
   it("boots webhook mode with webhook registration and shared shutdown hooks", async () => {

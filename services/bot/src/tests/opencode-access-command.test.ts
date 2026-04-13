@@ -19,7 +19,8 @@ describe("registerOpenCodeAccessCommand", () => {
     backendUrl: "http://backend:3000",
     botBackendAuthToken: "secret-token",
     publicBaseUrl: "http://localhost:4173",
-    opencodePublicBaseUrl: "https://code.example.com"
+    opencodePublicBaseUrl: "https://code.example.com",
+    transportMode: "auto"
   };
 
   const createBotMock = (): {
