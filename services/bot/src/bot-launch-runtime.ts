@@ -16,6 +16,7 @@ import { BotConfig } from "./config";
 import { checkOpenCodeVersionOnBoot } from "./bot-command-sync-runtime";
 import { registerBotShutdownHandlers } from "./bot-http-runtime";
 import { syncMiniAppMenuButton } from "./miniapp-menu-button";
+import { createTelegramWebhookMiddleware } from "./telegram-webhook-http";
 
 export type BotLaunchCommandSyncRuntime = {
   syncSlashCommands: (adminId: number) => Promise<void>;
@@ -27,23 +28,6 @@ export type BotLaunchDependencies = {
   syncMiniAppMenuButton: typeof syncMiniAppMenuButton;
   checkOpenCodeVersionOnBoot: typeof checkOpenCodeVersionOnBoot;
   registerShutdownHandlers: typeof registerBotShutdownHandlers;
-};
-
-type TelegramWebhookRequest = {
-  body?: {
-    update_id?: number;
-    message?: {
-      message_id?: number;
-      text?: string;
-      chat?: { id?: number };
-      from?: { id?: number };
-    };
-    callback_query?: {
-      id?: string;
-      from?: { id?: number };
-      message?: { chat?: { id?: number } };
-    };
-  };
 };
 
 const DEFAULT_DEPENDENCIES: BotLaunchDependencies = {
@@ -119,30 +103,7 @@ export const launchBotRuntime = async (input: {
   }
 
   /* Public HTTPS mode exposes Telegram webhook over Express and keeps menu button in sync. */
-  input.app.use((req: TelegramWebhookRequest, _res, next) => {
-    /* Production incidents need positive evidence that Telegram updates actually reached Express before Telegraf handles them. */
-    const update = req.body;
-    if (!update) {
-      next();
-      return;
-    }
-
-    const messageText = update.message?.text;
-    const chatId = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id ?? null;
-    const fromId = update.message?.from?.id ?? update.callback_query?.from?.id ?? null;
-
-    // eslint-disable-next-line no-console
-    console.info("Telegram webhook update received", {
-      updateId: update.update_id ?? null,
-      messageId: update.message?.message_id ?? null,
-      chatId,
-      fromId,
-      text: typeof messageText === "string" ? messageText : null,
-      hasCallbackQuery: Boolean(update.callback_query)
-    });
-    next();
-  });
-  input.app.use(input.bot.webhookCallback("/bot/webhook"));
+  input.app.use("/bot/webhook", createTelegramWebhookMiddleware(input.bot));
   await input.bot.telegram.setWebhook(`${input.config.publicBaseUrl}/bot/webhook`);
   await dependencies.syncMiniAppMenuButton(input.bot.telegram, input.config.publicBaseUrl);
 

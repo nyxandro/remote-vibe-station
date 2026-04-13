@@ -3,6 +3,7 @@
  */
 
 import { Telegraf } from "telegraf";
+import { createTelegramWebhookMiddleware } from "../telegram-webhook-http";
 
 import { launchBotRuntime } from "../bot-launch-runtime";
 import { BotConfig } from "../config";
@@ -18,23 +19,21 @@ describe("launchBotRuntime", () => {
   };
 
   const createBotMock = () => {
-    const webhookHandler = jest.fn();
     const botLike = {
       telegram: {
         setWebhook: jest.fn(async () => true)
       },
       launch: jest.fn(async () => undefined),
       stop: jest.fn(),
-      webhookCallback: jest.fn(() => webhookHandler)
+      handleUpdate: jest.fn(async () => undefined)
     };
 
     return {
       bot: botLike as unknown as Telegraf,
-      webhookHandler,
       setWebhook: botLike.telegram.setWebhook,
       launch: botLike.launch,
       stop: botLike.stop,
-      webhookCallback: botLike.webhookCallback
+      handleUpdate: botLike.handleUpdate
     };
   };
 
@@ -73,7 +72,7 @@ describe("launchBotRuntime", () => {
 
   it("boots webhook mode with webhook registration and shared shutdown hooks", async () => {
     /* Public HTTPS runtime should avoid polling and expose Telegram webhook through Express. */
-    const { bot, webhookHandler, setWebhook, launch, webhookCallback } = createBotMock();
+    const { bot, setWebhook, launch } = createBotMock();
     const app = { use: jest.fn() } as any;
     const syncMiniAppMenuButton = jest.fn(async () => undefined);
     const checkOpenCodeVersionOnBoot = jest.fn(async () => undefined);
@@ -96,9 +95,8 @@ describe("launchBotRuntime", () => {
     });
 
     expect(checkOpenCodeVersionOnBoot).toHaveBeenCalledWith({ ...baseConfig, publicBaseUrl: "https://example.com" }, 1);
-    expect(webhookCallback).toHaveBeenCalledWith("/bot/webhook");
-    expect(app.use).toHaveBeenCalledTimes(2);
-    expect(app.use).toHaveBeenNthCalledWith(2, webhookHandler);
+    expect(app.use).toHaveBeenCalledTimes(1);
+    expect(app.use).toHaveBeenNthCalledWith(1, "/bot/webhook", expect.any(Function));
     expect(setWebhook).toHaveBeenCalledWith("https://example.com/bot/webhook");
     expect(syncMiniAppMenuButton).toHaveBeenCalledWith((bot as any).telegram, "https://example.com");
     expect(commandSyncRuntime.syncSlashCommands).toHaveBeenCalledWith(1);
@@ -109,7 +107,7 @@ describe("launchBotRuntime", () => {
 
   it("keeps webhook boot alive when startup warmup is temporarily unavailable", async () => {
     /* Runtime restarts can leave backend warming up for a few seconds, but webhook bot must still come up and retry later. */
-    const { bot, webhookHandler, setWebhook, launch, webhookCallback } = createBotMock();
+    const { bot, setWebhook, launch } = createBotMock();
     const app = { use: jest.fn() } as any;
     const syncMiniAppMenuButton = jest.fn(async () => undefined);
     const checkOpenCodeVersionOnBoot = jest.fn(async () => {
@@ -135,9 +133,8 @@ describe("launchBotRuntime", () => {
     });
 
     expect(checkOpenCodeVersionOnBoot).toHaveBeenCalledWith({ ...baseConfig, publicBaseUrl: "https://example.com" }, 1);
-    expect(webhookCallback).toHaveBeenCalledWith("/bot/webhook");
-    expect(app.use).toHaveBeenCalledTimes(2);
-    expect(app.use).toHaveBeenNthCalledWith(2, webhookHandler);
+    expect(app.use).toHaveBeenCalledTimes(1);
+    expect(app.use).toHaveBeenNthCalledWith(1, "/bot/webhook", expect.any(Function));
     expect(setWebhook).toHaveBeenCalledWith("https://example.com/bot/webhook");
     expect(syncMiniAppMenuButton).toHaveBeenCalledWith((bot as any).telegram, "https://example.com");
     expect(commandSyncRuntime.syncSlashCommands).toHaveBeenCalledWith(1);
@@ -148,5 +145,48 @@ describe("launchBotRuntime", () => {
       "OpenCode version warmup failed during webhook boot; continuing startup",
       expect.any(Error)
     );
+  });
+
+  it("acknowledges Telegram webhook before async handler completion", async () => {
+    /* Telegram must receive HTTP 200 immediately so slow Bot API calls do not trigger webhook retries. */
+    let releaseUpdate!: () => void;
+    const handleUpdate = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseUpdate = resolve;
+        })
+    );
+    const middleware = createTelegramWebhookMiddleware({ handleUpdate } as unknown as Telegraf);
+    const response = {
+      status: jest.fn().mockReturnThis(),
+      end: jest.fn()
+    } as any;
+
+    middleware(
+      {
+        body: {
+          update_id: 1,
+          message: {
+            message_id: 2,
+            text: "/start",
+            chat: { id: 77 },
+            from: { id: 1 }
+          }
+        }
+      } as any,
+      response,
+      jest.fn()
+    );
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.end).toHaveBeenCalledTimes(1);
+    expect(handleUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update_id: 1
+      })
+    );
+
+    releaseUpdate();
+    await Promise.resolve();
   });
 });
