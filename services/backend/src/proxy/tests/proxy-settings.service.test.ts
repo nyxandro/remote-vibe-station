@@ -54,6 +54,7 @@ describe("ProxySettingsService", () => {
       expect(proxyEnvContent).toContain("HTTP_PROXY=socks5://vless-proxy:1080");
       expect(proxyEnvContent).toContain("NO_PROXY=127.0.0.1,backend,bot,cliproxy,localhost,miniapp,opencode,proxy,vless-proxy");
       expect(overrideContent).toContain("vless-proxy");
+      expect(overrideContent).toContain('entrypoint: ["sh", "-lc"]');
       expect(overrideContent).toContain("cat /runtime-config/infra/vless/xray.json > /tmp/xray.json");
       expect(overrideContent).not.toContain("./infra/vless/xray.json:/etc/xray/config.json:ro");
       expect(overrideContent).not.toContain('"8080:8080"');
