@@ -33,6 +33,7 @@ export class TelegramPromptQueueStore {
   }
 
   public appendBuffer(input: {
+    traceId: string;
     key: string;
     adminId: number;
     chatId: number;
@@ -76,6 +77,7 @@ export class TelegramPromptQueueStore {
     /* Create a fresh buffer for the first chunk in a new logical prompt. */
     const next: TelegramPromptBuffer = {
       id: crypto.randomUUID(),
+      traceId: input.traceId,
       key: input.key,
       adminId: input.adminId,
       chatId: input.chatId,
@@ -114,6 +116,7 @@ export class TelegramPromptQueueStore {
   }
 
   public enqueueItem(input: {
+    traceId: string;
     key: string;
     adminId: number;
     chatId: number;
@@ -128,6 +131,7 @@ export class TelegramPromptQueueStore {
     const file = this.readAll();
     const item: TelegramPromptQueueItem = {
       id: crypto.randomUUID(),
+      traceId: input.traceId,
       key: input.key,
       adminId: input.adminId,
       chatId: input.chatId,

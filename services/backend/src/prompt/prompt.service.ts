@@ -103,8 +103,20 @@ export class PromptService {
     promptTextForTelemetry: string;
     parts: OpenCodePromptInputPart[];
     allowEmptyResponse?: boolean;
+    traceId?: string;
   }): Promise<PromptResult> {
     /* Emit prompt start event before the actual OpenCode request for observability parity. */
+    const traceId = String(input.traceId ?? `prompt-${Date.now().toString(36)}`).trim();
+    const dispatchStartedAt = Date.now();
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] prompt.dispatch.enter", {
+      traceId,
+      adminId: input.adminId ?? null,
+      projectSlug: input.projectSlug,
+      directory: input.directory,
+      partCount: input.parts.length,
+      allowEmptyResponse: Boolean(input.allowEmptyResponse)
+    });
     this.events.publish({
       type: "opencode.prompt",
       ts: new Date().toISOString(),
@@ -122,19 +134,50 @@ export class PromptService {
       agent: string | null;
     } = input.adminId
       ? await this.preferences.getExecutionSettings(input.adminId)
-      : {
-          model: { ...(await this.opencode.getDefaultModel()) },
-          agent: null
-        };
+        : {
+            model: { ...(await this.opencode.getDefaultModel()) },
+            agent: null
+          };
+
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] prompt.execution.resolved", {
+      traceId,
+      providerID: execution.model.providerID,
+      modelID: execution.model.modelID,
+      thinking: execution.model.variant ?? null,
+      agent: execution.agent ?? "build",
+      durationMs: Date.now() - dispatchStartedAt
+    });
 
     /* Ensure runtime SSE subscription for the active project directory. */
+    const sseStartedAt = Date.now();
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] prompt.sse.wait.started", {
+      traceId,
+      directory: input.directory
+    });
     this.opencodeEvents.ensureDirectory(input.directory);
     await this.opencodeEvents.waitUntilConnected(input.directory);
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] prompt.sse.wait.completed", {
+      traceId,
+      directory: input.directory,
+      durationMs: Date.now() - sseStartedAt
+    });
 
     /* Send prompt to OpenCode and gather response. */
     let resolvedSessionID: string | null = null;
     const onSessionResolved = (sessionID: string, sessionResolution: SessionResolution) => {
       resolvedSessionID = sessionID;
+      // eslint-disable-next-line no-console
+      console.info("[telegram-trace] prompt.session.resolved", {
+        traceId,
+        adminId: input.adminId ?? null,
+        sessionID,
+        resolution: sessionResolution.reason,
+        isNew: sessionResolution.isNew,
+        durationMs: Date.now() - dispatchStartedAt
+      });
       if (input.adminId) {
         this.sessionRouting.bind(sessionID, { adminId: input.adminId, directory: input.directory });
         this.opencodeEvents.watchPermissionOnce({ directory: input.directory, sessionID });
@@ -162,11 +205,27 @@ export class PromptService {
 
     let result: Awaited<ReturnType<OpenCodeClient["sendPromptParts"]>>;
     try {
+      const requestStartedAt = Date.now();
+      // eslint-disable-next-line no-console
+      console.info("[telegram-trace] prompt.opencode.request.started", {
+        traceId,
+        adminId: input.adminId ?? null,
+        directory: input.directory
+      });
       result = await this.opencode.sendPromptParts(input.parts, {
         directory: input.directory,
         model: execution.model,
         agent: execution.agent,
         onSessionResolved
+      });
+      // eslint-disable-next-line no-console
+      console.info("[telegram-trace] prompt.opencode.request.completed", {
+        traceId,
+        adminId: input.adminId ?? null,
+        sessionID: resolvedSessionID,
+        durationMs: Date.now() - requestStartedAt,
+        totalDurationMs: Date.now() - dispatchStartedAt,
+        emptyResponse: Boolean((result as { emptyResponse?: boolean }).emptyResponse)
       });
     } catch (error) {
       /* Telegram queue prompts may still succeed over SSE after the synchronous HTTP call drops late. */
@@ -204,12 +263,30 @@ export class PromptService {
         });
       }
 
+      // eslint-disable-next-line no-console
+      console.error("[telegram-trace] prompt.opencode.request.failed", {
+        traceId,
+        adminId: input.adminId ?? null,
+        sessionID: resolvedSessionID,
+        totalDurationMs: Date.now() - dispatchStartedAt,
+        error: error instanceof Error ? error.message : String(error)
+      });
+
       throw error;
     }
 
     /* Multipart image prompts can finish via runtime stream without immediate HTTP body. */
     if ((result as { emptyResponse?: boolean }).emptyResponse) {
       if (input.allowEmptyResponse) {
+        // eslint-disable-next-line no-console
+        console.info("[telegram-trace] prompt.dispatch.completed", {
+          traceId,
+          adminId: input.adminId ?? null,
+          sessionID: result.sessionId,
+          mode: result.info.mode,
+          durationMs: Date.now() - dispatchStartedAt,
+          responseKind: "runtime-only"
+        });
         return {
           sessionId: result.sessionId,
           responseText: "",
@@ -225,6 +302,16 @@ export class PromptService {
 
       throw new Error("OpenCode returned an empty prompt response");
     }
+
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] prompt.dispatch.completed", {
+      traceId,
+      adminId: input.adminId ?? null,
+      sessionID: result.sessionId,
+      mode: result.info.mode,
+      durationMs: Date.now() - dispatchStartedAt,
+      responseKind: "http-final"
+    });
 
     return this.publishMessageResult(result, {
       activeProject: { slug: input.projectSlug, rootPath: input.directory },

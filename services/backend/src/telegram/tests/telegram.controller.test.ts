@@ -196,6 +196,7 @@ describe("TelegramController.enqueuePrompt", () => {
     const result = await controller.enqueuePrompt(
       {
         chatId: 77,
+        traceId: "tg-649624756-77-test",
         text: "Посмотри на скрин",
         messageId: 15,
         attachments: [
@@ -215,6 +216,7 @@ describe("TelegramController.enqueuePrompt", () => {
     expect(promptQueue.enqueueIncomingPrompt).toHaveBeenCalledWith({
       adminId: 649624756,
       chatId: 77,
+      traceId: "tg-649624756-77-test",
       text: "Посмотри на скрин",
       messageId: 15,
       attachments: [

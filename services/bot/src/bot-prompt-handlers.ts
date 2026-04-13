@@ -30,6 +30,11 @@ import {
   validateVoiceInput
 } from "./voice-control";
 
+const createTelegramPromptTraceId = (adminId: number, chatId: number): string => {
+  /* Use one compact identifier across bot/backend logs for the same Telegram turn. */
+  return `tg-${adminId}-${chatId}-${Date.now().toString(36)}`;
+};
+
 export type BotPromptCommandSyncRuntime = {
   resolveCommandAlias: (command: string) => string | undefined;
   syncSlashCommands: (adminId: number) => Promise<void>;
@@ -65,16 +70,49 @@ export const registerBotPromptHandlers = (input: {
   }): Promise<void> => {
     /* Reuse one enqueue flow for text, images, PDFs and transcribed voice so queue semantics stay identical. */
     /* Runtime bridge now owns thinking indicator lifecycle, so bot-side enqueue must not start optimistic typing early. */
+    const traceId = createTelegramPromptTraceId(prompt.adminId, prompt.chatId);
+    const bindStartedAt = Date.now();
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] bot.prompt.received", {
+      traceId,
+      adminId: prompt.adminId,
+      chatId: prompt.chatId,
+      payloadKeys: Object.keys(prompt.payload)
+    });
+
     await input.bindChat(prompt.adminId, prompt.chatId);
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] bot.bind.completed", {
+      traceId,
+      adminId: prompt.adminId,
+      chatId: prompt.chatId,
+      durationMs: Date.now() - bindStartedAt
+    });
 
     void (async () => {
+      const enqueueStartedAt = Date.now();
       try {
+        // eslint-disable-next-line no-console
+        console.info("[telegram-trace] bot.enqueue.started", {
+          traceId,
+          adminId: prompt.adminId,
+          chatId: prompt.chatId
+        });
         const response = await fetch(`${input.config.backendUrl}/api/telegram/prompt/enqueue`, {
           method: "POST",
           headers: buildBotBackendHeaders(input.config, prompt.adminId, {
             "Content-Type": "application/json"
           }),
-          body: JSON.stringify({ chatId: prompt.chatId, ...prompt.payload })
+          body: JSON.stringify({ chatId: prompt.chatId, traceId, ...prompt.payload })
+        });
+
+        // eslint-disable-next-line no-console
+        console.info("[telegram-trace] bot.enqueue.completed", {
+          traceId,
+          adminId: prompt.adminId,
+          chatId: prompt.chatId,
+          status: response.status,
+          durationMs: Date.now() - enqueueStartedAt
         });
 
         if (!response.ok) {
@@ -98,6 +136,14 @@ export const registerBotPromptHandlers = (input: {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        // eslint-disable-next-line no-console
+        console.error("[telegram-trace] bot.enqueue.failed", {
+          traceId,
+          adminId: prompt.adminId,
+          chatId: prompt.chatId,
+          durationMs: Date.now() - enqueueStartedAt,
+          error: message
+        });
         await safeSendMessage(prompt.chatId, `${prompt.errorLabel}: ${message}`);
       }
     })();

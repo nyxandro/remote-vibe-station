@@ -20,6 +20,7 @@ export type TelegramBufferedAttachment = {
 
 export type TelegramPromptBuffer = {
   id: string;
+  traceId: string;
   key: string;
   adminId: number;
   chatId: number;
@@ -45,6 +46,7 @@ export type TelegramQueuedAttachment = {
 
 export type TelegramPromptQueueItem = {
   id: string;
+  traceId: string;
   key: string;
   adminId: number;
   chatId: number;

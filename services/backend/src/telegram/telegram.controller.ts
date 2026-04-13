@@ -125,6 +125,7 @@ export class TelegramController {
     @Body()
     body: {
       chatId?: number;
+      traceId?: string;
       text?: string;
       messageId?: number;
       attachments?: Array<{
@@ -140,6 +141,7 @@ export class TelegramController {
   ) {
     /* Accept text chunks plus supported Telegram attachments for debounced Telegram-to-OpenCode queueing. */
     const adminId = requireTelegramAdminId(req);
+    const traceId = typeof body?.traceId === "string" && body.traceId.trim().length > 0 ? body.traceId.trim() : undefined;
 
     const text = typeof body?.text === "string" ? body.text.trim() : "";
     const chatId = typeof body?.chatId === "number" ? body.chatId : null;
@@ -169,6 +171,7 @@ export class TelegramController {
         ...(await this.promptQueue.enqueueIncomingPrompt({
           adminId,
           chatId,
+          traceId,
           text: text || undefined,
           messageId: typeof body?.messageId === "number" ? body.messageId : undefined,
           attachments

@@ -86,6 +86,7 @@ describe("TelegramPromptQueueService", () => {
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         adminId: 7,
+        traceId: expect.any(String),
         projectSlug: "remote-vibe-station",
         directory: "/home/nyx/projects/remote-vibe-station",
         promptTextForTelemetry: "Первая часть",
@@ -95,6 +96,7 @@ describe("TelegramPromptQueueService", () => {
     expect(promptService.dispatchPromptParts).toHaveBeenLastCalledWith(
       expect.objectContaining({
         adminId: 7,
+        traceId: expect.any(String),
         projectSlug: "remote-vibe-station",
         directory: "/home/nyx/projects/remote-vibe-station",
         promptTextForTelemetry: "Вторая часть",
@@ -133,6 +135,7 @@ describe("TelegramPromptQueueService", () => {
     expect(promptService.dispatchPromptParts).toHaveBeenCalledTimes(2);
     expect(promptService.dispatchPromptParts).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        traceId: expect.any(String),
         promptTextForTelemetry: "Второй",
         parts: [{ type: "text", text: "Второй" }]
       })
@@ -157,6 +160,7 @@ describe("TelegramPromptQueueService", () => {
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         adminId: 7,
+        traceId: expect.any(String),
         projectSlug: "remote-vibe-station",
         directory: "/home/nyx/projects/remote-vibe-station",
         promptTextForTelemetry: "Продолжай текущую kanban-задачу.",
@@ -201,6 +205,7 @@ describe("TelegramPromptQueueService", () => {
     expect(attachments.materializeAttachments).toHaveBeenCalledTimes(1);
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
+        traceId: expect.any(String),
         promptTextForTelemetry: "",
         parts: [
           {
@@ -251,6 +256,7 @@ describe("TelegramPromptQueueService", () => {
 
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
+        traceId: expect.any(String),
         promptTextForTelemetry: "Что на картинке?\n\nОпиши главное",
         parts: [
           { type: "text", text: "Что на картинке?\n\nОпиши главное" },
@@ -300,6 +306,7 @@ describe("TelegramPromptQueueService", () => {
 
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
+        traceId: expect.any(String),
         promptTextForTelemetry: "Вытащи требования из PDF",
         parts: [
           { type: "text", text: "Вытащи требования из PDF" },
@@ -373,6 +380,7 @@ describe("TelegramPromptQueueService", () => {
 
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
+        traceId: expect.any(String),
         promptTextForTelemetry: "Сравни кадры",
         parts: [
           { type: "text", text: "Сравни кадры" },

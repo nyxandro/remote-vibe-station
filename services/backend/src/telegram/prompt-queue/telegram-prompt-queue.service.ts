@@ -53,11 +53,14 @@ export class TelegramPromptQueueService implements OnModuleInit {
   public async enqueueIncomingPrompt(input: {
     adminId: number;
     chatId: number;
+    traceId?: string;
     text?: string;
     messageId?: number;
     attachments?: TelegramBufferedAttachment[];
   }): Promise<{ queueDepth: number; flushAt: string; position: number; buffered: boolean; merged: boolean }> {
     /* Resolve active project once at enqueue time so later dispatch is immune to project switching. */
+    const traceId = String(input.traceId ?? `queue-${input.adminId}-${input.chatId}-${Date.now().toString(36)}`).trim();
+    const enqueueStartedAt = Date.now();
     const activeProject = await this.projects.getActiveProject(input.adminId);
     if (!activeProject) {
       throw new Error(
@@ -83,6 +86,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
     const flushAt = new Date(nowMs + TELEGRAM_PROMPT_BUFFER_WINDOW_MS).toISOString();
     const willMerge = this.shouldMergeIntoExistingBuffer(existingBuffer, mergeMode);
     const buffer = this.store.appendBuffer({
+      traceId,
       key,
       adminId: input.adminId,
       chatId: input.chatId,
@@ -94,6 +98,19 @@ export class TelegramPromptQueueService implements OnModuleInit {
       nowIso,
       flushAtIso: flushAt,
       mergeMode
+    });
+
+    // eslint-disable-next-line no-console
+    console.info("[telegram-trace] backend.enqueue.accepted", {
+      traceId,
+      adminId: input.adminId,
+      chatId: input.chatId,
+      projectSlug: activeProject.slug,
+      directory: activeProject.rootPath,
+      queueDepth,
+      position: queueDepth + 1,
+      merged: willMerge,
+      durationMs: Date.now() - enqueueStartedAt
     });
 
     this.scheduleFlush(buffer);
@@ -129,7 +146,9 @@ export class TelegramPromptQueueService implements OnModuleInit {
 
     const key = this.buildQueueKey(input.adminId, input.directory);
     const queueDepth = this.store.countOutstandingItems(key);
+    const traceId = `system-${input.adminId}-${Date.now().toString(36)}`;
     this.store.enqueueItem({
+      traceId,
       key,
       adminId: input.adminId,
       chatId: binding.chatId,
@@ -224,6 +243,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
   private async materializeBuffer(buffer: TelegramPromptBuffer): Promise<void> {
     /* Shared materialization path keeps normal debounce flush and forced split behavior identical. */
     const text = buffer.textSegments.join("\n\n").trim();
+    const materializeStartedAt = Date.now();
 
     let materialized: TelegramQueuedAttachment[] = [];
     try {
@@ -233,6 +253,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
           ? await this.attachments.materializeAttachments({ attachments: buffer.attachments })
           : [];
       this.store.enqueueItem({
+        traceId: buffer.traceId,
         key: buffer.key,
         adminId: buffer.adminId,
         chatId: buffer.chatId,
@@ -243,6 +264,16 @@ export class TelegramPromptQueueService implements OnModuleInit {
         sourceMessageIds: buffer.sourceMessageIds,
         createdAtIso: new Date().toISOString()
       });
+      // eslint-disable-next-line no-console
+      console.info("[telegram-trace] backend.buffer.materialized", {
+        traceId: buffer.traceId,
+        adminId: buffer.adminId,
+        chatId: buffer.chatId,
+        projectSlug: buffer.projectSlug,
+        textLength: text.length,
+        attachmentCount: materialized.length,
+        durationMs: Date.now() - materializeStartedAt
+      });
       this.store.removeBuffer(buffer.key);
       this.pumpQueue(buffer.key);
     } catch (error) {
@@ -250,6 +281,14 @@ export class TelegramPromptQueueService implements OnModuleInit {
       this.store.removeBuffer(buffer.key);
       await this.attachments.deleteFiles({ attachments: materialized });
       const message = error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line no-console
+      console.error("[telegram-trace] backend.buffer.failed", {
+        traceId: buffer.traceId,
+        adminId: buffer.adminId,
+        chatId: buffer.chatId,
+        durationMs: Date.now() - materializeStartedAt,
+        error: message
+      });
       this.outbox.enqueueAdminNotification({
         adminId: buffer.adminId,
         text: `Не удалось подготовить вложение для агента: ${message}`
@@ -277,6 +316,17 @@ export class TelegramPromptQueueService implements OnModuleInit {
         }
 
         try {
+          const dispatchStartedAt = Date.now();
+          // eslint-disable-next-line no-console
+          console.info("[telegram-trace] backend.dispatch.started", {
+            traceId: item.traceId,
+            itemId: item.id,
+            adminId: item.adminId,
+            projectSlug: item.projectSlug,
+            directory: item.directory,
+            textLength: item.text.length,
+            attachmentCount: item.attachments.length
+          });
           const parts = this.buildPromptParts(item.text, item.attachments);
           await this.prompts.dispatchPromptParts({
             adminId: item.adminId,
@@ -284,12 +334,27 @@ export class TelegramPromptQueueService implements OnModuleInit {
             directory: item.directory,
             promptTextForTelemetry: item.text,
             parts,
-            allowEmptyResponse: true
+            allowEmptyResponse: true,
+            traceId: item.traceId
           });
           this.store.markCompleted(item.id, new Date().toISOString());
+          // eslint-disable-next-line no-console
+          console.info("[telegram-trace] backend.dispatch.completed", {
+            traceId: item.traceId,
+            itemId: item.id,
+            adminId: item.adminId,
+            durationMs: Date.now() - dispatchStartedAt
+          });
         } catch (error) {
           const message = normalizeOpenCodeTransportErrorMessage(error);
           this.store.markFailed(item.id, new Date().toISOString(), message);
+          // eslint-disable-next-line no-console
+          console.error("[telegram-trace] backend.dispatch.failed", {
+            traceId: item.traceId,
+            itemId: item.id,
+            adminId: item.adminId,
+            error: message
+          });
           this.outbox.enqueueAdminNotification({
             adminId: item.adminId,
             text: `Ошибка запроса: ${message}`
