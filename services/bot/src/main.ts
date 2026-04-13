@@ -84,6 +84,8 @@ export const bootstrap = async (): Promise<void> => {
   /* Always expose auth endpoints for Traefik forward-auth and link exchange. */
   const app = express();
   app.set("trust proxy", 1);
+  /* Telegram webhook middleware needs parsed JSON updates before it can acknowledge and hand them to Telegraf. */
+  app.use(express.json());
   registerOpenCodeWebAuthHttp({
     app,
     service: webAuth,
