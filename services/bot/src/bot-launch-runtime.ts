@@ -92,7 +92,13 @@ export const launchBotRuntime = async (input: {
   }
 
   if (primaryAdminId !== null) {
-    await dependencies.checkOpenCodeVersionOnBoot(input.config, primaryAdminId);
+    try {
+      /* Webhook boot must survive backend/OpenCode warmup races that happen during runtime restarts. */
+      await dependencies.checkOpenCodeVersionOnBoot(input.config, primaryAdminId);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn("OpenCode version warmup failed during webhook boot; continuing startup", error);
+    }
   }
 
   /* Public HTTPS mode exposes Telegram webhook over Express and keeps menu button in sync. */

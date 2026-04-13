@@ -83,8 +83,10 @@ export class ProxySettingsService {
   }
 
   public async applyRuntimeStack(): Promise<ProxyApplyResult> {
-    /* Run docker compose with generated override in runtime directory configured for backend. */
+    /* Only recycle proxy-target services so Apply action does not take down Mini App ingress or unrelated control-plane services. */
     const runtimeConfigDir = this.requireRuntimeConfigDir();
+    const record = await this.store.get();
+    const targetServices = this.buildApplyTargetServices(record);
     const args = [
       "--env-file",
       ENV_FILE,
@@ -93,7 +95,9 @@ export class ProxySettingsService {
       "-f",
       VLESS_OVERRIDE_FILE,
       "up",
-      "-d"
+      "-d",
+      "--remove-orphans",
+      ...targetServices
     ];
     const result = await this.dockerCompose.run(args, runtimeConfigDir);
     return {
@@ -170,8 +174,8 @@ export class ProxySettingsService {
   }
 
   private toApplyCommand(): string {
-    /* Keep one canonical compose command string for API/UI to avoid mismatch. */
-    return `docker compose --env-file ${ENV_FILE} -f ${PRIMARY_COMPOSE_FILE} -f ${VLESS_OVERRIDE_FILE} up -d`;
+    /* Keep one canonical compose command shape for API/UI to avoid mismatch. */
+    return `docker compose --env-file ${ENV_FILE} -f ${PRIMARY_COMPOSE_FILE} -f ${VLESS_OVERRIDE_FILE} up -d --remove-orphans <proxy-services>`;
   }
 
   private requireRuntimeConfigDir(): string {
@@ -239,6 +243,12 @@ export class ProxySettingsService {
     }
 
     return [...hostnames].sort().join(",");
+  }
+
+  private buildApplyTargetServices(record: ProxySettingsInput): string[] {
+    /* VLESS apply should touch only services whose runtime env changes, plus the proxy sidecar in VLESS mode. */
+    const targets = record.mode === "vless" ? ["vless-proxy", ...record.enabledServices] : [...DEFAULT_VLESS_ENABLED_SERVICES];
+    return [...new Set(targets)];
   }
 
   private isProxyUrl(value: string): boolean {

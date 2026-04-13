@@ -73,8 +73,66 @@ describe("ProxySettingsService", () => {
   });
 
   test("applies runtime compose in configured runtime directory", async () => {
-    /* Apply action should run docker compose with explicit override files in runtime dir. */
+    /* Apply action should only restart proxy-capable services so Mini App ingress never drops during a VLESS toggle. */
     const runtimeDir = await fs.mkdtemp(path.join(os.tmpdir(), "proxy-runtime-apply-"));
+    const prevRuntimeDir = process.env.RUNTIME_CONFIG_DIR;
+    process.env.RUNTIME_CONFIG_DIR = runtimeDir;
+
+    try {
+      const store = {
+        get: jest.fn().mockResolvedValue({
+          mode: "vless",
+          vlessProxyUrl: "socks5://vless-proxy:1080",
+          vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
+          enabledServices: ["bot", "cliproxy"],
+          noProxy: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy",
+          updatedAt: "2026-03-06T00:00:00.000Z"
+        }),
+        set: jest.fn()
+      };
+      const docker = {
+        run: jest.fn().mockResolvedValue({
+          exitCode: 0,
+          stdout: "done",
+          stderr: ""
+        })
+      };
+      const service = new ProxySettingsService(store as never, docker as never);
+
+      const result = await service.applyRuntimeStack();
+
+      expect(docker.run).toHaveBeenCalledWith(
+        [
+          "--env-file",
+          ".env",
+          "-f",
+          "docker-compose.yml",
+          "-f",
+          "docker-compose.vless.yml",
+          "up",
+          "-d",
+          "--remove-orphans",
+          "vless-proxy",
+          "bot",
+          "cliproxy"
+        ],
+        runtimeDir
+      );
+      expect(result.ok).toBe(true);
+      expect(result.stdout).toBe("done");
+    } finally {
+      if (prevRuntimeDir === undefined) {
+        delete process.env.RUNTIME_CONFIG_DIR;
+      } else {
+        process.env.RUNTIME_CONFIG_DIR = prevRuntimeDir;
+      }
+      await fs.rm(runtimeDir, { recursive: true, force: true });
+    }
+  });
+
+  test("applies direct mode without restarting unrelated ingress services", async () => {
+    /* Direct-mode apply should recycle only previously proxy-capable services and remove the VLESS orphan. */
+    const runtimeDir = await fs.mkdtemp(path.join(os.tmpdir(), "proxy-runtime-apply-direct-"));
     const prevRuntimeDir = process.env.RUNTIME_CONFIG_DIR;
     process.env.RUNTIME_CONFIG_DIR = runtimeDir;
 
@@ -99,14 +157,25 @@ describe("ProxySettingsService", () => {
       };
       const service = new ProxySettingsService(store as never, docker as never);
 
-      const result = await service.applyRuntimeStack();
+      await service.applyRuntimeStack();
 
       expect(docker.run).toHaveBeenCalledWith(
-        ["--env-file", ".env", "-f", "docker-compose.yml", "-f", "docker-compose.vless.yml", "up", "-d"],
+        [
+          "--env-file",
+          ".env",
+          "-f",
+          "docker-compose.yml",
+          "-f",
+          "docker-compose.vless.yml",
+          "up",
+          "-d",
+          "--remove-orphans",
+          "bot",
+          "cliproxy",
+          "opencode"
+        ],
         runtimeDir
       );
-      expect(result.ok).toBe(true);
-      expect(result.stdout).toBe("done");
     } finally {
       if (prevRuntimeDir === undefined) {
         delete process.env.RUNTIME_CONFIG_DIR;

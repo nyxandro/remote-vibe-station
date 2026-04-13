@@ -105,4 +105,46 @@ describe("launchBotRuntime", () => {
     expect(launch).not.toHaveBeenCalled();
     expect(registerShutdownHandlers).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps webhook boot alive when startup warmup is temporarily unavailable", async () => {
+    /* Runtime restarts can leave backend warming up for a few seconds, but webhook bot must still come up and retry later. */
+    const { bot, webhookHandler, setWebhook, launch, webhookCallback } = createBotMock();
+    const app = { use: jest.fn() } as any;
+    const syncMiniAppMenuButton = jest.fn(async () => undefined);
+    const checkOpenCodeVersionOnBoot = jest.fn(async () => {
+      throw new Error("connect ECONNREFUSED backend");
+    });
+    const registerShutdownHandlers = jest.fn();
+    const commandSyncRuntime = {
+      syncSlashCommands: jest.fn(async () => undefined),
+      startPeriodicCommandSync: jest.fn(),
+      stopPeriodicCommandSync: jest.fn()
+    };
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await launchBotRuntime({
+      app,
+      bot,
+      config: { ...baseConfig, publicBaseUrl: "https://example.com" },
+      commandSyncRuntime,
+      closeHttpServer: jest.fn(async () => undefined),
+      syncMiniAppMenuButton,
+      checkOpenCodeVersionOnBoot,
+      registerShutdownHandlers
+    });
+
+    expect(checkOpenCodeVersionOnBoot).toHaveBeenCalledWith({ ...baseConfig, publicBaseUrl: "https://example.com" }, 1);
+    expect(webhookCallback).toHaveBeenCalledWith("/bot/webhook");
+    expect(app.use).toHaveBeenCalledWith(webhookHandler);
+    expect(setWebhook).toHaveBeenCalledWith("https://example.com/bot/webhook");
+    expect(syncMiniAppMenuButton).toHaveBeenCalledWith((bot as any).telegram, "https://example.com");
+    expect(commandSyncRuntime.syncSlashCommands).toHaveBeenCalledWith(1);
+    expect(commandSyncRuntime.startPeriodicCommandSync).toHaveBeenCalledWith(1);
+    expect(launch).not.toHaveBeenCalled();
+    expect(registerShutdownHandlers).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "OpenCode version warmup failed during webhook boot; continuing startup",
+      expect.any(Error)
+    );
+  });
 });
