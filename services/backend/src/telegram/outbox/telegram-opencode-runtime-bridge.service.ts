@@ -49,6 +49,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
   private readonly bashProgressKeyByPart = new Map<string, string>();
   private readonly assistantTextByPart = new Map<string, string>();
   private readonly assistantTextBySession = new Map<string, string>();
+  private readonly lastAssistantDeltaByPart = new Map<string, string>();
   private readonly partTypeById = new Map<string, string>();
   private readonly partIdsBySession = new Map<string, Set<string>>();
   private readonly assistantPartState = new TelegramAssistantPartState();
@@ -320,10 +321,16 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
       return;
     }
 
+    const partKey = buildAssistantPartKey(route.adminId, sessionID, partID);
+    if (this.lastAssistantDeltaByPart.get(partKey) === delta) {
+      /* Replay of the exact same delta should not duplicate buffered assistant text. */
+      return;
+    }
+    this.lastAssistantDeltaByPart.set(partKey, delta);
+
     /* Long text streams should keep fallback final-reply metadata fresh until the turn actually finishes. */
     this.finalReply.touchSession(sessionID);
 
-    const partKey = buildAssistantPartKey(route.adminId, sessionID, partID);
     const nextPartText = `${this.assistantTextByPart.get(partKey) ?? ""}${delta}`;
     const sessionText = `${this.assistantTextBySession.get(sessionID) ?? ""}${delta}`;
     /* Forward important runtime/system notices even when stream mode is disabled. */
@@ -397,6 +404,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
         for (const key of this.assistantTextByPart.keys()) {
           if (key.includes(`:${sessionID}:${partID || "part"}`)) {
             this.assistantTextByPart.delete(key);
+            this.lastAssistantDeltaByPart.delete(key);
           }
         }
       });
@@ -417,6 +425,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
     for (const key of this.assistantTextByPart.keys()) {
       if (key.includes(`:${sessionID}:`)) {
         this.assistantTextByPart.delete(key);
+        this.lastAssistantDeltaByPart.delete(key);
       }
     }
   }
@@ -440,6 +449,7 @@ export class TelegramOpenCodeRuntimeBridge implements OnModuleInit {
 
   public finalizeAssistantReply(sessionID: string): void {
     /* The synchronous final reply is authoritative, so any later SSE replay for this turn becomes stale noise. */
+    this.finalReply.markPublished(sessionID);
     this.todoProgress.closeTurn(sessionID);
     this.runtimeTurnState.closeTurn(sessionID);
     this.clearSessionRuntimeState(sessionID);

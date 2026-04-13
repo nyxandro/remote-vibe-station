@@ -235,4 +235,93 @@ describe("Telegram runtime final reply fallback", () => {
     });
     nowSpy.mockRestore();
   });
+
+  it("does not emit idle fallback after the authoritative final reply already finalized the turn", () => {
+    /* Late idle events are common after sync completion and must not create a duplicate final Telegram answer. */
+    const { bridge, outbox } = makeBridge();
+
+    (bridge as any).onEvent({
+      type: "opencode.turn.started",
+      ts: new Date().toISOString(),
+      data: {
+        sessionId: "session-no-double-final",
+        providerID: "cliproxy",
+        modelID: "gpt-5.4",
+        thinking: "medium",
+        agent: "build"
+      }
+    });
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-finalized",
+        sessionID: "session-no-double-final"
+      }
+    });
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-no-double-final",
+            partID: "assistant-part-finalized",
+            field: "text",
+            delta: "Финальный текст"
+          }
+        })
+      }
+    });
+
+    bridge.finalizeAssistantReply("session-no-double-final");
+
+    (bridge as any).onEvent({
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "session.idle",
+          properties: {
+            sessionID: "session-no-double-final"
+          }
+        })
+      }
+    });
+
+    expect(outbox.enqueueAssistantReply).not.toHaveBeenCalled();
+  });
+
+  it("drops published-session markers after metadata FIFO eviction to avoid unbounded memory growth", () => {
+    /* Published session ids can outlive evicted metadata, so the next prune pass must remove orphan markers too. */
+    const { bridge } = makeBridge();
+    const finalReply = (bridge as any).finalReply;
+
+    for (let index = 0; index < 1024; index += 1) {
+      finalReply.rememberTurnStart({
+        sessionID: `session-${index}`,
+        meta: {
+          providerID: "cliproxy",
+          modelID: "gpt-5.4",
+          thinking: "medium",
+          agent: "build"
+        }
+      });
+    }
+
+    finalReply.markPublished("session-published-only");
+    expect(finalReply.enqueueBufferedFinalReply({ sessionID: "session-published-only", adminId: 10, text: "noop" })).toBe(false);
+
+    finalReply.rememberTurnStart({
+      sessionID: "session-overflow",
+      meta: {
+        providerID: "cliproxy",
+        modelID: "gpt-5.4",
+        thinking: "medium",
+        agent: "build"
+      }
+    });
+
+    expect((finalReply as any).publishedSessions.has("session-published-only")).toBe(false);
+  });
 });

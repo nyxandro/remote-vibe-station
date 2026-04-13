@@ -270,6 +270,40 @@ describe("TelegramOpenCodeRuntimeBridge bash progress", () => {
     nowSpy.mockRestore();
   });
 
+  it("ignores replayed text delta payloads for the same open part", () => {
+    /* SSE reconnect can replay the same delta while the text part is still open, so buffered text must not duplicate. */
+    const { bridge } = makeBridge();
+
+    (bridge as any).handlePartUpdated({
+      part: {
+        type: "text",
+        id: "assistant-part-dedup",
+        sessionID: "session-dedup"
+      }
+    });
+
+    const duplicateEvent = {
+      type: "opencode.event",
+      ts: new Date().toISOString(),
+      data: {
+        payload: JSON.stringify({
+          type: "message.part.delta",
+          properties: {
+            sessionID: "session-dedup",
+            partID: "assistant-part-dedup",
+            field: "text",
+            delta: "Одинаковый фрагмент"
+          }
+        })
+      }
+    };
+
+    (bridge as any).onEvent(duplicateEvent);
+    (bridge as any).onEvent(duplicateEvent);
+
+    expect((bridge as any).assistantTextBySession.get("session-dedup")).toBe("Одинаковый фрагмент");
+  });
+
   it("keeps closed text-part replay protection across long-lived sessions", () => {
     /* Old commentary chunks must stay ignored even when the same session continues hours later. */
     const { bridge, outbox } = makeBridge();

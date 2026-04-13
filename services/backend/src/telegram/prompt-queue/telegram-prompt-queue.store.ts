@@ -43,6 +43,7 @@ export class TelegramPromptQueueStore {
     messageId?: number | null;
     nowIso: string;
     flushAtIso: string;
+    mergeMode: "plain_text" | "attachment_context";
   }): TelegramPromptBuffer {
     /* Keep one mutable debounce buffer per admin+project key. */
     const file = this.readAll();
@@ -50,7 +51,7 @@ export class TelegramPromptQueueStore {
     const normalizedText = typeof input.text === "string" ? input.text.trim() : "";
     const attachments = Array.isArray(input.attachments) ? input.attachments : [];
 
-    if (existing) {
+    if (existing && existing.mergeMode === "attachment_context") {
       /* Extend the same logical prompt while new chunks keep arriving inside debounce window. */
       existing.chatId = input.chatId;
       existing.updatedAt = input.nowIso;
@@ -85,7 +86,8 @@ export class TelegramPromptQueueStore {
       sourceMessageIds: typeof input.messageId === "number" ? [input.messageId] : [],
       createdAt: input.nowIso,
       updatedAt: input.nowIso,
-      flushAt: input.flushAtIso
+      flushAt: input.flushAtIso,
+      mergeMode: input.mergeMode
     };
 
     file.buffers.push(next);

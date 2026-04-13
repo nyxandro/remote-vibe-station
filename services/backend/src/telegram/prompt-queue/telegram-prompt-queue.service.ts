@@ -19,6 +19,8 @@ import { TelegramPromptQueueStore } from "./telegram-prompt-queue.store";
 import { TelegramBufferedAttachment, TelegramPromptBuffer, TelegramQueuedAttachment } from "./telegram-prompt-queue.types";
 
 export const TELEGRAM_PROMPT_BUFFER_WINDOW_MS = 2_000;
+const ATTACHMENT_CONTEXT_MERGE_MODE = "attachment_context" as const;
+const PLAIN_TEXT_MERGE_MODE = "plain_text" as const;
 
 @Injectable()
 export class TelegramPromptQueueService implements OnModuleInit {
@@ -65,11 +67,21 @@ export class TelegramPromptQueueService implements OnModuleInit {
 
     /* Keep queue/session isolation at the admin+project level, not per Telegram update. */
     const key = this.buildQueueKey(input.adminId, activeProject.rootPath);
-    const hadBuffer = this.store.getBuffer(key) !== null;
+    const mergeMode = this.resolveMergeMode({ text: input.text, attachments: input.attachments });
+    let existingBuffer = this.store.getBuffer(key);
+    const shouldFlushExistingPlainText = existingBuffer?.mergeMode === PLAIN_TEXT_MERGE_MODE && mergeMode === PLAIN_TEXT_MERGE_MODE;
+
+    if (shouldFlushExistingPlainText) {
+      /* Distinct text messages should become separate queued turns even inside the debounce window. */
+      await this.flushBufferNow(key);
+      existingBuffer = this.store.getBuffer(key);
+    }
+
     const queueDepth = this.store.countOutstandingItems(key);
     const nowMs = Date.now();
     const nowIso = new Date(nowMs).toISOString();
     const flushAt = new Date(nowMs + TELEGRAM_PROMPT_BUFFER_WINDOW_MS).toISOString();
+    const willMerge = this.shouldMergeIntoExistingBuffer(existingBuffer, mergeMode);
     const buffer = this.store.appendBuffer({
       key,
       adminId: input.adminId,
@@ -80,7 +92,8 @@ export class TelegramPromptQueueService implements OnModuleInit {
       attachments: input.attachments,
       messageId: input.messageId,
       nowIso,
-      flushAtIso: flushAt
+      flushAtIso: flushAt,
+      mergeMode
     });
 
     this.scheduleFlush(buffer);
@@ -89,7 +102,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
       flushAt,
       position: queueDepth + 1,
       buffered: true,
-      merged: hadBuffer
+      merged: willMerge
     };
   }
 
@@ -139,6 +152,29 @@ export class TelegramPromptQueueService implements OnModuleInit {
     return `${adminId}:${directory}`;
   }
 
+  private resolveMergeMode(input: {
+    text?: string;
+    attachments?: TelegramBufferedAttachment[];
+  }): "plain_text" | "attachment_context" {
+    /* Plain text messages should stay as separate turns; only attachment context is merged intentionally. */
+    const attachments = Array.isArray(input.attachments) ? input.attachments : [];
+    return attachments.length > 0 ? ATTACHMENT_CONTEXT_MERGE_MODE : PLAIN_TEXT_MERGE_MODE;
+  }
+
+  private shouldMergeIntoExistingBuffer(
+    buffer: TelegramPromptBuffer | null,
+    incomingMode: "plain_text" | "attachment_context"
+  ): boolean {
+    /* Attachment-led prompts may absorb quick text follow-ups, but plain text must remain one user message per turn. */
+    if (!buffer) {
+      return false;
+    }
+
+    return buffer.mergeMode === ATTACHMENT_CONTEXT_MERGE_MODE && incomingMode !== ATTACHMENT_CONTEXT_MERGE_MODE
+      ? true
+      : buffer.mergeMode === ATTACHMENT_CONTEXT_MERGE_MODE && incomingMode === ATTACHMENT_CONTEXT_MERGE_MODE;
+  }
+
   private scheduleFlush(buffer: TelegramPromptBuffer): void {
     /* Reset debounce timer whenever a new chunk extends the same logical prompt. */
     const existing = this.flushTimers.get(buffer.key);
@@ -166,6 +202,27 @@ export class TelegramPromptQueueService implements OnModuleInit {
       return;
     }
 
+    await this.materializeBuffer(buffer);
+  }
+
+  private async flushBufferNow(key: string): Promise<void> {
+    /* Some input combinations intentionally break the debounce window to preserve one Telegram message per turn. */
+    const buffer = this.store.getBuffer(key);
+    if (!buffer) {
+      return;
+    }
+
+    const existing = this.flushTimers.get(key);
+    if (existing) {
+      clearTimeout(existing);
+      this.flushTimers.delete(key);
+    }
+
+    await this.materializeBuffer(buffer);
+  }
+
+  private async materializeBuffer(buffer: TelegramPromptBuffer): Promise<void> {
+    /* Shared materialization path keeps normal debounce flush and forced split behavior identical. */
     const text = buffer.textSegments.join("\n\n").trim();
 
     let materialized: TelegramQueuedAttachment[] = [];
@@ -176,7 +233,7 @@ export class TelegramPromptQueueService implements OnModuleInit {
           ? await this.attachments.materializeAttachments({ attachments: buffer.attachments })
           : [];
       this.store.enqueueItem({
-        key,
+        key: buffer.key,
         adminId: buffer.adminId,
         chatId: buffer.chatId,
         directory: buffer.directory,
@@ -186,11 +243,11 @@ export class TelegramPromptQueueService implements OnModuleInit {
         sourceMessageIds: buffer.sourceMessageIds,
         createdAtIso: new Date().toISOString()
       });
-      this.store.removeBuffer(key);
-      this.pumpQueue(key);
+      this.store.removeBuffer(buffer.key);
+      this.pumpQueue(buffer.key);
     } catch (error) {
       /* Attachment preparation failures should be visible to the admin and must not block later prompts. */
-      this.store.removeBuffer(key);
+      this.store.removeBuffer(buffer.key);
       await this.attachments.deleteFiles({ attachments: materialized });
       const message = error instanceof Error ? error.message : String(error);
       this.outbox.enqueueAdminNotification({

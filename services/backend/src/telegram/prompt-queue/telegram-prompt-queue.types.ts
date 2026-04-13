@@ -31,6 +31,7 @@ export type TelegramPromptBuffer = {
   createdAt: string;
   updatedAt: string;
   flushAt: string;
+  mergeMode: "plain_text" | "attachment_context";
 };
 
 export type TelegramQueuedAttachment = {

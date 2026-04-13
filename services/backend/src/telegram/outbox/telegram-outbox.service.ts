@@ -137,6 +137,7 @@ export class TelegramOutboxService {
   private readonly assistantResponseSeqBySession = new Map<string, number>();
   private readonly activeAssistantProgressKeyBySession = new Map<string, string>();
   private readonly assistantCommentarySeqBySession = new Map<string, number>();
+  private readonly activeAssistantCommentaryProgressKeyBySession = new Map<string, string>();
   private readonly recentAssistantCommentaryBySession = new Map<
     string,
     { text: string; progressKey: string; createdAtMs: number }
@@ -469,9 +470,11 @@ export class TelegramOutboxService {
       return null;
     }
 
-    const nextSeq = (this.assistantCommentarySeqBySession.get(input.sessionId) ?? 0) + 1;
-    this.assistantCommentarySeqBySession.set(input.sessionId, nextSeq);
-    const progressKey = `assistant-commentary:${input.adminId}:${input.sessionId}:${nextSeq}`;
+    const existing = this.activeAssistantCommentaryProgressKeyBySession.get(input.sessionId);
+    const progressKey = existing ?? this.createAssistantCommentaryProgressKey(input.adminId, input.sessionId);
+
+    /* One live commentary segment should update the same Telegram bubble until the bridge closes that slot. */
+    this.activeAssistantCommentaryProgressKeyBySession.set(input.sessionId, progressKey);
 
     if (input.isFinalChunk) {
       this.recentAssistantCommentaryBySession.set(input.sessionId, {
@@ -491,5 +494,13 @@ export class TelegramOutboxService {
     }
 
     this.activeAssistantProgressKeyBySession.delete(sessionId);
+    this.activeAssistantCommentaryProgressKeyBySession.delete(sessionId);
+  }
+
+  private createAssistantCommentaryProgressKey(adminId: number, sessionId: string): string {
+    /* Commentary sequence stays session-scoped so each new segment gets a fresh replace slot. */
+    const nextSeq = (this.assistantCommentarySeqBySession.get(sessionId) ?? 0) + 1;
+    this.assistantCommentarySeqBySession.set(sessionId, nextSeq);
+    return `assistant-commentary:${adminId}:${sessionId}:${nextSeq}`;
   }
 }

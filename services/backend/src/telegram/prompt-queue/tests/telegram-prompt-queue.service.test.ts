@@ -69,8 +69,8 @@ describe("TelegramPromptQueueService", () => {
     fs.rmSync(QUEUE_PATH, { force: true });
   });
 
-  it("merges consecutive text chunks into one queued prompt after debounce", async () => {
-    /* Telegram long messages may arrive as multiple chunks and must reach agent as one prompt. */
+  it("keeps consecutive plain text messages as separate queued prompts", async () => {
+    /* Distinct user messages should remain distinct OpenCode turns so Telegram history matches agent history. */
     const { service, promptService, attachments } = createService();
 
     const first = await service.enqueueIncomingPrompt({ adminId: 7, chatId: 70, text: "Первая часть", messageId: 1 });
@@ -80,16 +80,25 @@ describe("TelegramPromptQueueService", () => {
     await flushTimers();
 
     expect(first).toEqual(expect.objectContaining({ position: 1, buffered: true, merged: false, queueDepth: 0 }));
-    expect(second).toEqual(expect.objectContaining({ position: 1, buffered: true, merged: true, queueDepth: 0 }));
+    expect(second).toEqual(expect.objectContaining({ position: 1, buffered: true, merged: false, queueDepth: 0 }));
     expect(attachments.materializeAttachments).not.toHaveBeenCalled();
-    expect(promptService.dispatchPromptParts).toHaveBeenCalledTimes(1);
+    expect(promptService.dispatchPromptParts).toHaveBeenCalledTimes(2);
     expect(promptService.dispatchPromptParts).toHaveBeenCalledWith(
       expect.objectContaining({
         adminId: 7,
         projectSlug: "remote-vibe-station",
         directory: "/home/nyx/projects/remote-vibe-station",
-        promptTextForTelemetry: "Первая часть\n\nВторая часть",
-        parts: [{ type: "text", text: "Первая часть\n\nВторая часть" }]
+        promptTextForTelemetry: "Первая часть",
+        parts: [{ type: "text", text: "Первая часть" }]
+      })
+    );
+    expect(promptService.dispatchPromptParts).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        adminId: 7,
+        projectSlug: "remote-vibe-station",
+        directory: "/home/nyx/projects/remote-vibe-station",
+        promptTextForTelemetry: "Вторая часть",
+        parts: [{ type: "text", text: "Вторая часть" }]
       })
     );
   });

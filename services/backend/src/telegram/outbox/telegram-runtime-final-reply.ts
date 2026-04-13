@@ -31,12 +31,14 @@ const MAX_META_SESSIONS = 1024;
 
 export class TelegramRuntimeFinalReply {
   private readonly metaBySession = new Map<string, StoredRuntimeFinalReplyMeta>();
+  private readonly publishedSessions = new Set<string>();
 
   public constructor(private readonly outbox: TelegramOutboxService) {}
 
   public rememberTurnStart(input: { sessionID: string; meta?: Partial<TelegramRuntimeFinalReplyMeta> | null }): void {
     /* Runtime-only fallback needs footer metadata before the synchronous HTTP result may disappear. */
     this.prune(Date.now());
+    this.publishedSessions.delete(input.sessionID);
     const providerID = String(input.meta?.providerID ?? "").trim();
     const modelID = String(input.meta?.modelID ?? "").trim();
     const agent = String(input.meta?.agent ?? "").trim();
@@ -66,6 +68,9 @@ export class TelegramRuntimeFinalReply {
   public enqueueBufferedFinalReply(input: { sessionID: string; adminId: number; text: string }): boolean {
     /* When HTTP finalization is absent, buffered runtime text becomes the authoritative final Telegram reply. */
     this.prune(Date.now());
+    if (this.publishedSessions.has(input.sessionID)) {
+      return false;
+    }
     const text = input.text.trim();
     const stored = this.metaBySession.get(input.sessionID);
     if (!text || !stored) {
@@ -86,7 +91,13 @@ export class TelegramRuntimeFinalReply {
         tokens: ZERO_TOKENS
       }
     });
+    this.publishedSessions.add(input.sessionID);
     return true;
+  }
+
+  public markPublished(sessionID: string): void {
+    /* Authoritative HTTP final reply wins over any later idle-based fallback for the same turn. */
+    this.publishedSessions.add(sessionID);
   }
 
   public touchSession(sessionID: string): void {
@@ -103,6 +114,7 @@ export class TelegramRuntimeFinalReply {
   public clearSession(sessionID: string): void {
     /* Turn-scoped footer metadata should not leak into future unrelated sessions. */
     this.metaBySession.delete(sessionID);
+    this.publishedSessions.delete(sessionID);
   }
 
   private prune(nowMs: number): void {
@@ -112,6 +124,15 @@ export class TelegramRuntimeFinalReply {
         continue;
       }
       this.metaBySession.delete(sessionID);
+      this.publishedSessions.delete(sessionID);
+    }
+
+    /* Published-only sessions can outlive metadata after FIFO eviction, so prune orphan ids here as well. */
+    for (const sessionID of this.publishedSessions) {
+      if (this.metaBySession.has(sessionID)) {
+        continue;
+      }
+      this.publishedSessions.delete(sessionID);
     }
   }
 }

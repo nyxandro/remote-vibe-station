@@ -277,6 +277,23 @@ export class OpenCodeEventsService implements OnModuleInit, OnModuleDestroy {
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
+        if (buffer.length > 0) {
+          const tailLines = buffer.split("\n");
+          for (const line of tailLines) {
+            if (line.startsWith(SSE_EVENT_PREFIX)) {
+              currentEvent = line.slice(SSE_EVENT_PREFIX.length).trim();
+              continue;
+            }
+
+            if (line.startsWith(SSE_DATA_PREFIX)) {
+              dataLines.push(line.slice(SSE_DATA_PREFIX.length).trim());
+            }
+          }
+        }
+        if (dataLines.length > 0) {
+          /* Some OpenCode reconnects close without the final blank line; flush the buffered event tail explicitly. */
+          this.publishEvent(currentEvent, dataLines, directory);
+        }
         break;
       }
 

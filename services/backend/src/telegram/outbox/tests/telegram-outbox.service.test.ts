@@ -129,6 +129,40 @@ describe("TelegramOutboxService", () => {
     }
   });
 
+  test("reuses one replace slot while one commentary segment keeps growing", () => {
+    /* Live commentary should edit one Telegram bubble until a tool/question boundary closes that segment. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, true);
+
+      const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
+      service.enqueueAssistantCommentary({
+        adminId: 1,
+        sessionId: "session-live-commentary",
+        text: "Первая версия комментария"
+      });
+      service.enqueueAssistantCommentary({
+        adminId: 1,
+        sessionId: "session-live-commentary",
+        text: "Первая версия комментария и продолжение"
+      });
+
+      const assistantItems = readItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(assistantItems[0].mode).toBe("replace");
+      expect(assistantItems[0].progressKey).toBe("assistant-commentary:1:session-live-commentary:1");
+      expect(assistantItems[0].text).toContain("Первая версия комментария и продолжение");
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   test("starts a fresh final reply bubble after a blocking question pause", () => {
     /* Question/permission pauses must close the old replace slot so the resumed answer does not rewrite history. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
