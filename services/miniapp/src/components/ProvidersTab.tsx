@@ -23,10 +23,9 @@ import { CliproxyAccountsSection } from "./CliproxyAccountsSection";
 import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 const CLIPROXY_PROVIDER_ID = "cliproxy";
+const DEFAULT_PROXY_ENABLED_SERVICES: ProxyEnabledService[] = ["bot", "cliproxy", "opencode"];
 const PROXY_SERVICE_OPTIONS: Array<{ id: ProxyEnabledService; label: string }> = [
-  { id: "backend", label: "Backend" },
   { id: "bot", label: "Telegram bot" },
-  { id: "miniapp", label: "Mini App" },
   { id: "opencode", label: "OpenCode" },
   { id: "cliproxy", label: "CLIProxy" }
 ];
@@ -82,8 +81,7 @@ export const ProvidersTab = (props: Props) => {
   const [proxyMode, setProxyMode] = useState<ProxySettingsMode>("direct");
   const [vlessConfigUrl, setVlessConfigUrl] = useState<string>("");
   const [vlessProxyUrl, setVlessProxyUrl] = useState<string>("");
-  const [enabledServices, setEnabledServices] = useState<ProxyEnabledService[]>(PROXY_SERVICE_OPTIONS.map((option) => option.id));
-  const [noProxy, setNoProxy] = useState<string>("localhost,127.0.0.1,backend,opencode,cliproxy");
+  const [enabledServices, setEnabledServices] = useState<ProxyEnabledService[]>(DEFAULT_PROXY_ENABLED_SERVICES);
   const providerMap = useMemo(() => {
     /* Keep O(1) lookup for provider labels in connect modal and oauth forms. */
     return new Map(props.providers.map((item) => [item.id, item.name]));
@@ -131,7 +129,6 @@ export const ProvidersTab = (props: Props) => {
     setVlessConfigUrl(props.proxySnapshot.vlessConfigUrl ?? "");
     setVlessProxyUrl(props.proxySnapshot.vlessProxyUrl ?? "");
     setEnabledServices(props.proxySnapshot.enabledServices);
-    setNoProxy(props.proxySnapshot.noProxy);
   }, [props.proxySnapshot]);
 
   useEffect(() => {
@@ -324,20 +321,11 @@ export const ProvidersTab = (props: Props) => {
                 );
               })}
             </div>
+            <div className="project-create-note">
+              Recommended for blocked outbound traffic: Telegram bot, CLIProxy, and OpenCode if it talks to models directly.
+            </div>
           </>
         ) : null}
-
-        <label className="project-create-note" htmlFor={PROVIDERS_TAB_FIELD_IDS.noProxy}>
-          NO_PROXY
-        </label>
-        <input
-          id={PROVIDERS_TAB_FIELD_IDS.noProxy}
-          name={PROVIDERS_TAB_FIELD_IDS.noProxy}
-          aria-label="NO_PROXY"
-          className="input settings-input-compact"
-          value={noProxy}
-          onChange={(event) => setNoProxy(event.target.value)}
-        />
 
         <div className="settings-actions-grid">
           <button
@@ -347,8 +335,7 @@ export const ProvidersTab = (props: Props) => {
                 mode: proxyMode,
                 vlessProxyUrl: proxyMode === "vless" ? vlessProxyUrl.trim() : null,
                 vlessConfigUrl: proxyMode === "vless" ? vlessConfigUrl.trim() : null,
-                enabledServices: proxyMode === "vless" ? enabledServices : PROXY_SERVICE_OPTIONS.map((option) => option.id),
-                noProxy: noProxy.trim()
+                enabledServices: proxyMode === "vless" ? enabledServices : DEFAULT_PROXY_ENABLED_SERVICES
               })
             }
             disabled={isProxySaveDisabled}

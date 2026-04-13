@@ -15,14 +15,13 @@ import { ProxySettingsService } from "./proxy-settings.service";
 import { ProxyEnabledService, ProxySettingsInput, ProxySettingsTestInput } from "./proxy-settings.types";
 import {
   proxyModeInvalidError,
-  proxyNoProxyRequiredError,
   proxyTestUrlRequiredError,
   proxyEnabledServicesRequiredError,
   proxyVlessUrlRequiredError,
   requireProxyAdminId
 } from "./proxy-controller-errors";
 
-const PROXY_SERVICE_IDS: ProxyEnabledService[] = ["backend", "bot", "miniapp", "opencode", "cliproxy"];
+const PROXY_SERVICE_IDS: ProxyEnabledService[] = ["bot", "opencode", "cliproxy"];
 
 @Controller("api/telegram/proxy")
 export class ProxySettingsController {
@@ -51,10 +50,6 @@ export class ProxySettingsController {
       throw proxyModeInvalidError();
     }
 
-    if (typeof body.noProxy !== "string") {
-      throw proxyNoProxyRequiredError();
-    }
-
     if (!Array.isArray(body.enabledServices) || body.enabledServices.length === 0) {
       throw proxyEnabledServicesRequiredError();
     }
@@ -80,8 +75,7 @@ export class ProxySettingsController {
       vlessConfigUrl: typeof body.vlessConfigUrl === "string" ? body.vlessConfigUrl.trim() : null,
       enabledServices: body.enabledServices.filter((serviceId): serviceId is ProxyEnabledService => {
         return PROXY_SERVICE_IDS.includes(serviceId as ProxyEnabledService);
-      }),
-      noProxy: body.noProxy.trim()
+      })
     };
 
     const result = await this.proxySettings.updateSettings(payload);

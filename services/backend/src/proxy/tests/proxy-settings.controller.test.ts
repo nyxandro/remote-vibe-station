@@ -15,14 +15,14 @@ describe("ProxySettingsController", () => {
         mode: "direct",
         vlessProxyUrl: null,
         vlessConfigUrl: null,
-        enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
-        noProxy: "localhost,127.0.0.1,backend",
+        enabledServices: ["bot", "cliproxy", "opencode"],
+        noProxy: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy",
         updatedAt: "2026-03-06T10:40:00.000Z",
         envPreview: {
           HTTP_PROXY: null,
           HTTPS_PROXY: null,
           ALL_PROXY: null,
-          NO_PROXY: "localhost,127.0.0.1,backend"
+          NO_PROXY: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy"
         }
       })
     };
@@ -36,7 +36,7 @@ describe("ProxySettingsController", () => {
   });
 
   test("saves proxy settings payload", async () => {
-    /* Save endpoint must pass validated mode/url/no_proxy to service layer. */
+    /* Save endpoint must pass validated mode/url/service selection and let the service derive NO_PROXY. */
     const service = {
       getSettings: jest.fn(),
       applyRuntimeStack: jest.fn(),
@@ -44,14 +44,14 @@ describe("ProxySettingsController", () => {
         mode: "vless",
         vlessProxyUrl: "socks5://vless-proxy:1080",
         vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
-        enabledServices: ["backend", "bot"],
-        noProxy: "localhost,127.0.0.1,backend",
+        enabledServices: ["bot", "cliproxy"],
+        noProxy: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy",
         updatedAt: "2026-03-06T10:41:00.000Z",
         envPreview: {
           HTTP_PROXY: "socks5://vless-proxy:1080",
           HTTPS_PROXY: "socks5://vless-proxy:1080",
           ALL_PROXY: "socks5://vless-proxy:1080",
-          NO_PROXY: "localhost,127.0.0.1,backend"
+          NO_PROXY: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy"
         }
       })
     };
@@ -62,8 +62,7 @@ describe("ProxySettingsController", () => {
         mode: "vless",
         vlessProxyUrl: "socks5://vless-proxy:1080",
         vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
-        enabledServices: ["backend", "bot"],
-        noProxy: "localhost,127.0.0.1,backend"
+        enabledServices: ["bot", "cliproxy"]
       },
       { authAdminId: 649624756 } as unknown as Request
     );
@@ -72,8 +71,7 @@ describe("ProxySettingsController", () => {
       mode: "vless",
       vlessProxyUrl: "socks5://vless-proxy:1080",
       vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
-      enabledServices: ["backend", "bot"],
-      noProxy: "localhost,127.0.0.1,backend"
+      enabledServices: ["bot", "cliproxy"]
     });
     expect(result.mode).toBe("vless");
   });
@@ -135,14 +133,14 @@ describe("ProxySettingsController", () => {
 
     await expect(
       controller.saveSettings(
-        { mode: "broken" as any, noProxy: "localhost" },
+        { mode: "broken" as any, enabledServices: ["bot"] },
         { authAdminId: 649624756 } as unknown as Request
       )
     ).rejects.toBeInstanceOf(BadRequestException);
 
     try {
       await controller.saveSettings(
-        { mode: "broken" as any, noProxy: "localhost" },
+        { mode: "broken" as any, enabledServices: ["bot"] },
         { authAdminId: 649624756 } as unknown as Request
       );
     } catch (error) {

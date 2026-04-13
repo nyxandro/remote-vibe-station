@@ -244,14 +244,13 @@ export type SystemMetricsSnapshot = {
 
 export type ProxySettingsMode = "direct" | "vless";
 
-export type ProxyEnabledService = "backend" | "bot" | "miniapp" | "opencode" | "cliproxy";
+export type ProxyEnabledService = "bot" | "opencode" | "cliproxy";
 
 export type ProxySettingsInput = {
   mode: ProxySettingsMode;
   vlessProxyUrl: string | null;
   vlessConfigUrl: string | null;
   enabledServices: ProxyEnabledService[];
-  noProxy: string;
 };
 
 export type ProxySettingsTestInput = {

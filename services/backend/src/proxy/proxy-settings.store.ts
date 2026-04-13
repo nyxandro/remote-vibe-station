@@ -15,15 +15,20 @@ import { readJsonFileAsync, writeJsonFileAsyncAtomic } from "../storage/json-fil
 
 const DATA_DIR = "data";
 const SETTINGS_FILE = "proxy.settings.json";
-const DEFAULT_NO_PROXY = "localhost,127.0.0.1,backend,opencode,cliproxy";
-const DEFAULT_ENABLED_SERVICES = ["backend", "bot", "miniapp", "opencode", "cliproxy"] as const;
+const DEFAULT_NO_PROXY = "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy";
+const DEFAULT_ENABLED_SERVICES = ["bot", "cliproxy", "opencode"] as const;
+
+const buildStoredNoProxy = (enabledServices: readonly string[]): string => {
+  /* Persisted NO_PROXY should stay derived from selected outbound services plus required local hostnames. */
+  return [...new Set([...DEFAULT_NO_PROXY.split(","), ...enabledServices])].sort().join(",");
+};
 
 const storedSchema = z.object({
   mode: z.enum(["direct", "vless"]),
   vlessProxyUrl: z.string().nullable(),
   /* Existing persisted files may not have the new URL/service fields yet, so migrate them explicitly. */
   vlessConfigUrl: z.string().nullable().optional().default(null),
-  enabledServices: z.array(z.enum(["backend", "bot", "miniapp", "opencode", "cliproxy"])).optional().default([...DEFAULT_ENABLED_SERVICES]),
+  enabledServices: z.array(z.enum(["bot", "opencode", "cliproxy"])).optional().default([...DEFAULT_ENABLED_SERVICES]),
   noProxy: z.string().min(1),
   updatedAt: z.string().min(1)
 });
@@ -62,7 +67,8 @@ export class ProxySettingsStore {
       vlessProxyUrl: input.vlessProxyUrl,
       vlessConfigUrl: input.vlessConfigUrl,
       enabledServices: [...input.enabledServices],
-      noProxy: input.noProxy,
+      /* Persist derived NO_PROXY so runtime troubleshooting can inspect the exact exported host exclusions. */
+      noProxy: buildStoredNoProxy(input.enabledServices),
       updatedAt: new Date().toISOString()
     };
 

@@ -8,7 +8,6 @@
  * - cliproxyAccountIdRequiredError - Missing account id error.
  * - cliproxyAccountIdInvalidError - Invalid/path-like account id error.
  * - proxyModeInvalidError - Unsupported proxy mode error.
- * - proxyNoProxyRequiredError - Missing noProxy field error.
  * - proxyVlessUrlRequiredError - Missing vless URL error.
  * - proxyTestUrlRequiredError - Missing VLESS config URL for test/save in vless mode.
  * - proxyEnabledServicesRequiredError - Missing runtime target services.
@@ -86,17 +85,6 @@ export const proxyModeInvalidError = (): BadRequestException => {
       code: "APP_PROXY_MODE_INVALID",
       message: "Proxy mode must be either 'direct' or 'vless'.",
       hint: "Choose one supported proxy mode and retry saving proxy settings."
-    })
-  );
-};
-
-export const proxyNoProxyRequiredError = (): BadRequestException => {
-  /* Runtime stack rendering always needs an explicit NO_PROXY list. */
-  return new BadRequestException(
-    createAppErrorBody({
-      code: "APP_PROXY_NO_PROXY_REQUIRED",
-      message: "noProxy is required.",
-      hint: "Provide a non-empty noProxy string and retry saving proxy settings."
     })
   );
 };

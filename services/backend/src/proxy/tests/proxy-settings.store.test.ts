@@ -32,7 +32,7 @@ describe("ProxySettingsStore", () => {
     expect(snapshot.mode).toBe("direct");
     expect(snapshot.vlessProxyUrl).toBeNull();
     expect(snapshot.vlessConfigUrl).toBeNull();
-    expect(snapshot.enabledServices).toEqual(["backend", "bot", "miniapp", "opencode", "cliproxy"]);
+    expect(snapshot.enabledServices).toEqual(["bot", "cliproxy", "opencode"]);
     expect(snapshot.noProxy).toContain("localhost");
   });
 
@@ -43,8 +43,7 @@ describe("ProxySettingsStore", () => {
       mode: "vless",
       vlessProxyUrl: "socks5://vless-proxy:1080",
       vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality#demo",
-      enabledServices: ["bot", "cliproxy"],
-      noProxy: "localhost,127.0.0.1,backend"
+      enabledServices: ["bot", "cliproxy"]
     });
 
     const reloaded = new ProxySettingsStore();
@@ -54,7 +53,7 @@ describe("ProxySettingsStore", () => {
     expect(snapshot.vlessProxyUrl).toBe("socks5://vless-proxy:1080");
     expect(snapshot.vlessConfigUrl).toBe("vless://uuid@example.com:443?type=tcp&security=reality#demo");
     expect(snapshot.enabledServices).toEqual(["bot", "cliproxy"]);
-    expect(snapshot.noProxy).toBe("localhost,127.0.0.1,backend");
+    expect(snapshot.noProxy).toBe("127.0.0.1,backend,bot,cliproxy,localhost,miniapp,opencode,proxy,vless-proxy");
     expect(typeof snapshot.updatedAt).toBe("string");
   });
 });

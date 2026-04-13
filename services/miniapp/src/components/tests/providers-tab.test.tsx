@@ -195,9 +195,6 @@ describe("ProvidersTab", () => {
     expect(screen.getByLabelText("VLESS config URL").getAttribute("id")).toBe(
       PROVIDERS_TAB_FIELD_IDS.vlessConfigUrl
     );
-    expect(screen.getByLabelText("NO_PROXY").getAttribute("name")).toBe(
-      PROVIDERS_TAB_FIELD_IDS.noProxy
-    );
     expect(screen.getByPlaceholderText("Введите OAuth code").getAttribute("id")).toBe(
       PROVIDERS_TAB_FIELD_IDS.oauthCode
     );

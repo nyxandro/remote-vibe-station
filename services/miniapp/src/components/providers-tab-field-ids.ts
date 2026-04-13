@@ -13,7 +13,6 @@ export const PROVIDERS_TAB_FIELD_IDS = {
   proxyMode: "providers-tab-proxy-mode",
   vlessConfigUrl: "providers-tab-vless-config-url",
   vlessProxyUrl: "providers-tab-vless-proxy-url",
-  noProxy: "providers-tab-no-proxy",
   apiKey: "providers-tab-api-key",
   oauthCode: "providers-tab-oauth-code"
 } as const;

@@ -29,13 +29,12 @@ const ENV_FILE = ".env";
 const VLESS_PROXY_ENV_FILE = path.join("infra", "vless", "proxy.env");
 const VLESS_XRAY_CONFIG_FILE = path.join("infra", "vless", "xray.json");
 const LOCAL_VLESS_PROXY_URL = "http://vless-proxy:8080";
-const DEFAULT_VLESS_ENABLED_SERVICES: ProxyEnabledService[] = ["backend", "bot", "miniapp", "opencode", "cliproxy"];
+const DEFAULT_VLESS_ENABLED_SERVICES: ProxyEnabledService[] = ["bot", "cliproxy", "opencode"];
+const DEFAULT_NO_PROXY_HOSTS = ["localhost", "127.0.0.1", "backend", "bot", "miniapp", "opencode", "cliproxy", "proxy", "vless-proxy"] as const;
 
 const DIRECT_OVERRIDE_CONTENT = `services: {}\n`;
 const SERVICE_COMMENTS: Record<ProxyEnabledService, string> = {
-  backend: "Route backend validation calls for external providers through VLESS too.",
   bot: "Route bot Telegram and provider traffic through VLESS.",
-  miniapp: "Route Mini App browser-facing backend fetches through VLESS.",
   opencode: "Route OpenCode runtime provider traffic through VLESS.",
   cliproxy: "Route CLIProxy external provider traffic through VLESS."
 };
@@ -112,12 +111,14 @@ export class ProxySettingsService {
       return;
     }
 
+    const noProxy = this.buildNoProxy(record.enabledServices);
+
     const overridePath = path.join(runtimeConfigDir, VLESS_OVERRIDE_FILE);
     const proxyEnvPath = path.join(runtimeConfigDir, VLESS_PROXY_ENV_FILE);
     const xrayConfigPath = path.join(runtimeConfigDir, VLESS_XRAY_CONFIG_FILE);
 
     await fs.mkdir(path.dirname(proxyEnvPath), { recursive: true });
-    await fs.writeFile(proxyEnvPath, this.renderProxyEnv(record.mode, record.vlessProxyUrl, record.noProxy), "utf-8");
+    await fs.writeFile(proxyEnvPath, this.renderProxyEnv(record.mode, record.vlessProxyUrl, noProxy), "utf-8");
 
     const overrideContent = record.mode === "vless" ? this.renderVlessOverride(record.enabledServices) : DIRECT_OVERRIDE_CONTENT;
     await fs.writeFile(overridePath, overrideContent, "utf-8");
@@ -198,8 +199,6 @@ export class ProxySettingsService {
         input.mode === "vless"
           ? ([...new Set(input.enabledServices)].sort() as ProxyEnabledService[])
           : [...DEFAULT_VLESS_ENABLED_SERVICES],
-      noProxy:
-        typeof input.noProxy === "string" && input.noProxy.trim().length > 0 ? input.noProxy.trim() : ""
     };
   }
 
@@ -229,9 +228,17 @@ export class ProxySettingsService {
       throw new BadRequestException("vlessProxyUrl and vlessConfigUrl must be empty in direct mode");
     }
 
-    if (!input.noProxy) {
-      throw new BadRequestException("noProxy is required");
+  }
+
+  private buildNoProxy(enabledServices: ProxyEnabledService[]): string {
+    /* Runtime proxy exclusions must always include local/container hostnames, even when UI only selects target services. */
+    const hostnames = new Set<string>(DEFAULT_NO_PROXY_HOSTS);
+
+    for (const serviceId of enabledServices) {
+      hostnames.add(serviceId);
     }
+
+    return [...hostnames].sort().join(",");
   }
 
   private isProxyUrl(value: string): boolean {

@@ -14,7 +14,7 @@
 
 export type ProxyMode = "direct" | "vless";
 
-export type ProxyEnabledService = "backend" | "bot" | "miniapp" | "opencode" | "cliproxy";
+export type ProxyEnabledService = "bot" | "opencode" | "cliproxy";
 
 export type ProxySettingsRecord = {
   mode: ProxyMode;
@@ -30,7 +30,6 @@ export type ProxySettingsInput = {
   vlessProxyUrl: string | null;
   vlessConfigUrl: string | null;
   enabledServices: ProxyEnabledService[];
-  noProxy: string;
 };
 
 export type ProxySettingsTestInput = {

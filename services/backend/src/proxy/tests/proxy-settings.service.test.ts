@@ -21,16 +21,16 @@ describe("ProxySettingsService", () => {
           mode: "direct",
           vlessProxyUrl: null,
           vlessConfigUrl: null,
-          enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
-          noProxy: "localhost,127.0.0.1,backend",
+          enabledServices: ["bot", "cliproxy", "opencode"],
+          noProxy: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy",
           updatedAt: "2026-03-06T00:00:00.000Z"
         }),
         set: jest.fn().mockResolvedValue({
           mode: "vless",
           vlessProxyUrl: "socks5://vless-proxy:1080",
           vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality&pbk=test-key&sni=example.com&fp=chrome#demo",
-          enabledServices: ["backend", "bot", "cliproxy"],
-          noProxy: "localhost,127.0.0.1,backend",
+          enabledServices: ["bot", "cliproxy", "opencode"],
+          noProxy: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy",
           updatedAt: "2026-03-06T00:01:00.000Z"
         })
       };
@@ -41,8 +41,7 @@ describe("ProxySettingsService", () => {
         mode: "vless",
         vlessProxyUrl: "socks5://vless-proxy:1080",
         vlessConfigUrl: "vless://uuid@example.com:443?type=tcp&security=reality&pbk=test-key&sni=example.com&fp=chrome#demo",
-        enabledServices: ["backend", "bot", "cliproxy"],
-        noProxy: "localhost,127.0.0.1,backend"
+        enabledServices: ["bot", "cliproxy", "opencode"]
       });
 
       const proxyEnvPath = path.join(runtimeDir, "infra", "vless", "proxy.env");
@@ -53,13 +52,13 @@ describe("ProxySettingsService", () => {
       const xrayContent = await fs.readFile(xrayPath, "utf-8");
 
       expect(proxyEnvContent).toContain("HTTP_PROXY=socks5://vless-proxy:1080");
-      expect(proxyEnvContent).toContain("NO_PROXY=localhost,127.0.0.1,backend");
+      expect(proxyEnvContent).toContain("NO_PROXY=127.0.0.1,backend,bot,cliproxy,localhost,miniapp,opencode,proxy,vless-proxy");
       expect(overrideContent).toContain("vless-proxy");
-      expect(overrideContent).toContain("backend:");
       expect(overrideContent).toContain("bot:");
       expect(overrideContent).toContain("cliproxy:");
+      expect(overrideContent).toContain("opencode:");
+      expect(overrideContent).not.toContain("backend:");
       expect(overrideContent).not.toContain("miniapp:");
-      expect(overrideContent).not.toContain("opencode:");
       expect(xrayContent).toContain('"protocol": "vless"');
       expect(xrayContent).toContain('"serverName": "example.com"');
       expect(snapshot.runtimeFiles.runtimeConfigDir).toBe(runtimeDir);
@@ -85,8 +84,8 @@ describe("ProxySettingsService", () => {
           mode: "direct",
           vlessProxyUrl: null,
           vlessConfigUrl: null,
-          enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
-          noProxy: "localhost",
+          enabledServices: ["bot", "cliproxy", "opencode"],
+          noProxy: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy",
           updatedAt: "2026-03-06T00:00:00.000Z"
         }),
         set: jest.fn()
@@ -125,8 +124,8 @@ describe("ProxySettingsService", () => {
         mode: "direct",
         vlessProxyUrl: null,
         vlessConfigUrl: null,
-        enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
-        noProxy: "localhost",
+          enabledServices: ["bot", "cliproxy", "opencode"],
+          noProxy: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy",
         updatedAt: "2026-03-06T00:00:00.000Z"
       }),
       set: jest.fn()

@@ -22,8 +22,7 @@ const proxySnapshot = {
   mode: "direct" as const,
   vlessProxyUrl: null,
   vlessConfigUrl: null,
-  enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
-  noProxy: "localhost,127.0.0.1",
+  enabledServices: ["bot", "cliproxy", "opencode"],
   updatedAt: "2026-03-22T12:00:00.000Z",
   envPreview: {
     HTTP_PROXY: null,

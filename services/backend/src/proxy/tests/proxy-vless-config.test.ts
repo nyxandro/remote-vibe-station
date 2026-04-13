@@ -50,8 +50,7 @@ describe("ProxySettingsService VLESS parsing", () => {
         mode: "vless",
         vlessProxyUrl: "http://vless-proxy:8080",
         vlessConfigUrl,
-        enabledServices: ["backend", "bot"],
-        noProxy: "localhost,127.0.0.1,backend"
+        enabledServices: ["bot", "cliproxy"]
       });
 
       const xray = await readGeneratedXray(runtimeDir);
@@ -85,8 +84,7 @@ describe("ProxySettingsService VLESS parsing", () => {
         mode: "vless",
         vlessProxyUrl: "http://vless-proxy:8080",
         vlessConfigUrl,
-        enabledServices: ["backend", "bot"],
-        noProxy: "localhost,127.0.0.1,backend"
+        enabledServices: ["bot", "cliproxy"]
       });
 
       const xray = await readGeneratedXray(runtimeDir);
@@ -122,8 +120,7 @@ describe("ProxySettingsService VLESS parsing", () => {
         mode: "vless",
         vlessProxyUrl: "http://vless-proxy:8080",
         vlessConfigUrl,
-        enabledServices: ["backend", "bot"],
-        noProxy: "localhost,127.0.0.1,backend"
+        enabledServices: ["bot", "cliproxy"]
       });
 
       const xray = await readGeneratedXray(runtimeDir);

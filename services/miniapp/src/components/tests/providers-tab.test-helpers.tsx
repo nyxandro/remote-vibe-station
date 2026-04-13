@@ -78,14 +78,13 @@ export const proxySnapshotFixture: ProxySettingsSnapshot = {
   mode: "direct",
   vlessProxyUrl: null,
   vlessConfigUrl: null,
-  enabledServices: ["backend", "bot", "miniapp", "opencode", "cliproxy"],
-  noProxy: "localhost,127.0.0.1,backend,opencode,cliproxy",
+  enabledServices: ["bot", "cliproxy", "opencode"],
   updatedAt: "2026-03-06T10:00:00.000Z",
   envPreview: {
     HTTP_PROXY: null,
     HTTPS_PROXY: null,
     ALL_PROXY: null,
-    NO_PROXY: "localhost,127.0.0.1,backend,opencode,cliproxy"
+    NO_PROXY: "localhost,127.0.0.1,backend,bot,miniapp,opencode,cliproxy,proxy,vless-proxy"
   },
   runtimeFiles: {
     runtimeConfigDir: "/runtime",
