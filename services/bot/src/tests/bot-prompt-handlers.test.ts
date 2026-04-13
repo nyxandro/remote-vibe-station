@@ -96,8 +96,8 @@ describe("registerBotPromptHandlers", () => {
     });
     await flushAsyncWork();
 
-    expect(indicator.start).toHaveBeenCalledWith(77);
-    expect(indicator.stop).toHaveBeenCalledWith(77);
+    expect(indicator.start).not.toHaveBeenCalled();
+    expect(indicator.stop).not.toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledWith(
       "http://backend:3000/api/telegram/prompt/enqueue",
       expect.objectContaining({ method: "POST" })

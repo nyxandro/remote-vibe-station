@@ -43,16 +43,6 @@ export const registerBotPromptHandlers = (input: {
   bindChat: (adminId: number, chatId: number) => Promise<void>;
   commandSyncRuntime: BotPromptCommandSyncRuntime;
 }): void => {
-  const safeStopIndicator = async (chatId: number): Promise<void> => {
-    /* Indicator cleanup failures should never crash the background transport task. */
-    try {
-      await input.indicator.stop(chatId);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("Failed to stop Telegram thinking indicator", error);
-    }
-  };
-
   const safeSendMessage = async (
     chatId: number,
     text: string,
@@ -74,8 +64,8 @@ export const registerBotPromptHandlers = (input: {
     errorLabel: string;
   }): Promise<void> => {
     /* Reuse one enqueue flow for text, images, PDFs and transcribed voice so queue semantics stay identical. */
+    /* Runtime bridge now owns thinking indicator lifecycle, so bot-side enqueue must not start optimistic typing early. */
     await input.bindChat(prompt.adminId, prompt.chatId);
-    await input.indicator.start(prompt.chatId);
 
     void (async () => {
       try {
@@ -89,7 +79,6 @@ export const registerBotPromptHandlers = (input: {
 
         if (!response.ok) {
           const body = await response.text();
-          await safeStopIndicator(prompt.chatId);
           await safeSendMessage(prompt.chatId, buildBackendErrorMessage(response.status, body));
           return;
         }
@@ -100,7 +89,6 @@ export const registerBotPromptHandlers = (input: {
           buffered?: boolean;
           merged?: boolean;
         };
-        await input.indicator.stop(prompt.chatId);
 
         /* Notify only when the message becomes a new queued item behind another active turn. */
         if (payload.buffered && !payload.merged && typeof payload.position === "number" && payload.position > 1) {
@@ -109,7 +97,6 @@ export const registerBotPromptHandlers = (input: {
           });
         }
       } catch (error) {
-        await safeStopIndicator(prompt.chatId);
         const message = error instanceof Error ? error.message : String(error);
         await safeSendMessage(prompt.chatId, `${prompt.errorLabel}: ${message}`);
       }
@@ -265,7 +252,6 @@ export const registerBotPromptHandlers = (input: {
       }
 
       await input.bindChat(adminId, chatId);
-      await input.indicator.start(chatId);
 
       /* Run command call in background to avoid Telegraf middleware timeout while backend keeps working. */
       void (async () => {
@@ -283,18 +269,15 @@ export const registerBotPromptHandlers = (input: {
 
           if (!commandResponse.ok) {
             const body = await commandResponse.text();
-            await safeStopIndicator(chatId);
             await safeSendMessage(chatId, buildBackendErrorMessage(commandResponse.status, body));
             return;
           }
 
           await commandResponse.json();
-          await safeStopIndicator(chatId);
           await safeSendMessage(chatId, buildCommandQueuedMessage(slash.command), {
             disable_notification: true
           });
         } catch (error) {
-          await safeStopIndicator(chatId);
           const message = error instanceof Error ? error.message : String(error);
           await safeSendMessage(chatId, `Ошибка команды: ${message}`);
         }
