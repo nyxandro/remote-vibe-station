@@ -74,7 +74,7 @@ services:
     build:
       context: ./services/bot
       dockerfile: Dockerfile
-    # Telegram webhook обработчик
+    # Telegram bot runtime; production default uses webhook delivery while env can force polling for incident response.
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_IDS=${ADMIN_IDS}
@@ -82,7 +82,7 @@ services:
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:?BOT_BACKEND_AUTH_TOKEN must be set}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL:?OPENCODE_PUBLIC_BASE_URL must be set}
-      - TELEGRAM_TRANSPORT_MODE=${TELEGRAM_TRANSPORT_MODE:-auto}
+      - TELEGRAM_TRANSPORT_MODE=${TELEGRAM_TRANSPORT_MODE:-webhook}
     volumes:
       - bot_data:/app/data
       # Media delivery reads staged agent files from the shared OpenCode data volume.

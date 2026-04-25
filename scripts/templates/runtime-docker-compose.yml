@@ -80,6 +80,7 @@ services:
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
       - OPENCODE_PUBLIC_BASE_URL=${OPENCODE_PUBLIC_BASE_URL}
+      - TELEGRAM_TRANSPORT_MODE=${TELEGRAM_TRANSPORT_MODE:-webhook}
     volumes:
       # Media delivery reads staged agent files from the shared OpenCode data volume.
       - opencode_data:/opencode-data:ro

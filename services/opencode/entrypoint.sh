@@ -37,6 +37,11 @@ for target in /toolbox/bin/* /toolbox/npm-global/bin/*; do
   fi
 done
 
+# Auto-update OpenCode in the shared toolbox on startup, but keep the runtime available if npm is temporarily unreachable.
+if ! node /usr/local/bin/opencode-auto-update.js; then
+  echo "APP_OPENCODE_AUTO_UPDATE_FAILED: Startup auto-update failed; continuing with the installed OpenCode version." >&2
+fi
+
 # Seed the temp file with the existing config so the generator can merge instead
 # of replacing unrelated user-managed keys like MCP server definitions.
 if [ -f "$CONFIG_PATH" ]; then
@@ -49,6 +54,7 @@ node /usr/local/bin/cliproxy-provider-config.js "$TMP_PATH"
 # Sync default local plugins into the persisted config volume before OpenCode loads them.
 node /usr/local/bin/kanban-plugin-sync.js /usr/local/share/opencode/kanban-tools-plugin.ts
 node /usr/local/bin/telegram-media-plugin-sync.js /usr/local/share/opencode/telegram-media-tools-plugin.ts
+node /usr/local/bin/skills-bundle-sync.js /usr/local/share/opencode/skills
 
 mv "$TMP_PATH" "$CONFIG_PATH"
 

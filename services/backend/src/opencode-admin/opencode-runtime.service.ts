@@ -26,6 +26,7 @@ export type OpenCodeUpdateResult = {
 
 const OPENCODE_SERVICE_LABEL = "label=com.docker.compose.service=opencode";
 const OPENCODE_NPM_PACKAGE = "opencode-ai";
+const OPENCODE_AUTO_UPDATE_SCRIPT_PATH = "/usr/local/bin/opencode-auto-update.js";
 const VERSION_READ_MAX_ATTEMPTS = 20;
 const VERSION_READ_RETRY_DELAY_MS = 1_000;
 
@@ -77,9 +78,10 @@ export class OpenCodeRuntimeService {
   }
 
   public async updateToLatestVersion(): Promise<OpenCodeUpdateResult> {
-    /* Immutable runtime images must be replaced via deploy, not mutated inside the running container. */
+    /* Force-update the shared toolbox install, then restart containers so the new binary becomes active. */
     const before = await this.checkVersionStatus();
     const latestVersion = before.latestVersion;
+    const containerNames = await this.listOpenCodeContainerNames();
 
     if (!latestVersion) {
       throw new Error("Latest OpenCode version is unavailable");
@@ -94,9 +96,19 @@ export class OpenCodeRuntimeService {
       };
     }
 
-    throw new Error(
-      `APP_OPENCODE_IMMUTABLE_UPDATE_REQUIRED: OpenCode runtime uses immutable images. Publish or pull image version ${latestVersion} and redeploy the container instead of updating packages inside the running runtime.`
-    );
+    await this.runDocker(["exec", containerNames[0], "node", OPENCODE_AUTO_UPDATE_SCRIPT_PATH, "--force"]);
+
+    for (const name of containerNames) {
+      await this.runDocker(["restart", name]);
+    }
+
+    const after = await this.getVersionStatus();
+    return {
+      updated: after.currentVersion === latestVersion,
+      restarted: containerNames,
+      before,
+      after
+    };
   }
 
   private async listOpenCodeContainerNames(): Promise<string[]> {

@@ -23,18 +23,54 @@ describe("OpenCodeRuntimeService", () => {
     expect(runDocker).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects in-place runtime updates when immutable images are required", async () => {
-    /* Update action must fail fast with operator guidance instead of mutating the running container. */
+  it("force-updates toolbox install and restarts opencode containers", async () => {
+    /* Manual update action should run the updater inside one container, then restart every OpenCode container. */
     const service = new OpenCodeRuntimeService();
-    jest.spyOn(service, "checkVersionStatus").mockResolvedValue({
-      currentVersion: "1.0.0",
+    jest
+      .spyOn(service, "checkVersionStatus")
+      .mockResolvedValueOnce({
+        currentVersion: "1.0.0",
+        latestVersion: "1.0.1",
+        latestCheckedAt: "2026-03-17T00:00:00.000Z",
+        updateAvailable: true
+      });
+
+    jest.spyOn(service as any, "listOpenCodeContainerNames").mockResolvedValue([
+      "remote-vibe-station-opencode-1",
+      "remote-vibe-station-opencode-2"
+    ]);
+
+    const runDocker = jest.spyOn(service as any, "runDocker").mockResolvedValue("ok");
+
+    jest.spyOn(service, "getVersionStatus").mockResolvedValue({
+      currentVersion: "1.0.1",
       latestVersion: "1.0.1",
-      latestCheckedAt: "2026-03-17T00:00:00.000Z",
-      updateAvailable: true
+      latestCheckedAt: "2026-03-17T00:00:30.000Z",
+      updateAvailable: false
     });
 
-    await expect(service.updateToLatestVersion()).rejects.toThrow(
-      "APP_OPENCODE_IMMUTABLE_UPDATE_REQUIRED"
+    await expect(service.updateToLatestVersion()).resolves.toEqual({
+      updated: true,
+      restarted: ["remote-vibe-station-opencode-1", "remote-vibe-station-opencode-2"],
+      before: {
+        currentVersion: "1.0.0",
+        latestVersion: "1.0.1",
+        latestCheckedAt: "2026-03-17T00:00:00.000Z",
+        updateAvailable: true
+      },
+      after: {
+        currentVersion: "1.0.1",
+        latestVersion: "1.0.1",
+        latestCheckedAt: "2026-03-17T00:00:30.000Z",
+        updateAvailable: false
+      }
+    });
+
+    expect(runDocker).toHaveBeenNthCalledWith(
+      1,
+      ["exec", "remote-vibe-station-opencode-1", "node", "/usr/local/bin/opencode-auto-update.js", "--force"]
     );
+    expect(runDocker).toHaveBeenNthCalledWith(2, ["restart", "remote-vibe-station-opencode-1"]);
+    expect(runDocker).toHaveBeenNthCalledWith(3, ["restart", "remote-vibe-station-opencode-2"]);
   });
 });

@@ -29,7 +29,9 @@
 
 - Текущая версия читается из running-контейнера (`opencode --version`).
 - Latest версия читается из npm (`opencode-ai`).
-- Обновление выполняется в контейнере через `npm install -g opencode-ai@<latest>` с последующим `docker restart`.
+- На старте `opencode` контейнер автоматически проверяет latest и обновляет toolbox-install по TTL.
+- Кнопка `Update OpenCode` выполняет принудительный update через `node /usr/local/bin/opencode-auto-update.js --force`, затем делает `docker restart` контейнера(ов).
+- Обновление живет в shared `/toolbox/npm-global`, поэтому переживает обычные рестарты dev-runtime.
 
 ### Что проверить
 

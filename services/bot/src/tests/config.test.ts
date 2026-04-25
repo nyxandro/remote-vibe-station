@@ -5,8 +5,8 @@
  * - (none)
  *
  * Tests:
- * - setEnv (L17) - Helper to mutate process.env.
- * - loadConfig suite (L28) - Validation test cases.
+ * - setEnv - Helper to mutate process.env.
+ * - loadConfig suite - Validation test cases.
  */
 
 import { loadConfig } from "../config";
@@ -40,7 +40,8 @@ describe("loadConfig", () => {
       BACKEND_URL: undefined,
       BOT_BACKEND_AUTH_TOKEN: undefined,
       PUBLIC_BASE_URL: undefined,
-      OPENCODE_PUBLIC_BASE_URL: undefined
+      OPENCODE_PUBLIC_BASE_URL: undefined,
+      TELEGRAM_TRANSPORT_MODE: undefined
     });
   });
 
@@ -50,7 +51,7 @@ describe("loadConfig", () => {
     expect(() => loadConfig()).toThrow();
   });
 
-  it("parses configuration from environment", () => {
+  it("defaults Telegram transport mode to auto", () => {
     /* Load configuration with required values. */
     setEnv(baseEnv);
     const config = loadConfig();

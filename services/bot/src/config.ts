@@ -2,13 +2,14 @@
  * @fileoverview Bot configuration loader.
  *
  * Exports:
- * - BotConfig (L15) - Validated configuration shape.
- * - TelegramTransportMode (L24) - Supported inbound Telegram delivery modes.
- * - HTTPS_PREFIX (L22) - HTTPS scheme prefix.
- * - CSV_SEPARATOR (L23) - CSV delimiter for admin ids.
- * - parseAdminIds (L32) - Parse and validate admin id list.
- * - requireHttps (L52) - Enforce HTTPS public URLs.
- * - loadConfig (L60) - Parse and validate environment.
+ * - BotConfig - Validated configuration shape.
+ * - TelegramTransportMode - Supported inbound Telegram delivery modes.
+ * - loadConfig - Parse and validate environment.
+ *
+ * Key constructs:
+ * - DEFAULT_TELEGRAM_TRANSPORT_MODE - Runtime default used when env does not specify a mode.
+ * - parseAdminIds - Parse and validate admin id list.
+ * - requirePublicBaseUrl - Enforce public URL constraints for Telegram/OpenCode surfaces.
  */
 
 import { z } from "zod";
@@ -28,6 +29,7 @@ export type TelegramTransportMode = "auto" | "webhook" | "polling";
 const HTTPS_PREFIX = "https://";
 const LOCALHOST_PREFIXES = ["http://localhost", "http://127.0.0.1"];
 const CSV_SEPARATOR = ",";
+const DEFAULT_TELEGRAM_TRANSPORT_MODE: TelegramTransportMode = "auto";
 
 const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
@@ -101,6 +103,6 @@ export const loadConfig = (): BotConfig => {
       env.OPENCODE_PUBLIC_BASE_URL,
       "OPENCODE_PUBLIC_BASE_URL"
     ),
-    transportMode: env.TELEGRAM_TRANSPORT_MODE ?? "auto"
+    transportMode: env.TELEGRAM_TRANSPORT_MODE ?? DEFAULT_TELEGRAM_TRANSPORT_MODE
   };
 };

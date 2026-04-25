@@ -111,8 +111,11 @@ COPY --chmod=755 github-git-credential.js /usr/local/bin/github-git-credential.j
 COPY --chmod=755 github-gh-auth-wrapper.sh /usr/local/bin/gh
 COPY kanban-plugin-sync.js /usr/local/bin/kanban-plugin-sync.js
 COPY telegram-media-plugin-sync.js /usr/local/bin/telegram-media-plugin-sync.js
+COPY opencode-auto-update.js /usr/local/bin/opencode-auto-update.js
+COPY skills-bundle-sync.js /usr/local/bin/skills-bundle-sync.js
 COPY kanban-tools-plugin.ts /usr/local/share/opencode/kanban-tools-plugin.ts
 COPY telegram-media-tools-plugin.ts /usr/local/share/opencode/telegram-media-tools-plugin.ts
+COPY skills /usr/local/share/opencode/skills
 COPY --chmod=755 docker-wrapper.sh /usr/local/bin/docker
 COPY toolbox-profile.sh /etc/profile.d/toolbox.sh
 

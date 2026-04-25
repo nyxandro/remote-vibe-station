@@ -13,6 +13,7 @@
 
 - На старте контейнер генерирует `/root/.config/opencode/opencode.json`, если заданы
   `CLIPROXY_BASE_URL` и `CLIPROXY_API_KEY`.
+- На старте контейнер синхронизирует проектные plugins и весь managed bundle skills в `/root/.config/opencode`.
 - Провайдер по умолчанию — `cliproxy` (переопределяется через `CLIPROXY_PROVIDER_ID`).
 - Список моделей подгружается динамически из `CLIPROXY_BASE_URL/models`.
 - `CLIPROXY_DEFAULT_MODEL_ID` (если задан) валидируется против динамического каталога моделей.

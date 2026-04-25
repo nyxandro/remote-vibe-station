@@ -8,3 +8,4 @@ services/**/dist/
 *.root-owned.backup/
 services/**/dist.root-owned.backup/
 *.tsbuildinfo
+*:Zone.Identifier

@@ -134,7 +134,7 @@ export class OpenCodeController {
 
   @Post("version/update")
   public async updateVersion(@Req() req: Request) {
-    /* Install latest OpenCode version into running container and restart runtime. */
+    /* Force OpenCode toolbox update, then restart runtime so the fresh binary becomes active. */
     try {
       const result = await this.runtime.updateToLatestVersion();
       publishWorkspaceStateChangedEvent({
@@ -150,7 +150,7 @@ export class OpenCodeController {
           error,
           fallbackCode: "APP_OPENCODE_VERSION_UPDATE_FAILED",
           fallbackMessage: "Failed to update OpenCode version.",
-          fallbackHint: "Use immutable image redeploy flow or inspect runtime logs, then retry."
+          fallbackHint: "Check npm access and OpenCode runtime health, then retry the update."
         })
       );
     }
