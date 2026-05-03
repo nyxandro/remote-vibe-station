@@ -21,7 +21,6 @@ import { useProjectFiles } from "./hooks/use-project-files";
 import { useProviderAuth } from "./hooks/use-provider-auth";
 import { useProjectGit } from "./hooks/use-project-git";
 import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-memory";
-import { useTelegramStreamControl } from "./hooks/use-telegram-stream-control";
 import { useThemeMode } from "./hooks/use-theme-mode";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useWorkspaceRuntimeActions } from "./hooks/use-workspace-runtime-actions";
@@ -119,10 +118,6 @@ export const App = () => {
   const clearActiveSelection = (): void => {
     setActiveId(null); setActiveTab("projects"); resetFiles(); setSettingsActiveFile(null);
   };
-  const { telegramStreamEnabled, startTelegramChat, endTelegramChat } = useTelegramStreamControl(
-    setError,
-    canControlTelegramStream
-  );
   const { themeMode, setThemeMode } = useThemeMode();
   const {
     state: voiceControlState,
@@ -283,7 +278,6 @@ export const App = () => {
     activeTab,
     activeId,
     filePath,
-    canControlTelegramStream,
     loadProjects,
     loadGitOverview,
     loadFiles,
@@ -344,11 +338,7 @@ export const App = () => {
           activeProject={activeProject}
           activeTab={activeTab}
           canUseProjectTabs={canUseProjectTabs}
-          canControlTelegramStream={canControlTelegramStream}
-          telegramStreamEnabled={telegramStreamEnabled}
           onSetTab={setActiveTab}
-          onStartStream={() => void startTelegramChat()}
-          onStopStream={() => void endTelegramChat()}
         />
 
         {error ? <div className="alert">{error}</div> : null}
@@ -359,7 +349,6 @@ export const App = () => {
           activeProject={activeProject}
           visibleProjects={visibleProjects}
           query={query}
-          telegramStreamEnabled={telegramStreamEnabled}
           statusMap={statusMap}
           gitSummaryMap={gitSummaryMap}
           logsMap={logsMap}

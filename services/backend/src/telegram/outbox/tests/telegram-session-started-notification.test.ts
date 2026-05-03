@@ -79,4 +79,58 @@ describe("Telegram session started notification", () => {
       }
     }
   });
+
+  test("routes project.selected into admin notification after legacy stream-off state", () => {
+    /* Project selection is routing-critical, so it must not depend on the removed stream toggle. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-project-selected-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const config = {
+        telegramBotToken: "x",
+        adminIds: [1],
+        publicBaseUrl: "http://localhost:4173",
+        publicDomain: "localhost",
+        projectsRoot: tmp,
+        opencodeServerUrl: "http://localhost",
+        eventBufferSize: 10
+      };
+
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, false);
+
+      const outboxService = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
+      const events = new EventsService(config as any);
+      const bridge = new TelegramEventsOutboxBridge(events, outboxService, {
+        finalizeAssistantReply: jest.fn()
+      } as any, config as any);
+      bridge.onModuleInit();
+
+      events.publish({
+        type: "project.selected",
+        ts: new Date().toISOString(),
+        data: {
+          adminId: 1,
+          slug: "demo",
+          name: "Demo",
+          rootPath: "/srv/projects/demo"
+        }
+      });
+
+      const items = readOutboxItems();
+      expect(items).toHaveLength(1);
+      expect(items[0].chatId).toBe(123);
+      expect(items[0].text).toBe("📁 Выбран проект: Demo\n/srv/projects/demo");
+      expect(items[0].disableNotification).toBe(true);
+    } finally {
+      process.chdir(prev);
+      try {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  });
 });

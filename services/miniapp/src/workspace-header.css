@@ -106,14 +106,6 @@
   background: #f7f9ff;
 }
 
-.active-project-card .stream-toggle {
-  width: 52px;
-  height: auto;
-  min-height: 100%;
-  border-radius: 12px;
-  padding: 0;
-}
-
 html[data-theme="dark"] .active-project-card {
   background: rgba(20, 30, 50, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.05);

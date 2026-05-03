@@ -28,7 +28,6 @@ const buildInput = (overrides: Partial<HookInput> = {}): HookInput => ({
   activeTab: "github",
   activeId: "alpha",
   filePath: "src",
-  canControlTelegramStream: true,
   loadProjects: vi.fn().mockResolvedValue(undefined),
   loadGitOverview: vi.fn().mockResolvedValue(undefined),
   loadFiles: vi.fn().mockResolvedValue(undefined),
@@ -121,12 +120,11 @@ describe("useReactiveWorkspaceSync", () => {
     expect(nextInput.loadFiles).toHaveBeenCalledWith("alpha", "src/components");
   });
 
-  it("loads settings snapshot in parallel and skips voice settings when telegram control is unavailable", async () => {
-    /* Settings should auto-refresh all visible diagnostics, but only fetch Telegram-specific data when allowed. */
+  it("loads settings snapshot in parallel including voice settings", async () => {
+    /* Settings should auto-refresh all visible diagnostics after removing the stream-toggle permission gate. */
     const input = buildInput({
       activeTab: "settings",
-      activeId: null,
-      canControlTelegramStream: false
+      activeId: null
     });
 
     renderHook(() => useReactiveWorkspaceSync(input));
@@ -139,7 +137,7 @@ describe("useReactiveWorkspaceSync", () => {
     expect(input.loadGithubAuthStatus).toHaveBeenCalledTimes(1);
     expect(input.loadServerMetrics).toHaveBeenCalledTimes(1);
     expect(input.loadRuntimeServices).toHaveBeenCalledTimes(1);
-    expect(input.loadVoiceControlSettings).not.toHaveBeenCalled();
+    expect(input.loadVoiceControlSettings).toHaveBeenCalledTimes(1);
   });
 
   it("does not run central sync for already-live tabs", async () => {

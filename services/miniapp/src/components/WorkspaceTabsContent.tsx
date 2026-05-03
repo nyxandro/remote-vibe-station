@@ -58,7 +58,6 @@ type Props = {
   activeProject: ProjectRecord | null;
   visibleProjects: ProjectRecord[];
   query: string;
-  telegramStreamEnabled: boolean;
   statusMap: Record<string, ProjectStatus[]>;
   gitSummaryMap: Record<string, ProjectGitSummary | null>;
   logsMap: Record<string, string>;
@@ -234,7 +233,6 @@ export const WorkspaceTabsContent = (props: Props) => {
         visibleProjects={props.visibleProjects}
         activeId={props.activeId}
         query={props.query}
-        telegramStreamEnabled={props.telegramStreamEnabled}
         statusMap={props.statusMap}
         gitSummaryMap={props.gitSummaryMap}
         onQueryChange={props.onQueryChange}

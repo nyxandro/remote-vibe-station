@@ -14,7 +14,6 @@ export type ReactiveWorkspaceSyncInput = {
   activeTab: TabKey;
   activeId: string | null;
   filePath: string;
-  canControlTelegramStream: boolean;
   loadProjects: () => Promise<void> | void;
   loadGitOverview: (projectId: string) => Promise<void> | void;
   loadFiles: (projectId: string, path: string) => Promise<void> | void;
@@ -105,9 +104,7 @@ export const useReactiveWorkspaceSync = (input: ReactiveWorkspaceSyncInput): voi
           current.loadRuntimeVersion()
         ];
 
-        if (current.canControlTelegramStream) {
-          settingsRequests.push(current.loadVoiceControlSettings());
-        }
+        settingsRequests.push(current.loadVoiceControlSettings());
 
         await Promise.all(settingsRequests);
         return;
@@ -134,7 +131,7 @@ export const useReactiveWorkspaceSync = (input: ReactiveWorkspaceSyncInput): voi
   useEffect(() => {
     /* Entering a request-driven tab should immediately hydrate it from the current backend state. */
     void refreshActiveTab("entry");
-  }, [input.activeId, input.activeTab, input.canControlTelegramStream, input.filePath, refreshActiveTab]);
+  }, [input.activeId, input.activeTab, input.filePath, refreshActiveTab]);
 
   useEffect(() => {
     /* Poll only the currently visible tab and only where live server events do not exist yet. */

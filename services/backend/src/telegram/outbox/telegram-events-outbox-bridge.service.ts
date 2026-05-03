@@ -94,7 +94,7 @@ export class TelegramEventsOutboxBridge implements OnModuleInit {
       const rootPath = String((event.data as any)?.rootPath ?? "");
       const message = `📁 Выбран проект: ${name}\n${rootPath}`;
 
-      this.outbox.enqueueStreamNotification({ adminId, text: message });
+      this.outbox.enqueueAdminNotification({ adminId, text: message });
       return;
     }
 

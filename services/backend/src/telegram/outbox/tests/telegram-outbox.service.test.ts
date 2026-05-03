@@ -239,4 +239,39 @@ describe("TelegramOutboxService", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  test("keeps replace delivery even after legacy stream-off state", () => {
+    /* Stream is mandatory now: old persisted streamEnabled=false must not reintroduce duplicate final replies. */
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-outbox-service-"));
+    const prev = process.cwd();
+    process.chdir(tmp);
+
+    try {
+      const streamStore = new TelegramStreamStore();
+      streamStore.bindAdminChat(1, 123);
+      streamStore.setStreamEnabled(1, false);
+
+      const service = new TelegramOutboxService(streamStore, new TelegramOutboxStore());
+      service.enqueueAssistantReply({
+        adminId: 1,
+        delivery: {
+          sessionId: "session-legacy-off",
+          text: "Ответ без дубля",
+          providerID: "opencode",
+          modelID: "big-pickle",
+          thinking: null,
+          agent: "build",
+          tokens: { input: 1, output: 2, reasoning: 0 }
+        }
+      });
+
+      const assistantItems = readItems().filter((item) => item.control == null);
+      expect(assistantItems).toHaveLength(1);
+      expect(assistantItems[0].mode).toBe("replace");
+      expect(assistantItems[0].progressKey).toBe("assistant:1:session-legacy-off:1");
+    } finally {
+      process.chdir(prev);
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 });

@@ -22,11 +22,7 @@ describe("WorkspaceHeader", () => {
         activeProject={null}
         activeTab="projects"
         canUseProjectTabs={false}
-        canControlTelegramStream={false}
-        telegramStreamEnabled={false}
         onSetTab={vi.fn()}
-        onStartStream={vi.fn()}
-        onStopStream={vi.fn()}
       />
     );
 
@@ -56,11 +52,7 @@ describe("WorkspaceHeader", () => {
         activeProject={null}
         activeTab="projects"
         canUseProjectTabs={false}
-        canControlTelegramStream={false}
-        telegramStreamEnabled={false}
         onSetTab={vi.fn()}
-        onStartStream={vi.fn()}
-        onStopStream={vi.fn()}
       />
     );
 
@@ -74,11 +66,7 @@ describe("WorkspaceHeader", () => {
         activeProject={null}
         activeTab="projects"
         canUseProjectTabs={false}
-        canControlTelegramStream={false}
-        telegramStreamEnabled={false}
         onSetTab={vi.fn()}
-        onStartStream={vi.fn()}
-        onStopStream={vi.fn()}
       />
     );
 
@@ -98,11 +86,7 @@ describe("WorkspaceHeader", () => {
         }}
         activeTab="tasks"
         canUseProjectTabs={true}
-        canControlTelegramStream={false}
-        telegramStreamEnabled={false}
         onSetTab={vi.fn()}
-        onStartStream={vi.fn()}
-        onStopStream={vi.fn()}
       />
     );
 

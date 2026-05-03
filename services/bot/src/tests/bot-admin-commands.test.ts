@@ -99,13 +99,9 @@ describe("registerAdminProjectCommands", () => {
     expect(syncSlashCommands).toHaveBeenCalledWith(1);
   });
 
-  it("reports backend failure when stream shutdown request is rejected", async () => {
-    /* /end must not confirm success if backend refused to disable chat streaming. */
-    jest.spyOn(global, "fetch" as any).mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: async () => "backend down"
-    } as Response);
+  it("keeps /end as a no-op compatibility hint", async () => {
+    /* Stream delivery is mandatory now, so /end must not call backend stream/off anymore. */
+    const fetchSpy = jest.spyOn(global, "fetch" as any).mockResolvedValue({ ok: true } as Response);
 
     const mock = createBotMock();
     registerAdminProjectCommands({
@@ -122,7 +118,8 @@ describe("registerAdminProjectCommands", () => {
 
     await handler!({ from: { id: 1 }, chat: { id: 100 }, reply });
 
-    expect(reply).toHaveBeenCalledWith("Ошибка backend (500)");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalledWith("Поток всегда включен. Чтобы остановить текущий запуск агента, используй /stop.");
   });
 
   it("reports bindChat failure before enabling stream", async () => {

@@ -2,7 +2,7 @@
  * @fileoverview Persistent mapping of Telegram chats to stream settings.
  *
  * Exports:
- * - TelegramStreamStore - Stores last chatId per admin and stream enabled flag.
+ * - TelegramStreamStore - Stores last chatId per admin while keeping Telegram streaming always enabled.
  */
 
 import * as path from "node:path";
@@ -39,7 +39,7 @@ export class TelegramStreamStore {
 
     const next: StreamRecord = {
       chatId,
-      streamEnabled: file.byAdminId[key]?.streamEnabled ?? false,
+      streamEnabled: true,
       updatedAt: new Date().toISOString()
     };
 
@@ -49,7 +49,7 @@ export class TelegramStreamStore {
   }
 
   public setStreamEnabled(adminId: number, enabled: boolean): StreamRecord {
-    /* Enable/disable stream for the admin's last known chat. */
+    /* Keep old API calls compatible, but the runtime invariant is now always-on streaming. */
     const file = this.readAll();
     const key = String(adminId);
     const existing = file.byAdminId[key];
@@ -60,7 +60,7 @@ export class TelegramStreamStore {
 
     const next: StreamRecord = {
       ...existing,
-      streamEnabled: enabled,
+      streamEnabled: true,
       updatedAt: new Date().toISOString()
     };
 
@@ -70,9 +70,10 @@ export class TelegramStreamStore {
   }
 
   public get(adminId: number): StreamRecord | null {
-    /* Return binding record for admin, if present. */
+    /* Normalize legacy persisted streamEnabled=false records without hiding their chat binding. */
     const file = this.readAll();
-    return file.byAdminId[String(adminId)] ?? null;
+    const record = file.byAdminId[String(adminId)];
+    return record ? { ...record, streamEnabled: true } : null;
   }
 
   public pruneToAdmins(input: { allowedAdminIds: number[] }): { before: number; after: number; removed: number } {

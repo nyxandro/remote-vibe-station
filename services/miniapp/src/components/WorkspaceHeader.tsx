@@ -14,8 +14,6 @@ import {
   ListTodo,
   LucideIcon,
   Plug,
-  Radio,
-  RadioTower,
   Settings,
   Terminal
 } from "lucide-react";
@@ -36,11 +34,7 @@ type Props = {
   activeProject: ProjectRecord | null;
   activeTab: TabKey;
   canUseProjectTabs: boolean;
-  canControlTelegramStream: boolean;
-  telegramStreamEnabled: boolean;
   onSetTab: (tab: TabKey) => void;
-  onStartStream: () => void;
-  onStopStream: () => void;
 };
 
 const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: LucideIcon }> = [
@@ -55,13 +49,6 @@ const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: LucideIcon }> = [
 ];
 
 export const WorkspaceHeader = (props: Props) => {
-  /* Keep stream controls near the active project context to reduce scanning. */
-  const streamTitle = props.canControlTelegramStream
-    ? props.telegramStreamEnabled
-      ? "Stop streaming to Telegram"
-      : "Start streaming to Telegram"
-    : "Open the Mini App inside Telegram from the bot menu button";
-
   return (
     <header className="workspace-header-shell">
       <nav className="workspace-top-tabs" aria-label="Workspace navigation">
@@ -97,17 +84,6 @@ export const WorkspaceHeader = (props: Props) => {
             <span className="active-project-name">{props.activeProject.name}</span>
             <span className="active-project-path">{props.activeProject.rootPath}</span>
           </div>
-
-          <button
-            className={props.telegramStreamEnabled ? "stream-toggle stream-toggle-on" : "stream-toggle"}
-            disabled={!props.canControlTelegramStream}
-            onClick={props.telegramStreamEnabled ? props.onStopStream : props.onStartStream}
-            title={streamTitle}
-            type="button"
-            aria-label={props.telegramStreamEnabled ? "Stop stream" : "Start stream"}
-          >
-            {props.telegramStreamEnabled ? <RadioTower size={20} /> : <Radio size={20} />}
-          </button>
         </section>
       ) : (
         <section className="active-project-card active-project-card-empty">

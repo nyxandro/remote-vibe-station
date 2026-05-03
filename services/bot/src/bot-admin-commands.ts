@@ -91,7 +91,7 @@ export const registerAdminProjectCommands = (input: {
   });
 
   input.bot.command("chat", async (ctx) => {
-    /* Enable streaming of agent output to this chat and persist the backend stream state. */
+    /* Bind this chat as the always-on Telegram delivery target. */
     if (!input.isAdmin(ctx.from?.id)) {
       await ctx.reply("Access denied");
       return;
@@ -114,34 +114,16 @@ export const registerAdminProjectCommands = (input: {
       return;
     }
 
-    await ctx.reply("Поток включен для этого чата. /end чтобы выключить.");
+    await ctx.reply("Поток включен для этого чата. Он теперь работает всегда и не требует ручного выключения.");
   });
 
   input.bot.command("end", async (ctx) => {
-    /* Disable streaming to this chat without stopping the active backend execution. */
+    /* Streaming is now an always-on delivery mode; keep the command as a harmless compatibility hint. */
     if (!input.isAdmin(ctx.from?.id)) {
       await ctx.reply("Access denied");
       return;
     }
-
-    const adminId = ctx.from!.id;
-    try {
-      await input.bindChat(adminId, ctx.chat.id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // eslint-disable-next-line no-console
-      console.error(`Failed to bind Telegram chat ${ctx.chat.id} for admin ${adminId}`, error);
-      await ctx.reply(`Не удалось привязать Telegram чат к backend: ${message}`);
-      return;
-    }
-
-    const toggle = await toggleStreamState({ adminId, chatId: ctx.chat.id, enabled: false });
-    if (!toggle.ok) {
-      await ctx.reply(toggle.errorMessage ?? "Ошибка backend (500)");
-      return;
-    }
-
-    await ctx.reply("Поток выключен. /chat чтобы включить снова.");
+    await ctx.reply("Поток всегда включен. Чтобы остановить текущий запуск агента, используй /stop.");
   });
 
   input.bot.command("projects", async (ctx) => {

@@ -14,44 +14,17 @@
 .input:focus-visible,
 .icon-tool-btn:focus,
 .icon-tool-btn:focus-visible,
-.stream-toggle:focus,
-.stream-toggle:focus-visible,
 .terminal-send-btn:focus,
 .terminal-send-btn:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
 
-/* Active project header row: name left, stream action right. */
+/* Active project header row keeps project context compact. */
 .active-project-line {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-/* Stream toggle keeps one-click behavior in project context. */
-.stream-toggle {
-  border: 1px solid #9db8ff;
-  background: #ffffff;
-  color: #1b3f91;
-  border-radius: 999px;
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.stream-toggle:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.stream-toggle-on {
-  color: #065f46;
-  border-color: #86efac;
-  background: #ecfdf5;
 }
 
 /* File toolbar becomes a compact icon strip for future tools. */
@@ -772,18 +745,6 @@ html[data-theme="dark"] .file-item,
 html[data-theme="dark"] .file-item.dir {
   background: #131d31;
   border-bottom-color: #233352;
-}
-
-html[data-theme="dark"] .stream-toggle {
-  background: #131d31;
-  border-color: #2e4b7b;
-  color: #b9ceef;
-}
-
-html[data-theme="dark"] .stream-toggle-on {
-  background: #113128;
-  border-color: #1d5f4c;
-  color: #9ff0ce;
 }
 
 html[data-theme="dark"] .btn.ghost {

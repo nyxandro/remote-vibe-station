@@ -9,8 +9,8 @@ import * as path from "node:path";
 import { TelegramStreamStore } from "../telegram-stream.store";
 
 describe("TelegramStreamStore", () => {
-  test("binds chat and toggles stream", () => {
-    /* Use isolated cwd so store writes into a temp folder. */
+  test("binds chat and keeps stream always enabled", () => {
+    /* Use isolated cwd so store writes into a temp folder while verifying legacy off writes normalize to enabled. */
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tvoc-tg-"));
     const prev = process.cwd();
     process.chdir(tmp);
@@ -22,13 +22,14 @@ describe("TelegramStreamStore", () => {
 
       const bound = store.bindAdminChat(123, 777);
       expect(bound.chatId).toBe(777);
-      expect(bound.streamEnabled).toBe(false);
+      expect(bound.streamEnabled).toBe(true);
 
       const enabled = store.setStreamEnabled(123, true);
       expect(enabled.streamEnabled).toBe(true);
 
       const disabled = store.setStreamEnabled(123, false);
-      expect(disabled.streamEnabled).toBe(false);
+      expect(disabled.streamEnabled).toBe(true);
+      expect(store.get(123)?.streamEnabled).toBe(true);
     } finally {
       process.chdir(prev);
     }

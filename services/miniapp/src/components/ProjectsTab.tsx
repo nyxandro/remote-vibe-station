@@ -2,7 +2,7 @@
  * @fileoverview Projects tab UI.
  *
  * Exports:
- * - ProjectsTab (L22) - Renders project search, actions, and stream indicator.
+ * - ProjectsTab (L22) - Renders project search, actions, and deployment indicators.
  */
 
 import { ChangeEvent, useState } from "react";
@@ -32,7 +32,6 @@ type Props = {
   visibleProjects: ProjectRecord[];
   activeId: string | null;
   query: string;
-  telegramStreamEnabled: boolean;
   statusMap: Record<string, ProjectStatus[] | undefined>;
   gitSummaryMap: Record<string, ProjectGitSummary | null | undefined>;
   onQueryChange: (value: string) => void;
@@ -86,7 +85,6 @@ export const ProjectsTab = (props: Props) => {
       <div className="project-grid">
         {props.visibleProjects.map((project) => {
           const isActive = project.id === props.activeId;
-          const showStream = isActive && props.telegramStreamEnabled;
           const health = deriveProjectContainerHealth(
             props.statusMap[project.id],
           );
@@ -109,15 +107,6 @@ export const ProjectsTab = (props: Props) => {
                 <div className="project-top">
                   <div className="project-name-row">
                     <div className="project-name">{project.name}</div>
-                    {showStream ? (
-                      <span
-                        className="stream-pill"
-                        title="Streaming to Telegram"
-                      >
-                        <span className="stream-dot" />
-                        STREAM
-                      </span>
-                    ) : null}
                   </div>
 
                   {health ? (
