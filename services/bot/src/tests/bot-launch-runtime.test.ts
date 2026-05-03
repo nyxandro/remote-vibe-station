@@ -21,6 +21,7 @@ describe("launchBotRuntime", () => {
 
   const createBotMock = () => {
     const botLike = {
+      webhookReply: true,
       telegram: {
         setWebhook: jest.fn(async () => true)
       },
@@ -165,6 +166,7 @@ describe("launchBotRuntime", () => {
     expect(syncMiniAppMenuButton).toHaveBeenCalledWith((bot as any).telegram, "https://example.com");
     expect(commandSyncRuntime.syncSlashCommands).toHaveBeenCalledWith(1);
     expect(commandSyncRuntime.startPeriodicCommandSync).toHaveBeenCalledWith(1);
+    expect((bot as any).webhookReply).toBe(false);
     expect(launch).not.toHaveBeenCalled();
     expect(registerShutdownHandlers).toHaveBeenCalledTimes(1);
   });

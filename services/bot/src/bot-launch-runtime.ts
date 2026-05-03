@@ -128,6 +128,8 @@ export const launchBotRuntime = async (input: {
   }
 
   /* Public HTTPS mode exposes Telegram webhook over Express and keeps menu button in sync. */
+  /* We ack webhook requests manually in Express, so Telegraf must not try to reply via the closed HTTP response. */
+  input.bot.webhookReply = false;
   input.app.use("/bot/webhook", createTelegramWebhookMiddleware(input.bot));
   await input.bot.telegram.setWebhook(`${input.config.publicBaseUrl}/bot/webhook`);
   await dependencies.syncMiniAppMenuButton(input.bot.telegram, input.config.publicBaseUrl);
