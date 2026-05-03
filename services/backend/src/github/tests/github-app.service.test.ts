@@ -53,6 +53,19 @@ describe("GithubAppService", () => {
     expect(() => service.saveToken({ adminId: 42, token: "   " })).toThrow("GitHub token is required");
   });
 
+  test("returns raw stored PAT for internal GitHub API callers", () => {
+    /* Background release checks need the real token, not the masked preview used by UI. */
+    const { service, store } = buildService();
+    store.getToken.mockReturnValue({
+      adminId: 42,
+      token: "github_pat_example123",
+      tokenPreview: "gith...e123",
+      updatedAt: "2026-03-10T10:00:00.000Z"
+    });
+
+    expect(service.getStoredToken()).toBe("github_pat_example123");
+  });
+
   test("creates git credential payload from stored PAT", async () => {
     /* Git HTTPS helper only needs a deterministic username/password pair for github.com remotes. */
     const { service, store } = buildService();

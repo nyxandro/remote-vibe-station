@@ -63,6 +63,11 @@ export class GithubAppService {
     return { ok: true };
   }
 
+  public getStoredToken(): string | null {
+    /* Runtime services may reuse the saved PAT for GitHub API requests that should not hit anonymous rate limits. */
+    return this.store.getToken()?.token ?? null;
+  }
+
   public async createGitCredential(input?: {
     protocol?: string;
     host?: string;

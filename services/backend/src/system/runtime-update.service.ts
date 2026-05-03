@@ -12,7 +12,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
 
-import { Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
+import { GithubAppService } from "../github/github-app.service";
 
 const RUNTIME_ENV_FILE = ".env";
 const RUNTIME_PREVIOUS_ENV_FILE = ".env.previous";
@@ -84,6 +85,7 @@ type RuntimeUpdateDeps = {
 export class RuntimeUpdateService {
   private latestCache: { version: string; imageTag: string; commitSha: string | null; releaseNotes: string | null; checkedAt: string } | null = null;
   private readonly deps: RuntimeUpdateDeps;
+  @Optional() @Inject(GithubAppService) private readonly githubApp?: GithubAppService;
 
   public constructor(@Optional() deps?: Partial<RuntimeUpdateDeps>) {
     /* Dependencies stay injectable so update flows can be unit-tested without Docker or network access. */
@@ -293,7 +295,7 @@ export class RuntimeUpdateService {
 
   private async fetchLatestVersion(): Promise<LatestRuntimeVersion> {
     /* GitHub releases provide human-readable versions; master commit is only a fallback for commit metadata. */
-    const response = await fetch(GITHUB_LATEST_RELEASE_URL, { headers: { Accept: "application/vnd.github+json" } });
+    const response = await fetch(GITHUB_LATEST_RELEASE_URL, { headers: this.buildGithubHeaders() });
     if (!response.ok) {
       throw new Error(`APP_RUNTIME_RELEASE_CHECK_FAILED: GitHub latest release request failed with HTTP ${response.status}. Retry later.`);
     }
@@ -308,7 +310,7 @@ export class RuntimeUpdateService {
 
   private async fetchMasterCommitSha(): Promise<string | null> {
     /* Commit SHA is useful for diagnostics but must not block release-based updates. */
-    const response = await fetch(GITHUB_MASTER_REF_URL, { headers: { Accept: "application/vnd.github+json" } });
+    const response = await fetch(GITHUB_MASTER_REF_URL, { headers: this.buildGithubHeaders() });
     if (!response.ok) {
       return null;
     }
@@ -372,6 +374,17 @@ export class RuntimeUpdateService {
 
   private isoNow(): string {
     return new Date(this.deps.now()).toISOString();
+  }
+
+  private buildGithubHeaders(): Record<string, string> {
+    /* Saved global GitHub PAT keeps runtime release checks stable under API rate limits. */
+    const token = this.githubApp?.getStoredToken()?.trim();
+    return token
+      ? {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`
+        }
+      : { Accept: "application/vnd.github+json" };
   }
 
   private async runCommand(command: string, args: string[], cwd: string): Promise<void> {
