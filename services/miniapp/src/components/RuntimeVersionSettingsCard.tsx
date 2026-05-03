@@ -7,6 +7,22 @@
 
 import { RuntimeUpdateState, RuntimeVersionSnapshot } from "../types";
 
+const toDisplayVersion = (input: {
+  version: string | null | undefined;
+  imageTag?: string | null;
+}): string => {
+  /* Transitional runtimes may still store sha labels in RVS_RUNTIME_VERSION, so prefer semantic image tags for UI. */
+  const version = input.version?.trim() ?? "";
+  const imageTag = input.imageTag?.trim() ?? "";
+  if (version && !version.startsWith("sha-")) {
+    return version;
+  }
+  if (imageTag.startsWith("v") && imageTag.length > 1) {
+    return imageTag.slice(1);
+  }
+  return version || imageTag || "Unknown";
+};
+
 type Props = {
   snapshot: RuntimeVersionSnapshot | null;
   isLoading: boolean;
@@ -23,8 +39,16 @@ type Props = {
 };
 
 export const RuntimeVersionSettingsCard = (props: Props) => {
-  const currentVersion = props.snapshot?.currentVersion ?? "Unknown";
-  const latestVersion = props.snapshot?.latestVersion ?? "Not checked";
+  const currentVersion = toDisplayVersion({
+    version: props.snapshot?.currentVersion,
+    imageTag: props.snapshot?.currentImageTag
+  });
+  const latestVersion = props.snapshot
+    ? toDisplayVersion({
+        version: props.snapshot.latestVersion,
+        imageTag: props.snapshot.latestImageTag
+      })
+    : "Not checked";
   const effectiveStatus = props.isReconnecting ? "Restarting..." : props.updateState?.status === "completed" ? "Updated" : props.snapshot?.updateAvailable ? "Update available" : "Up to date";
   const statusClassName = props.isReconnecting || props.updateState?.status === "updating" || props.updateState?.status === "restarting"
     ? "runtime-version-status progress"
@@ -52,7 +76,11 @@ export const RuntimeVersionSettingsCard = (props: Props) => {
         <article className="runtime-update-progress" aria-live="polite">
           <strong>{props.isReconnecting ? "Restarting services..." : props.updateState?.status === "completed" ? "Update completed" : props.updateState?.status === "failed" ? "Update failed" : "Updating runtime"}</strong>
           <div className="project-create-note">
-            {props.isReconnecting ? "Connection can disappear during update. Mini App will reconnect automatically." : props.updateState?.targetVersion ? `Target version: ${props.updateState.targetVersion}` : "Preparing update..."}
+            {props.isReconnecting
+              ? "Connection can disappear during update. Mini App will reconnect automatically."
+              : props.updateState?.targetVersion
+              ? `Target version: ${toDisplayVersion({ version: props.updateState.targetVersion, imageTag: props.updateState.targetImageTag })}`
+              : "Preparing update..."}
           </div>
           {props.updateState?.steps.length ? (
             <div className="runtime-update-steps">
