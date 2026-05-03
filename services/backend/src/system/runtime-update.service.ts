@@ -18,6 +18,7 @@ import { GithubAppService } from "../github/github-app.service";
 const RUNTIME_ENV_FILE = ".env";
 const RUNTIME_PREVIOUS_ENV_FILE = ".env.previous";
 const RUNTIME_UPDATE_STATE_FILE = "runtime-update-state.json";
+const PROC_SELF_MOUNTINFO_FILE = "/proc/self/mountinfo";
 const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/releases/latest";
 const GITHUB_MASTER_REF_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/commits/master";
 const RVS_IMAGE_PREFIX = "ghcr.io/nyxandro/remote-vibe-station";
@@ -76,6 +77,8 @@ type LatestRuntimeVersion = {
 
 type RuntimeUpdateDeps = {
   runtimeConfigDir: () => string;
+  runtimeHostConfigDir: () => string;
+  mountInfoPath: () => string;
   now: () => number;
   fetchLatestVersion: () => Promise<LatestRuntimeVersion>;
   runCommand: (command: string, args: string[], cwd: string) => Promise<void>;
@@ -91,6 +94,8 @@ export class RuntimeUpdateService {
     /* Dependencies stay injectable so update flows can be unit-tested without Docker or network access. */
     this.deps = {
       runtimeConfigDir: deps?.runtimeConfigDir ?? (() => this.requireRuntimeConfigDir()),
+      runtimeHostConfigDir: deps?.runtimeHostConfigDir ?? (() => this.resolveRuntimeHostConfigDir(this.deps.runtimeConfigDir())),
+      mountInfoPath: deps?.mountInfoPath ?? (() => PROC_SELF_MOUNTINFO_FILE),
       now: deps?.now ?? (() => Date.now()),
       fetchLatestVersion: deps?.fetchLatestVersion ?? (() => this.fetchLatestVersion()),
       runCommand: deps?.runCommand ?? ((command, args, cwd) => this.runCommand(command, args, cwd))
@@ -227,7 +232,7 @@ export class RuntimeUpdateService {
   private async pullRuntimeImages(): Promise<void> {
     /* Pull all images before mutating .env so failed downloads never stop the current runtime. */
     const runtimeDir = this.deps.runtimeConfigDir();
-    const args = ["--env-file", ".env", "-f", "docker-compose.yml", "-f", "docker-compose.vless.yml"];
+    const args = this.buildComposeArgs(runtimeDir);
     await this.deps.runCommand("docker", ["compose", ...args, "pull"], runtimeDir);
   }
 
@@ -243,9 +248,23 @@ export class RuntimeUpdateService {
   private async applyRuntimeCompose(): Promise<void> {
     /* Restart backend last because this code is running inside backend during self-update. */
     const runtimeDir = this.deps.runtimeConfigDir();
-    const args = ["--env-file", ".env", "-f", "docker-compose.yml", "-f", "docker-compose.vless.yml"];
+    const args = this.buildComposeArgs(runtimeDir);
     await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--remove-orphans", ...NON_BACKEND_RUNTIME_SERVICES], runtimeDir);
     await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--no-deps", BACKEND_SERVICE], runtimeDir);
+  }
+
+  private buildComposeArgs(runtimeDir: string): string[] {
+    /* Docker daemon resolves relative bind mounts on the host, not inside the backend container. */
+    return [
+      "--project-directory",
+      this.deps.runtimeHostConfigDir(),
+      "--env-file",
+      path.join(runtimeDir, RUNTIME_ENV_FILE),
+      "-f",
+      path.join(runtimeDir, "docker-compose.yml"),
+      "-f",
+      path.join(runtimeDir, "docker-compose.vless.yml")
+    ];
   }
 
   private readEnvFile(): Record<string, string> {
@@ -291,6 +310,31 @@ export class RuntimeUpdateService {
       throw new Error("APP_RUNTIME_CONFIG_DIR_REQUIRED: RUNTIME_CONFIG_DIR is not set. Start backend from the runtime compose stack.");
     }
     return value;
+  }
+
+  private resolveRuntimeHostConfigDir(runtimeDir: string): string {
+    /* Mountinfo exposes the host source for /runtime-config without adding another required env var. */
+    const normalizedRuntimeDir = path.resolve(runtimeDir);
+    const mountInfoPath = this.deps.mountInfoPath();
+    const mountInfo = fs.existsSync(mountInfoPath) ? fs.readFileSync(mountInfoPath, "utf-8") : "";
+    for (const line of mountInfo.split(/\r?\n/)) {
+      const fields = line.split(" ");
+      if (fields.length < 10 || fields[4] !== normalizedRuntimeDir) {
+        continue;
+      }
+
+      const hostSource = this.decodeMountInfoPath(fields[3]);
+      if (hostSource.trim()) {
+        return hostSource;
+      }
+    }
+
+    throw new Error(`APP_RUNTIME_HOST_CONFIG_DIR_UNRESOLVED: Unable to resolve host path for ${runtimeDir} from ${mountInfoPath}. Restart backend from the runtime Docker Compose stack.`);
+  }
+
+  private decodeMountInfoPath(value: string): string {
+    /* Linux mountinfo escapes spaces and other bytes as octal sequences. */
+    return value.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)));
   }
 
   private async fetchLatestVersion(): Promise<LatestRuntimeVersion> {

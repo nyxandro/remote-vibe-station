@@ -32,6 +32,7 @@ describe("RuntimeUpdateService", () => {
     const runCommand = jest.fn().mockResolvedValue(undefined);
     const service = new RuntimeUpdateService({
       runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
       now: () => Date.parse("2026-05-03T12:00:00.000Z"),
       fetchLatestVersion: jest.fn().mockResolvedValue({ version: "1.2.3", imageTag: "v1.2.3", commitSha: "newsha", releaseNotes: "- Fixed updates" }),
       runCommand
@@ -48,10 +49,54 @@ describe("RuntimeUpdateService", () => {
     expect(env).toContain("RVS_RUNTIME_COMMIT_SHA=newsha");
     expect(env).toContain("RVS_BACKEND_IMAGE=ghcr.io/nyxandro/remote-vibe-station-backend:v1.2.3");
     expect(fs.existsSync(path.join(runtimeDir, ".env.previous"))).toBe(true);
-    expect(runCommand).toHaveBeenNthCalledWith(1, "docker", expect.arrayContaining(["compose", "pull"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["miniapp", "bot", "opencode", "cliproxy", "proxy"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["backend"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(1, "docker", expect.arrayContaining(["compose", "--project-directory", "/opt/remote-vibe-station-runtime", "pull"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime", "miniapp", "bot", "opencode", "cliproxy", "proxy"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime", "backend"]), runtimeDir);
     expect(JSON.parse(fs.readFileSync(path.join(runtimeDir, "runtime-update-state.json"), "utf-8"))).toMatchObject({ status: "restarting", targetVersion: "1.2.3" });
+  });
+
+  test("uses host project directory for compose relative mounts", async () => {
+    /* Docker daemon resolves bind-mount sources on the host, so compose must not use /runtime-config as project dir. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-host-dir-"));
+    const runCommand = jest.fn().mockResolvedValue(undefined);
+    writeRuntimeEnv(runtimeDir);
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "1.2.3", imageTag: "v1.2.3", commitSha: "newsha" }),
+      runCommand
+    });
+
+    await service.updateToLatest();
+
+    const composeArgs = runCommand.mock.calls.map(([, args]) => args as string[]);
+    expect(composeArgs).toEqual(expect.arrayContaining([
+      expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime"])
+    ]));
+    expect(composeArgs[0]).toEqual(expect.arrayContaining(["--env-file", path.join(runtimeDir, ".env"), "-f", path.join(runtimeDir, "docker-compose.yml")]));
+  });
+
+  test("resolves host config directory from linux mountinfo", async () => {
+    /* Bind mounts store the host subpath in the mountinfo root field, not in the filesystem source field. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-mountinfo-"));
+    const mountInfoPath = path.join(runtimeDir, "mountinfo");
+    fs.writeFileSync(
+      mountInfoPath,
+      `708 618 8:1 /opt/remote-vibe-station-runtime ${runtimeDir} rw,relatime - ext4 /dev/sda1 rw,discard,errors=remount-ro\n`,
+      "utf-8"
+    );
+    writeRuntimeEnv(runtimeDir);
+    const runCommand = jest.fn().mockResolvedValue(undefined);
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      mountInfoPath: () => mountInfoPath,
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "1.2.3", imageTag: "v1.2.3", commitSha: "newsha" }),
+      runCommand
+    });
+
+    await service.updateToLatest();
+
+    expect(runCommand).toHaveBeenNthCalledWith(1, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime"]), runtimeDir);
   });
 
   test("recovers update state as completed after backend restart", async () => {
@@ -81,6 +126,7 @@ describe("RuntimeUpdateService", () => {
     const runCommand = jest.fn().mockResolvedValue(undefined);
     const service = new RuntimeUpdateService({
       runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => runtimeDir,
       fetchLatestVersion: jest.fn(),
       runCommand
     });
