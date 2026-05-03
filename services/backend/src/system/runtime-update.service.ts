@@ -14,13 +14,12 @@ import { spawn } from "node:child_process";
 
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { GithubAppService } from "../github/github-app.service";
+import { fetchLatestRuntimeVersion, LatestRuntimeVersion } from "./runtime-github-release";
 
 const RUNTIME_ENV_FILE = ".env";
 const RUNTIME_PREVIOUS_ENV_FILE = ".env.previous";
 const RUNTIME_UPDATE_STATE_FILE = "runtime-update-state.json";
 const PROC_SELF_MOUNTINFO_FILE = "/proc/self/mountinfo";
-const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/releases/latest";
-const GITHUB_MASTER_REF_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/commits/master";
 const RVS_IMAGE_PREFIX = "ghcr.io/nyxandro/remote-vibe-station";
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const BACKEND_SERVICE = "backend";
@@ -69,13 +68,6 @@ export type RuntimeUpdateResult = {
   current: RuntimeVersionSnapshot;
 };
 
-type LatestRuntimeVersion = {
-  version?: string;
-  imageTag?: string;
-  commitSha?: string | null;
-  releaseNotes?: string | null;
-};
-
 type RuntimeUpdateDeps = {
   runtimeConfigDir: () => string;
   runtimeHostConfigDir: () => string;
@@ -98,7 +90,7 @@ export class RuntimeUpdateService {
       runtimeHostConfigDir: deps?.runtimeHostConfigDir ?? (() => this.resolveRuntimeHostConfigDir(this.deps.runtimeConfigDir())),
       mountInfoPath: deps?.mountInfoPath ?? (() => PROC_SELF_MOUNTINFO_FILE),
       now: deps?.now ?? (() => Date.now()),
-      fetchLatestVersion: deps?.fetchLatestVersion ?? (() => this.fetchLatestVersion()),
+      fetchLatestVersion: deps?.fetchLatestVersion ?? (() => fetchLatestRuntimeVersion(this.githubApp)),
       runCommand: deps?.runCommand ?? ((command, args, cwd) => this.runCommand(command, args, cwd))
     };
   }
@@ -364,31 +356,6 @@ export class RuntimeUpdateService {
     return value.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)));
   }
 
-  private async fetchLatestVersion(): Promise<LatestRuntimeVersion> {
-    /* GitHub releases provide human-readable versions; master commit is only a fallback for commit metadata. */
-    const response = await fetch(GITHUB_LATEST_RELEASE_URL, { headers: this.buildGithubHeaders() });
-    if (!response.ok) {
-      throw new Error(`APP_RUNTIME_RELEASE_CHECK_FAILED: GitHub latest release request failed with HTTP ${response.status}. Retry later.`);
-    }
-    const payload = (await response.json()) as { tag_name?: string; target_commitish?: string; body?: string | null };
-    const imageTag = typeof payload.tag_name === "string" ? payload.tag_name.trim() : "";
-    const version = imageTag.replace(/^v/, "");
-    const commitSha = typeof payload.target_commitish === "string" && payload.target_commitish.trim().length > 0
-      ? payload.target_commitish.trim()
-      : await this.fetchMasterCommitSha();
-    return { version, imageTag, commitSha, releaseNotes: payload.body ?? null };
-  }
-
-  private async fetchMasterCommitSha(): Promise<string | null> {
-    /* Commit SHA is useful for diagnostics but must not block release-based updates. */
-    const response = await fetch(GITHUB_MASTER_REF_URL, { headers: this.buildGithubHeaders() });
-    if (!response.ok) {
-      return null;
-    }
-    const payload = (await response.json()) as { sha?: string };
-    return typeof payload.sha === "string" && payload.sha.trim().length > 0 ? payload.sha.trim() : null;
-  }
-
   private readUpdateState(): RuntimeUpdateState {
     /* State is persisted next to .env so a backend restart can resume the operator-facing status. */
     const statePath = path.join(this.deps.runtimeConfigDir(), RUNTIME_UPDATE_STATE_FILE);
@@ -445,17 +412,6 @@ export class RuntimeUpdateService {
 
   private isoNow(): string {
     return new Date(this.deps.now()).toISOString();
-  }
-
-  private buildGithubHeaders(): Record<string, string> {
-    /* Saved global GitHub PAT keeps runtime release checks stable under API rate limits. */
-    const token = this.githubApp?.getStoredToken()?.trim();
-    return token
-      ? {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`
-        }
-      : { Accept: "application/vnd.github+json" };
   }
 
   private async runCommand(command: string, args: string[], cwd: string): Promise<void> {

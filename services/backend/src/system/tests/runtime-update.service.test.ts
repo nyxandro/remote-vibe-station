@@ -55,6 +55,36 @@ describe("RuntimeUpdateService", () => {
     expect(JSON.parse(fs.readFileSync(path.join(runtimeDir, "runtime-update-state.json"), "utf-8"))).toMatchObject({ status: "restarting", targetVersion: "1.2.3" });
   });
 
+  test("uses saved GitHub token for release checks", async () => {
+    /* Authenticated GitHub API calls avoid anonymous rate limits during runtime update checks. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-github-token-"));
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ tag_name: "v1.2.3", target_commitish: "newsha", body: "Release notes" })
+    } as Response);
+    writeRuntimeEnv(runtimeDir);
+    const service = new RuntimeUpdateService({ runtimeConfigDir: () => runtimeDir });
+    (service as unknown as { githubApp: { getStoredToken: () => string } }).githubApp = { getStoredToken: () => "github_pat_example123" };
+
+    await service.checkLatestVersion();
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/releases/latest"), {
+      headers: expect.objectContaining({ Authorization: "Bearer github_pat_example123" })
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("explains GitHub rate limits when no token is saved", async () => {
+    /* Operators need an actionable message because unauthenticated GitHub checks can hit shared IP limits. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-github-rate-limit-"));
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValueOnce({ ok: false, status: 403 } as Response);
+    writeRuntimeEnv(runtimeDir);
+    const service = new RuntimeUpdateService({ runtimeConfigDir: () => runtimeDir });
+
+    await expect(service.checkLatestVersion()).rejects.toThrow("APP_RUNTIME_GITHUB_TOKEN_REQUIRED");
+    fetchMock.mockRestore();
+  });
+
   test("uses host project directory for compose relative mounts", async () => {
     /* Docker daemon resolves bind-mount sources on the host, so compose must not use /runtime-config as project dir. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-host-dir-"));
