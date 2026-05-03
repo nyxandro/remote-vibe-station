@@ -38,7 +38,7 @@ const buildInput = (overrides: Partial<HookInput> = {}): HookInput => ({
   loadGithubAuthStatus: vi.fn().mockResolvedValue(undefined),
   loadServerMetrics: vi.fn().mockResolvedValue(undefined),
   loadRuntimeServices: vi.fn().mockResolvedValue(undefined),
-  loadRuntimeVersion: vi.fn().mockResolvedValue(undefined),
+  checkRuntimeVersion: vi.fn().mockResolvedValue(undefined),
   loadProviderOverview: vi.fn().mockResolvedValue(undefined),
   loadProxySettings: vi.fn().mockResolvedValue(undefined),
   loadCliproxyAccounts: vi.fn().mockResolvedValue(undefined),
@@ -137,6 +137,7 @@ describe("useReactiveWorkspaceSync", () => {
     expect(input.loadGithubAuthStatus).toHaveBeenCalledTimes(1);
     expect(input.loadServerMetrics).toHaveBeenCalledTimes(1);
     expect(input.loadRuntimeServices).toHaveBeenCalledTimes(1);
+    expect(input.checkRuntimeVersion).toHaveBeenCalledTimes(1);
     expect(input.loadVoiceControlSettings).toHaveBeenCalledTimes(1);
   });
 

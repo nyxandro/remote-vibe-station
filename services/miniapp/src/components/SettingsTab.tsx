@@ -2,7 +2,7 @@
  * @fileoverview Settings accordion with OpenCode rules/config editors.
  *
  * Exports:
- * - SettingsTab (L41) - Renders sectioned settings UI and embedded file editor.
+ * - SettingsTab - Renders sectioned settings UI and embedded file editor.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +23,7 @@ import {
 } from "../types";
 import { inferTextEditorLanguage } from "../utils/text-editor-language";
 import { SettingsRuntimeDashboard } from "./SettingsRuntimeDashboard";
-import { RuntimeVersionSettingsCard } from "./RuntimeVersionSettingsCard";
+import { RuntimeVersionSettingsAccordion } from "./RuntimeVersionSettingsAccordion";
 import { ThemeMode } from "../utils/theme";
 import { GitHubAuthSettingsSection } from "./GitHubAuthSettingsSection";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
@@ -32,6 +32,7 @@ import { SettingsProjectDangerZone } from "./SettingsProjectDangerZone";
 import { SettingsEditorModal } from "./SettingsEditorModal";
 import { ThemeModeToggle } from "./ThemeModeToggle";
 import { VoiceControlSettingsSection } from "./VoiceControlSettingsSection";
+import { AgentRulesSettingsAccordion } from "./AgentRulesSettingsAccordion";
 
 type ActiveFile = {
   kind: OpenCodeSettingsKind;
@@ -296,65 +297,30 @@ export const SettingsTab = (props: Props) => {
         />
       ) : null}
 
-      {props.runtimeVersion ? (
-        <RuntimeVersionSettingsCard
-          snapshot={props.runtimeVersion.snapshot}
-          isLoading={props.runtimeVersion.isLoading}
-          isChecking={props.runtimeVersion.isChecking}
-          isUpdating={props.runtimeVersion.isUpdating}
-          isRollingBack={props.runtimeVersion.isRollingBack}
-          lastResult={props.runtimeVersion.lastResult}
-          onLoad={props.onReloadRuntimeVersion ?? (() => {})}
-          onCheck={props.onCheckRuntimeVersion ?? (() => {})}
-          onUpdate={props.onUpdateRuntime ?? (() => {})}
-          onRollback={props.onRollbackRuntime ?? (() => {})}
-        />
-      ) : null}
+      <RuntimeVersionSettingsAccordion
+        runtimeVersion={props.runtimeVersion}
+        onReloadRuntimeVersion={props.onReloadRuntimeVersion}
+        onCheckRuntimeVersion={props.onCheckRuntimeVersion}
+        onUpdateRuntime={props.onUpdateRuntime}
+        onRollbackRuntime={props.onRollbackRuntime}
+      />
 
-      <details className="settings-accordion-item" open>
-        <summary>1. Agent rules</summary>
-        <div className="settings-accordion-body">
-          {/* Show file entry only when AGENTS.md exists to avoid confusing empty placeholders. */}
-          {props.overview?.globalRule.exists ? (
-            <button className="btn outline" onClick={() => props.onOpenFile("globalRule")} type="button">
-              Global AGENTS.md
-            </button>
-          ) : null}
-          {!props.overview?.globalRule.exists ? (
-            <button className="btn" onClick={() => props.onCreateFile("globalRule")} type="button">
-              Create Global AGENTS.md
-            </button>
-          ) : null}
-
-          {props.activeId ? (
-            <>
-              {/* Keep project rule entry hidden until file is created in selected project. */}
-              {props.overview?.projectRule?.exists ? (
-                <button className="btn outline" onClick={() => props.onOpenFile("projectRule")} type="button">
-                  Project AGENTS.md
-                </button>
-              ) : null}
-              {!props.overview?.projectRule?.exists ? (
-                <button className="btn" onClick={() => props.onCreateFile("projectRule")} type="button">
-                  Create Project AGENTS.md
-                </button>
-              ) : null}
-            </>
-          ) : (
-            <div className="placeholder">Select project for local AGENTS.md.</div>
-          )}
-        </div>
-      </details>
+      <AgentRulesSettingsAccordion
+        activeId={props.activeId}
+        overview={props.overview}
+        onOpenFile={props.onOpenFile}
+        onCreateFile={props.onCreateFile}
+      />
 
       {renderListSection({
-        title: "2. Agents",
+        title: "3. Agents",
         kind: "agent",
         items: props.overview?.agents ?? [],
         emptyText: "Agents folder is empty. Create a new .md file."
       })}
 
       <details className="settings-accordion-item">
-        <summary>3. OpenCode config</summary>
+        <summary>4. OpenCode config</summary>
         <div className="settings-accordion-body">
           <button className="btn outline" onClick={() => props.onOpenFile("config")} type="button">
             OpenCode config
@@ -410,14 +376,14 @@ export const SettingsTab = (props: Props) => {
       </details>
 
       {renderListSection({
-        title: "4. Commands",
+        title: "5. Commands",
         kind: "command",
         items: props.overview?.commands ?? [],
         emptyText: "Global commands folder is empty. Create a new .md file."
       })}
 
       <details className="settings-accordion-item">
-        <summary>5. Project settings</summary>
+        <summary>6. Project settings</summary>
         <div className="settings-accordion-body">
           {props.activeId ? (
             <>
@@ -498,7 +464,7 @@ export const SettingsTab = (props: Props) => {
       />
 
       <details className="settings-accordion-item">
-        <summary>9. General settings</summary>
+        <summary>10. General settings</summary>
         <div className="settings-accordion-body">
           <ThemeModeToggle themeMode={props.themeMode} onChangeTheme={props.onChangeTheme} />
         </div>

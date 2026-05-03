@@ -22,7 +22,7 @@ type Props = {
 export const GitHubAuthSettingsSection = (props: Props) => {
   return (
     <details className="settings-accordion-item">
-      <summary>7. GitHub для git</summary>
+      <summary>8. GitHub для git</summary>
       <div className="settings-accordion-body">
         <div className="project-create-note">
           Этот блок хранит один глобальный GitHub token для `git` в backend и OpenCode.

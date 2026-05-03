@@ -33,7 +33,7 @@ describe("RuntimeUpdateService", () => {
     const service = new RuntimeUpdateService({
       runtimeConfigDir: () => runtimeDir,
       now: () => Date.parse("2026-05-03T12:00:00.000Z"),
-      fetchLatestRelease: jest.fn().mockResolvedValue({ tag_name: "v1.2.3", target_commitish: "newsha" }),
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "sha-new", commitSha: "newsha" }),
       runCommand
     });
 
@@ -41,11 +41,11 @@ describe("RuntimeUpdateService", () => {
     const result = await service.updateToLatest();
     const env = fs.readFileSync(path.join(runtimeDir, ".env"), "utf-8");
 
-    expect(checked).toMatchObject({ currentVersion: "sha-old", latestVersion: "v1.2.3", updateAvailable: true });
+    expect(checked).toMatchObject({ currentVersion: "sha-old", latestVersion: "sha-new", updateAvailable: true });
     expect(result.applied).toBe(true);
-    expect(env).toContain("RVS_RUNTIME_VERSION=v1.2.3");
+    expect(env).toContain("RVS_RUNTIME_VERSION=sha-new");
     expect(env).toContain("RVS_RUNTIME_COMMIT_SHA=newsha");
-    expect(env).toContain("RVS_BACKEND_IMAGE=ghcr.io/nyxandro/remote-vibe-station-backend:v1.2.3");
+    expect(env).toContain("RVS_BACKEND_IMAGE=ghcr.io/nyxandro/remote-vibe-station-backend:sha-new");
     expect(fs.existsSync(path.join(runtimeDir, ".env.previous"))).toBe(true);
     expect(runCommand).toHaveBeenNthCalledWith(1, "docker", expect.arrayContaining(["compose", "pull"]), runtimeDir);
     expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["compose", "up"]), runtimeDir);
@@ -59,7 +59,7 @@ describe("RuntimeUpdateService", () => {
     const runCommand = jest.fn().mockResolvedValue(undefined);
     const service = new RuntimeUpdateService({
       runtimeConfigDir: () => runtimeDir,
-      fetchLatestRelease: jest.fn(),
+      fetchLatestVersion: jest.fn(),
       runCommand
     });
 

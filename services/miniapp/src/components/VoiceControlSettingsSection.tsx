@@ -25,7 +25,7 @@ type Props = {
 export const VoiceControlSettingsSection = (props: Props) => {
   return (
     <details className="settings-accordion-item">
-      <summary>6. Голосовое управление</summary>
+      <summary>7. Голосовое управление</summary>
       <div className="settings-accordion-body">
         {props.voiceControl ? (
           <>

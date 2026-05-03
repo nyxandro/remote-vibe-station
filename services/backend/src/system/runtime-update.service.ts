@@ -15,7 +15,7 @@ import { Injectable, Optional } from "@nestjs/common";
 
 const RUNTIME_ENV_FILE = ".env";
 const RUNTIME_PREVIOUS_ENV_FILE = ".env.previous";
-const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/releases/latest";
+const GITHUB_MASTER_REF_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/commits/master";
 const RVS_IMAGE_PREFIX = "ghcr.io/nyxandro/remote-vibe-station";
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -41,15 +41,15 @@ export type RuntimeUpdateResult = {
   current: RuntimeVersionSnapshot;
 };
 
-type LatestRelease = {
-  tag_name?: string;
-  target_commitish?: string;
+type LatestRuntimeVersion = {
+  version?: string;
+  commitSha?: string | null;
 };
 
 type RuntimeUpdateDeps = {
   runtimeConfigDir: () => string;
   now: () => number;
-  fetchLatestRelease: () => Promise<LatestRelease>;
+  fetchLatestVersion: () => Promise<LatestRuntimeVersion>;
   runCommand: (command: string, args: string[], cwd: string) => Promise<void>;
 };
 
@@ -63,7 +63,7 @@ export class RuntimeUpdateService {
     this.deps = {
       runtimeConfigDir: deps?.runtimeConfigDir ?? (() => this.requireRuntimeConfigDir()),
       now: deps?.now ?? (() => Date.now()),
-      fetchLatestRelease: deps?.fetchLatestRelease ?? (() => this.fetchLatestRelease()),
+      fetchLatestVersion: deps?.fetchLatestVersion ?? (() => this.fetchLatestVersion()),
       runCommand: deps?.runCommand ?? ((command, args, cwd) => this.runCommand(command, args, cwd))
     };
   }
@@ -75,14 +75,14 @@ export class RuntimeUpdateService {
 
   public async checkLatestVersion(): Promise<RuntimeVersionSnapshot> {
     /* GitHub release check is explicit because network errors should not block opening Settings. */
-    const release = await this.deps.fetchLatestRelease();
-    const version = typeof release.tag_name === "string" ? release.tag_name.trim() : "";
+    const release = await this.deps.fetchLatestVersion();
+    const version = typeof release.version === "string" ? release.version.trim() : "";
     if (!version) {
-      throw new Error("APP_RUNTIME_LATEST_VERSION_INVALID: GitHub latest release response does not include tag_name. Retry later or update by explicit image tag.");
+      throw new Error("APP_RUNTIME_LATEST_VERSION_INVALID: GitHub master commit response does not include a runtime image tag. Retry later or update by explicit image tag.");
     }
 
-    const commitSha = typeof release.target_commitish === "string" && release.target_commitish.trim().length > 0
-      ? release.target_commitish.trim()
+    const commitSha = typeof release.commitSha === "string" && release.commitSha.trim().length > 0
+      ? release.commitSha.trim()
       : null;
     this.latestCache = { version, commitSha, checkedAt: new Date(this.deps.now()).toISOString() };
     return this.getVersionSnapshot();
@@ -210,13 +210,15 @@ export class RuntimeUpdateService {
     return value;
   }
 
-  private async fetchLatestRelease(): Promise<LatestRelease> {
-    /* Public GitHub release metadata drives Mini App update checks. */
-    const response = await fetch(GITHUB_LATEST_RELEASE_URL, { headers: { Accept: "application/vnd.github+json" } });
+  private async fetchLatestVersion(): Promise<LatestRuntimeVersion> {
+    /* Runtime images are published as sha-<master commit>, so master commit metadata is the source of truth. */
+    const response = await fetch(GITHUB_MASTER_REF_URL, { headers: { Accept: "application/vnd.github+json" } });
     if (!response.ok) {
-      throw new Error(`APP_RUNTIME_RELEASE_CHECK_FAILED: GitHub latest release request failed with HTTP ${response.status}. Retry later.`);
+      throw new Error(`APP_RUNTIME_RELEASE_CHECK_FAILED: GitHub master commit request failed with HTTP ${response.status}. Retry later.`);
     }
-    return (await response.json()) as LatestRelease;
+    const payload = (await response.json()) as { sha?: string };
+    const commitSha = typeof payload.sha === "string" && payload.sha.trim().length > 0 ? payload.sha.trim() : "";
+    return { version: commitSha ? `sha-${commitSha}` : "", commitSha };
   }
 
   private async runCommand(command: string, args: string[], cwd: string): Promise<void> {

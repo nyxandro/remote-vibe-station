@@ -241,7 +241,7 @@ export const App = () => {
         loadGithubAuthStatus(),
         loadServerMetrics(),
         loadRuntimeServices(),
-        loadRuntimeVersion()
+        checkRuntimeVersion()
       ];
 
     if (canControlTelegramStream) {
@@ -288,7 +288,7 @@ export const App = () => {
     loadGithubAuthStatus,
     loadServerMetrics,
     loadRuntimeServices,
-    loadRuntimeVersion,
+    checkRuntimeVersion,
     loadProviderOverview,
     loadProxySettings,
     loadCliproxyAccounts

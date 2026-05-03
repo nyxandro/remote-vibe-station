@@ -34,7 +34,7 @@ export const ServerParametersAccordion = (props: Props) => {
 
   return (
     <details className="settings-accordion-item">
-      <summary>8. Параметры сервера</summary>
+      <summary>9. Параметры сервера</summary>
       <div className="settings-accordion-body">
         <div className="settings-actions-grid">
           <button className="btn outline" onClick={props.onReload} disabled={props.isLoading} type="button">

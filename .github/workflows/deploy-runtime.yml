@@ -1,11 +1,6 @@
 name: Deploy Runtime
 
 on:
-  workflow_run:
-    workflows:
-      - Build And Publish Images
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       image_tag:
@@ -23,16 +18,6 @@ concurrency:
 
 jobs:
   deploy:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'master'
-      ) ||
-      (
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main'
-      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -74,7 +59,7 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           DEPLOY_IMAGE_TAG: ${{ inputs.image_tag }}
           DEPLOY_RUNTIME_VERSION: ${{ inputs.runtime_version }}
-          DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          DEPLOY_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           if [ -z "$DEPLOY_IMAGE_TAG" ]; then

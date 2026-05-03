@@ -40,7 +40,7 @@ describe("SettingsTab", () => {
     );
 
     expect(screen.queryByText("Settings")).toBeNull();
-    fireEvent.click(screen.getByText("3. OpenCode config"));
+    fireEvent.click(screen.getByText("4. OpenCode config"));
     fireEvent.click(screen.getByRole("button", { name: "Refresh project list" }));
     expect(onRefreshProjects).toHaveBeenCalledTimes(1);
   });
@@ -106,7 +106,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("4. Commands"));
+    fireEvent.click(screen.getByText("5. Commands"));
     fireEvent.click(screen.getByRole("button", { name: "deploy.md" }));
     expect(onOpenFile).toHaveBeenCalledWith("command", "deploy.md");
 
@@ -152,7 +152,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("5. Project settings"));
+    fireEvent.click(screen.getByText("6. Project settings"));
     fireEvent.click(screen.getByRole("button", { name: ".env" }));
     expect(onOpenFile).toHaveBeenCalledWith("projectEnvFile", ".env");
 
@@ -200,7 +200,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("5. Project settings"));
+    fireEvent.click(screen.getByText("6. Project settings"));
     fireEvent.change(screen.getByLabelText("Run mode"), { target: { value: "static" } });
     fireEvent.change(screen.getByLabelText("Static root path"), { target: { value: "public" } });
     fireEvent.click(screen.getByRole("button", { name: "Save deploy settings" }));
@@ -249,7 +249,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("5. Project settings"));
+    fireEvent.click(screen.getByText("6. Project settings"));
     expect(screen.getByLabelText("Docker service name")).toBeTruthy();
     expect(screen.getByLabelText("Docker internal port")).toBeTruthy();
     expect(screen.getByLabelText("Static root path")).toBeTruthy();
@@ -303,7 +303,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("5. Project settings"));
+    fireEvent.click(screen.getByText("6. Project settings"));
     fireEvent.change(screen.getByLabelText("Run mode"), { target: { value: "static" } });
     expect(screen.getByText("Static mode requires static root path.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Save deploy settings" }) as HTMLButtonElement).disabled).toBe(true);
@@ -347,7 +347,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("5. Project settings"));
+    fireEvent.click(screen.getByText("6. Project settings"));
     fireEvent.change(screen.getByLabelText("Docker internal port"), { target: { value: "70000" } });
     expect(screen.getByText("Docker internal port must be an integer in range 1-65535.")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Save deploy settings" }) as HTMLButtonElement).disabled).toBe(true);
@@ -446,7 +446,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("1. Agent rules"));
+    fireEvent.click(screen.getByText("2. Agent rules"));
 
     expect(screen.queryByRole("button", { name: "Global AGENTS.md" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Project AGENTS.md" })).toBeNull();
@@ -532,7 +532,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("6. Голосовое управление"));
+    fireEvent.click(screen.getByText("7. Голосовое управление"));
     fireEvent.change(screen.getByPlaceholderText("Groq API key (gsk_...)"), {
       target: { value: "gsk_test_123" }
     });
@@ -579,7 +579,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("6. Голосовое управление"));
+    fireEvent.click(screen.getByText("7. Голосовое управление"));
     expect(screen.getByText("Сохраняем настройки...")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled).toBe(true);
   });
@@ -620,7 +620,7 @@ describe("SettingsTab", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("9. General settings"));
+    fireEvent.click(screen.getByText("10. General settings"));
     expect(screen.getByText("OpenCode: 1.2.3")).toBeTruthy();
     expect(screen.getByText("Latest: 1.2.4")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Update OpenCode" }));
@@ -685,8 +685,8 @@ describe("SettingsTab", () => {
     expect(onRestartRuntimeService).toHaveBeenCalledWith("opencode");
   });
 
-  it("renders runtime version controls and runs update/rollback actions", () => {
-    /* Settings should expose station-level runtime updates separately from OpenCode package updates. */
+  it("renders runtime version controls inside settings accordion and runs update/rollback actions", () => {
+    /* Runtime updates should behave like neighboring settings sections instead of floating above the accordion. */
     const onCheckRuntimeVersion = vi.fn();
     const onUpdateRuntime = vi.fn();
     const onRollbackRuntime = vi.fn();
@@ -737,8 +737,9 @@ describe("SettingsTab", () => {
       />
     );
 
-    expect(screen.getByText("Runtime updates")).toBeTruthy();
+    expect(screen.getByText("1. Runtime updates")).toBeTruthy();
     expect(screen.getByText("sha-old")).toBeTruthy();
+    expect(screen.getByText("v1.2.3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Check" }));
     fireEvent.click(screen.getByRole("button", { name: "Update runtime" }));
     fireEvent.click(screen.getByRole("button", { name: "Rollback" }));
