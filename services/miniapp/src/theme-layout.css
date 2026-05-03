@@ -148,21 +148,28 @@
   min-height: 40px;
 }
 
-/* Runtime updates are split into two horizontal rows so long sha tags remain readable on phones. */
+/* Runtime updates expose only user-facing version state; technical paths stay out of the main UI. */
 .runtime-version-panel {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.runtime-version-row {
+.runtime-version-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+  gap: 10px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: #fcfcff;
+}
+
+.runtime-version-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .runtime-version-label {
@@ -178,27 +185,32 @@
   overflow-wrap: anywhere;
 }
 
-.runtime-version-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 11px;
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-
 .runtime-version-actions {
   align-items: center;
 }
 
-@media (min-width: 720px) {
-  .runtime-version-row {
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    align-items: center;
-  }
+.runtime-version-status {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
 
-  .runtime-version-row-actions {
-    grid-template-columns: minmax(0, 1fr) auto;
+.runtime-version-status.ok {
+  color: #065f46;
+  background: #ecfdf5;
+}
+
+.runtime-version-status.update {
+  color: #0b2a6d;
+  background: #dbeafe;
+}
+
+@media (min-width: 720px) {
+  .runtime-version-summary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    align-items: end;
   }
 }
 
@@ -724,7 +736,7 @@ html[data-theme="dark"] .input,
 html[data-theme="dark"] .files-list,
 html[data-theme="dark"] .status-card,
 html[data-theme="dark"] .server-metrics-card,
-html[data-theme="dark"] .runtime-version-row,
+html[data-theme="dark"] .runtime-version-summary,
 html[data-theme="dark"] .placeholder,
 html[data-theme="dark"] .codebox,
 html[data-theme="dark"] .project-card,
@@ -739,6 +751,16 @@ html[data-theme="dark"] .settings-editor-modal {
 
 html[data-theme="dark"] .runtime-version-value {
   color: #eef5ff;
+}
+
+html[data-theme="dark"] .runtime-version-status.ok {
+  color: #9ff0ce;
+  background: #113128;
+}
+
+html[data-theme="dark"] .runtime-version-status.update {
+  color: #bfdbfe;
+  background: #172554;
 }
 
 html[data-theme="dark"] .settings-editor-modal-backdrop {
