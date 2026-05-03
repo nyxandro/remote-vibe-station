@@ -16,12 +16,14 @@ import {
   ProjectRuntimeSnapshot,
   OpenCodeVersionStatus,
   RuntimeServicesSnapshot,
+  RuntimeVersionSnapshot,
   SystemMetricsSnapshot,
   SettingsFileSummary,
   VoiceControlSettings
 } from "../types";
 import { inferTextEditorLanguage } from "../utils/text-editor-language";
 import { SettingsRuntimeDashboard } from "./SettingsRuntimeDashboard";
+import { RuntimeVersionSettingsCard } from "./RuntimeVersionSettingsCard";
 import { ThemeMode } from "../utils/theme";
 import { GitHubAuthSettingsSection } from "./GitHubAuthSettingsSection";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
@@ -96,6 +98,14 @@ type Props = {
   serverMetrics?: { snapshot: SystemMetricsSnapshot | null; isLoading: boolean };
   onReloadServerMetrics?: () => void;
   runtimeServices?: { snapshot: RuntimeServicesSnapshot | null; isLoading: boolean; restartingByService: Partial<Record<ManagedRuntimeServiceId, boolean>> };
+  runtimeVersion?: {
+    snapshot: RuntimeVersionSnapshot | null;
+    isLoading: boolean;
+    isChecking: boolean;
+    isUpdating: boolean;
+    isRollingBack: boolean;
+    lastResult: "idle" | "updated" | "rolled-back" | "noop";
+  };
   proxyState?: {
     snapshot: import("../types").ProxySettingsSnapshot | null;
     accounts: CliproxyAccountState | null;
@@ -103,6 +113,10 @@ type Props = {
   };
   onReloadRuntimeServices?: () => void;
   onRestartRuntimeService?: (serviceId: ManagedRuntimeServiceId) => void;
+  onReloadRuntimeVersion?: () => void;
+  onCheckRuntimeVersion?: () => void;
+  onUpdateRuntime?: () => void;
+  onRollbackRuntime?: () => void;
   onApplyProxyRuntime?: () => void;
 };
 
@@ -279,6 +293,21 @@ export const SettingsTab = (props: Props) => {
           onSyncProjects={props.onSyncProjects}
           onRestartOpenCode={props.onRestartOpenCode}
           onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
+        />
+      ) : null}
+
+      {props.runtimeVersion ? (
+        <RuntimeVersionSettingsCard
+          snapshot={props.runtimeVersion.snapshot}
+          isLoading={props.runtimeVersion.isLoading}
+          isChecking={props.runtimeVersion.isChecking}
+          isUpdating={props.runtimeVersion.isUpdating}
+          isRollingBack={props.runtimeVersion.isRollingBack}
+          lastResult={props.runtimeVersion.lastResult}
+          onLoad={props.onReloadRuntimeVersion ?? (() => {})}
+          onCheck={props.onCheckRuntimeVersion ?? (() => {})}
+          onUpdate={props.onUpdateRuntime ?? (() => {})}
+          onRollback={props.onRollbackRuntime ?? (() => {})}
         />
       ) : null}
 

@@ -27,6 +27,7 @@ import {
   ProxySettingsInput,
   ProxySettingsSnapshot,
   RuntimeServicesSnapshot,
+  RuntimeVersionSnapshot,
   SystemMetricsSnapshot,
   ProjectGitSummary,
   ProjectRecord,
@@ -151,8 +152,20 @@ type Props = {
     isLoading: boolean;
     restartingByService: Partial<Record<ManagedRuntimeServiceId, boolean>>;
   };
+  runtimeVersion?: {
+    snapshot: RuntimeVersionSnapshot | null;
+    isLoading: boolean;
+    isChecking: boolean;
+    isUpdating: boolean;
+    isRollingBack: boolean;
+    lastResult: "idle" | "updated" | "rolled-back" | "noop";
+  };
   onReloadRuntimeServices?: () => void;
   onRestartRuntimeService?: (serviceId: ManagedRuntimeServiceId) => void;
+  onReloadRuntimeVersion?: () => void;
+  onCheckRuntimeVersion?: () => void;
+  onUpdateRuntime?: () => void;
+  onRollbackRuntime?: () => void;
   onReloadServerMetrics?: () => void;
   onUpdateOpenCodeVersion: () => void;
   iconForEntry: (name: string, kind: "file" | "dir") => JSX.Element;
@@ -370,6 +383,7 @@ export const WorkspaceTabsContent = (props: Props) => {
        onUpdateOpenCodeVersion={props.onUpdateOpenCodeVersion}
        serverMetrics={props.serverMetrics}
        runtimeServices={props.runtimeServices}
+        runtimeVersion={props.runtimeVersion}
        proxyState={props.proxyState.snapshot ? {
          snapshot: props.proxyState.snapshot,
          accounts: props.proxyState.cliproxyAccounts,
@@ -382,6 +396,10 @@ export const WorkspaceTabsContent = (props: Props) => {
        onReloadServerMetrics={props.onReloadServerMetrics}
        onReloadRuntimeServices={props.onReloadRuntimeServices}
        onRestartRuntimeService={props.onRestartRuntimeService}
+        onReloadRuntimeVersion={props.onReloadRuntimeVersion}
+        onCheckRuntimeVersion={props.onCheckRuntimeVersion}
+        onUpdateRuntime={props.onUpdateRuntime}
+        onRollbackRuntime={props.onRollbackRuntime}
        onApplyProxyRuntime={props.proxyState.onApply}
      />
    );

@@ -136,6 +136,8 @@ services:
   opencode:
     image: ${RVS_OPENCODE_IMAGE:?RVS_OPENCODE_IMAGE must be set}
     working_dir: ${PROJECTS_ROOT:?PROJECTS_ROOT must be set}
+    privileged: true
+    pid: host
     environment:
       - BACKEND_URL=http://backend:3000
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN}
@@ -146,6 +148,7 @@ services:
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID}
       - HOST_ROOT_PATH=/hostfs
+      - RVS_HOST_COMMAND=rvs-host
       # Ask backend for short-lived GitHub App credentials so agent git auth stays global across projects.
       - GIT_CONFIG_COUNT=1
       - GIT_CONFIG_KEY_0=credential.https://github.com.helper

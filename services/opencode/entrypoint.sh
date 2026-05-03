@@ -48,15 +48,20 @@ if [ -f "$CONFIG_PATH" ]; then
   cp "$CONFIG_PATH" "$TMP_PATH"
 fi
 
-# Build provider config from live CLIProxy /v1/models to avoid manual model mapping maintenance.
-node /usr/local/bin/cliproxy-provider-config.js "$TMP_PATH"
+# Build provider config from live CLIProxy /v1/models when accounts are configured.
+# Fresh installs can start with an empty CLIProxy catalog; keep OpenCode up so the operator can add providers from Mini App.
+if ! node /usr/local/bin/cliproxy-provider-config.js "$TMP_PATH"; then
+  echo "APP_OPENCODE_PROVIDER_CONFIG_SKIPPED: CLIProxy model catalog is unavailable; continuing with existing OpenCode config." >&2
+fi
 
 # Sync default local plugins into the persisted config volume before OpenCode loads them.
 node /usr/local/bin/kanban-plugin-sync.js /usr/local/share/opencode/kanban-tools-plugin.ts
 node /usr/local/bin/telegram-media-plugin-sync.js /usr/local/share/opencode/telegram-media-tools-plugin.ts
 node /usr/local/bin/skills-bundle-sync.js /usr/local/share/opencode/skills
 
-mv "$TMP_PATH" "$CONFIG_PATH"
+if [ -f "$TMP_PATH" ]; then
+  mv "$TMP_PATH" "$CONFIG_PATH"
+fi
 
 # Continue with OpenCode server process.
 ensure_toolbox_link() {

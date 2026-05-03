@@ -1,52 +1,200 @@
-# Runtime Install (Image-Only)
+# Runtime Install
 
-Этот сценарий ставит и запускает стек без исходников проекта на сервере.
+Эта инструкция описывает установку Remote Vibe Station на сервер без копирования исходников проекта. На сервер попадает только runtime-директория с `.env`, Compose-файлами и инфраструктурными конфигами. Сервисы запускаются из заранее опубликованных Docker images.
 
-## Что делает скрипт
+## Что Получится
 
-- Устанавливает системные зависимости (`curl`, `ufw`, `fail2ban`, `openssl`, `jq`, `git`, `gh`)
-- Устанавливает Docker (если отсутствует)
-- Генерирует runtime-директорию с файлами:
-  - `docker-compose.yml`
-  - `docker-compose.vless.yml` (опциональный override)
-  - `.env`
-  - `infra/traefik/*`
-  - `infra/cliproxy/config.yaml`
-  - `infra/vless/xray.json` и `infra/vless/proxy.env` (опционально)
-- Генерирует все секреты автоматически:
-  - `OPENCODE_SERVER_PASSWORD`
-  - `CLIPROXY_MANAGEMENT_PASSWORD`
-  - `CLIPROXY_API_KEY`
-- Выполняет preflight перед запуском:
-  - DNS для `--domain` и `code.<domain>` резолвится
-  - домены указывают на текущий сервер
-  - порты `80/443` свободны
-  - сгенерированный `docker-compose.yml` валиден
-- Настраивает UFW:
-  - deny incoming / allow outgoing
-  - allow 22, 80, 443
-  - limit 22 (anti-bruteforce)
-- Настраивает `fail2ban` для `sshd`
-- Включает host-wide Docker log rotation (`json-file`, `10m`, `5` файлов)
-- Создает ежедневный maintenance timer, который чистит unused images, stopped containers, unused networks и build cache
-- Опционально авторизует GitHub CLI (`gh`) по токену
-- Поднимает стек через `docker compose`
-- Поднимает общий `opencode` toolbox-runtime с persistent volume `/toolbox` для shared CLI/install cache
+- Traefik принимает внешний HTTPS-трафик на `80/443` и выпускает Let's Encrypt сертификаты.
+- `backend`, `miniapp`, `bot`, `opencode` и `cliproxy` запускаются через Docker Compose.
+- OpenCode работает из image `RVS_OPENCODE_IMAGE` и хранит состояние в Docker volumes.
+- Проекты агентов лежат в host-директории `PROJECTS_ROOT`, по умолчанию `/srv/projects`.
+- OpenCode runtime запускается как доверенный admin-agent: у него есть Docker socket, `/hostfs`, host PID namespace и команда `rvs-host` для установки пакетов/настройки сервера без ручного SSH.
+- Telegram bot на production runtime по умолчанию стартует в webhook-режиме.
+- VLESS по умолчанию выключен: `docker-compose.vless.yml` создаётся как no-op override.
 
-По умолчанию весь runtime работает **напрямую без прокси**.
-VLESS включается только вручную отдельным override-файлом после настройки.
+## Требования
 
-## Быстрый запуск
+- Ubuntu/Debian-compatible сервер с root/sudo доступом.
+- Публичный домен, который указывает на сервер, или `--domain auto` для `sslip.io`.
+- Email для Let's Encrypt.
+- Telegram bot token из BotFather.
+- Telegram admin id.
+- Доступ сервера к Docker registry с опубликованными images.
 
-### Open-source one-liner (рекомендуется)
+По умолчанию installer использует images:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master/scripts/bootstrap-runtime.sh | sudo bash -s -- --bot-token "<TELEGRAM_BOT_TOKEN>" --admin-id "<TELEGRAM_ADMIN_ID>" --domain auto --tls-email "ops@example.com"
+```text
+ghcr.io/nyxandro/remote-vibe-station-backend:latest
+ghcr.io/nyxandro/remote-vibe-station-miniapp:latest
+ghcr.io/nyxandro/remote-vibe-station-bot:latest
+ghcr.io/nyxandro/remote-vibe-station-opencode:latest
+eceasy/cli-proxy-api:latest
 ```
 
-Скрипт сам скачает installer-assets во временную папку и запустит установку.
+Если GHCR images приватные, перед установкой нужен доступ к registry или последующий `docker login ghcr.io` на сервере.
 
-### Прямой запуск локального скрипта
+## Быстрая Установка
+
+Рекомендуемый способ: скачать bootstrap-скрипт напрямую из GitHub и передать параметры installer-а.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master/scripts/bootstrap-runtime.sh | sudo bash -s -- \
+  --bot-token "<TELEGRAM_BOT_TOKEN>" \
+  --admin-id "<TELEGRAM_ADMIN_ID>" \
+  --domain "example.com" \
+  --tls-email "ops@example.com"
+```
+
+Для тестового сервера без домена можно использовать auto-domain:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master/scripts/bootstrap-runtime.sh | sudo bash -s -- \
+  --bot-token "<TELEGRAM_BOT_TOKEN>" \
+  --admin-id "<TELEGRAM_ADMIN_ID>" \
+  --domain auto \
+  --tls-email "ops@example.com"
+```
+
+В режиме `--domain auto` installer определит публичный IPv4 и создаст домены вида:
+
+```text
+<ip>.sslip.io
+code.<ip>.sslip.io
+```
+
+## Что Делает Bootstrap
+
+`scripts/bootstrap-runtime.sh` не клонирует репозиторий. Он скачивает во временную папку только install-assets:
+
+- `scripts/install-runtime.sh`
+- `scripts/install-runtime-preflight.sh`
+- `scripts/runtime-installer-lib.sh`
+- `scripts/templates/runtime-docker-compose.yml`
+- `scripts/templates/runtime-docker-compose.vless.yml`
+- `scripts/templates/vless-proxy.env`
+- `scripts/templates/vless-xray.json`
+
+После этого bootstrap запускает `install-runtime.sh` с теми аргументами, которые вы передали.
+
+## Что Делает Installer
+
+`scripts/install-runtime.sh` выполняет полный image-only setup:
+
+- устанавливает базовые пакеты: `ca-certificates`, `curl`, `git`, `iproute2`, `jq`, `openssl`, `ufw`, `fail2ban`;
+- ставит GitHub CLI best-effort: если пакет `gh` недоступен в apt, runtime продолжает установку без host-level `gh auth`;
+- устанавливает Docker через официальный convenience script, если Docker отсутствует;
+- создаёт runtime-директорию, по умолчанию `/opt/remote-vibe-station-runtime`;
+- создаёт project root, по умолчанию `/srv/projects`;
+- генерирует `.env` со всеми runtime variables и секретами;
+- копирует Compose templates и infra configs;
+- создаёт Traefik dynamic middleware для OpenCode forward-auth и noindex headers;
+- создаёт CLIProxy config с сгенерированным API key;
+- включает Docker log rotation;
+- включает key-only SSH hardening, если на сервере уже есть authorized SSH keys;
+- настраивает UFW для `22`, `80`, `443`;
+- включает `fail2ban` для `sshd`;
+- создаёт systemd timer для безопасной Docker cleanup;
+- запускает `docker compose pull` и `docker compose up -d --remove-orphans`.
+
+Installer не пишет исходный код проекта на сервер.
+
+## Права Агента
+
+Runtime рассчитан на личный remote-dev сервер, где агенту доверяют администрирование окружения. Контейнер `opencode` может:
+
+- запускать Docker и Docker Compose через host Docker socket;
+- читать и менять host filesystem через `/hostfs`;
+- выполнять host-команды через `rvs-host <command>`;
+- использовать host SSH/GitHub CLI state для git/ssh операций;
+- сохранять установленные CLI, MCP tooling, Playwright browsers и caches в persistent volume `/toolbox`.
+
+Примеры:
+
+```bash
+rvs-host apt-get update
+rvs-host apt-get install -y imagemagick
+npx playwright install chromium
+```
+
+Такой режим намеренно даёт агенту широкие права, чтобы он мог сам доустанавливать инструменты и деплоить проекты на текущем сервере.
+
+## Сгенерированные Файлы
+
+Runtime-директория выглядит так:
+
+```text
+/opt/remote-vibe-station-runtime/
+├── .env
+├── docker-compose.yml
+├── docker-compose.vless.yml
+├── runtime-maintenance.sh
+└── infra/
+    ├── cliproxy/config.yaml
+    ├── traefik/traefik.yml
+    ├── traefik/acme.json
+    ├── traefik/dynamic/noindex.yml
+    ├── traefik/dynamic/opencode-auth.yml
+    └── vless/
+        ├── proxy.env
+        └── xray.json
+```
+
+Важные файлы:
+
+- `.env` - runtime secrets, domains, image refs and project paths.
+- `docker-compose.yml` - основной image-only Compose stack.
+- `docker-compose.vless.yml` - optional proxy override. На свежей установке это `services: {}`.
+- `infra/vless/proxy.env` - пустые proxy variables на свежей установке.
+- `infra/vless/xray.json` - disabled direct config на свежей установке.
+
+## Runtime Переменные
+
+Installer генерирует и записывает в `.env`:
+
+```text
+COMPOSE_PROJECT_NAME=remote-vibe-station
+TELEGRAM_BOT_TOKEN=<provided>
+ADMIN_IDS=<provided>
+PUBLIC_BASE_URL=https://<domain>
+PUBLIC_DOMAIN=<domain>
+OPENCODE_PUBLIC_BASE_URL=https://<opencode-domain>
+OPENCODE_PUBLIC_DOMAIN=<opencode-domain>
+PROJECTS_ROOT=/srv/projects
+RVS_RUNTIME_VERSION=<version-or-image-tag>
+RVS_RUNTIME_COMMIT_SHA=<source-commit-sha>
+BOT_BACKEND_AUTH_TOKEN=<generated>
+OPENCODE_SERVER_PASSWORD=<generated>
+CLIPROXY_API_KEY=<generated>
+CLIPROXY_MANAGEMENT_PASSWORD=<generated>
+RVS_BACKEND_IMAGE=<image>
+RVS_MINIAPP_IMAGE=<image>
+RVS_BOT_IMAGE=<image>
+RVS_OPENCODE_IMAGE=<image>
+RVS_CLIPROXY_IMAGE=<image>
+```
+
+Telegram transport mode не обязан быть в `.env`. Runtime Compose default:
+
+```text
+TELEGRAM_TRANSPORT_MODE=webhook
+```
+
+Если нужно временно перейти на polling, добавьте в `.env`:
+
+```text
+TELEGRAM_TRANSPORT_MODE=polling
+```
+
+Затем примените stack:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans bot
+```
+
+## Кастомные Images
+
+Любой image можно переопределить при установке:
 
 ```bash
 sudo ./scripts/install-runtime.sh \
@@ -54,124 +202,149 @@ sudo ./scripts/install-runtime.sh \
   --admin-id "<TELEGRAM_ADMIN_ID>" \
   --domain "example.com" \
   --tls-email "ops@example.com" \
-  --github-token "<GITHUB_TOKEN_OPTIONAL>"
+  --backend-image "ghcr.io/org/backend:tag" \
+  --miniapp-image "ghcr.io/org/miniapp:tag" \
+  --bot-image "ghcr.io/org/bot:tag" \
+  --opencode-image "ghcr.io/org/opencode:tag"
 ```
 
-Для удаленной dev-среды без собственного домена можно передать `--domain auto`.
-Скрипт определит публичный IPv4 сервера и подставит `${IP}.sslip.io` + `code.${IP}.sslip.io`.
+Для установки всех RVS-сервисов с одним tag используйте:
 
-Если preflight нужно временно пропустить (не рекомендуется), добавьте `--skip-preflight`.
+```bash
+sudo ./scripts/install-runtime.sh \
+  --bot-token "<TELEGRAM_BOT_TOKEN>" \
+  --admin-id "<TELEGRAM_ADMIN_ID>" \
+  --domain "example.com" \
+  --tls-email "ops@example.com" \
+  --runtime-version "v1.2.3" \
+  --runtime-commit-sha "<commit-sha>" \
+  --image-tag "v1.2.3"
+```
 
-Минимально обязательные параметры:
+## Preflight
 
-- `--bot-token`
-- `--admin-id`
-- `--domain`
-- `--tls-email`
+Перед запуском stack installer выполняет `scripts/install-runtime-preflight.sh`.
 
-## Dry run
+Проверяется:
 
-Проверка генерации файлов без установки пакетов/файрвола/запуска Docker:
+- runtime-директория доступна на запись;
+- `PROJECTS_ROOT` доступен на запись;
+- `PUBLIC_DOMAIN` и `OPENCODE_PUBLIC_DOMAIN` резолвятся в IPv4;
+- домены указывают на текущий public IPv4 сервера;
+- порты `80` и `443` свободны;
+- Compose config валиден вместе с no-op VLESS override.
+
+Если нужно сознательно пропустить эти проверки:
+
+```bash
+sudo ./scripts/install-runtime.sh ... --skip-preflight
+```
+
+## Dry Run
+
+Dry run генерирует runtime files без установки пакетов, firewall changes и запуска Docker:
 
 ```bash
 ./scripts/install-runtime.sh \
   --dry-run \
   --install-dir /tmp/rvs-runtime \
   --bot-token "123:token" \
-  --admin-id "1" \
+  --admin-id "100500" \
   --domain "example.com" \
   --tls-email "ops@example.com"
 ```
 
-## Важные замечания по безопасности
+Проверочный тест installer-а:
 
-- Скрипт не хранит исходники проекта на сервере: только runtime-конфиг и Docker volumes.
-- Образы backend/miniapp/bot/opencode должны быть заранее опубликованы в registry.
-- По умолчанию используются `ghcr.io/nyxandro/...:latest`; их можно переопределить флагами `--*-image`.
-- Если OpenCode/CLIProxy management интерфейсы не нужны публично, не публикуйте дополнительные порты в compose.
-- Авто-cleanup намеренно не трогает Docker volumes, чтобы не потерять данные проекта, OpenCode state и CLIProxy auth.
+```bash
+bash scripts/tests/install-runtime.test.sh
+```
 
-## Обслуживание диска
+## VLESS
 
-- После каждого deploy installer/runtime запускает безопасную очистку Docker-мусора.
-- Дополнительно systemd timer `remote-vibe-station-maintenance.timer` запускает такую же очистку ежедневно.
-- Ротация Docker логов включена на уровне daemon defaults и в runtime compose.
+На свежей установке VLESS выключен, но файлы уже подготовлены. Это сделано специально, потому что installer не должен стартовать `vless-proxy` с placeholder credentials.
 
-Что очищается автоматически:
+Правильный flow:
 
-- неиспользуемые образы;
-- остановленные контейнеры;
-- неиспользуемые сети;
-- build cache Docker.
+1. Откройте Mini App.
+2. Перейдите в Providers / CLIProxy runtime settings.
+3. Выберите `vless`.
+4. Вставьте реальный `vless://...` config URL.
+5. Нажмите test/save.
+6. Нажмите `Apply runtime now`.
 
-Что не очищается автоматически:
-
-- named volumes (`opencode_data`, `opencode_config`, `backend_data`, `cliproxy_auth` и т.д.).
-
-## Автодеплой после push
-
-В репозитории есть два workflow:
-
-- `Build And Publish Images` - собирает и публикует образы в GHCR на каждый push в `master`/`main`
-- `Deploy Runtime` - после успешной публикации подключается к серверу по SSH, делает `docker compose pull` и `docker compose up -d --remove-orphans`
-
-То есть в нормально настроенном runtime push в `master` сам доводит новые контейнеры до сервера: отдельный ручной `docker compose pull && up -d` нужен только как запасной вариант, если GitHub Actions или SSH secrets временно недоступны.
-
-Для включения автодеплоя добавьте GitHub Secrets в репозиторий:
-
-- `DEPLOY_HOST` - IP или hostname сервера
-- `DEPLOY_USER` - SSH user
-- `DEPLOY_SSH_KEY` - приватный SSH-ключ для входа на сервер
-- `DEPLOY_PORT` - опционально, порт SSH, по умолчанию `22`
-- `DEPLOY_RUNTIME_DIR` - опционально, путь к runtime, по умолчанию `/opt/remote-vibe-station-runtime`
-- `GHCR_USERNAME` - опционально, username для `docker login ghcr.io`
-- `GHCR_TOKEN` - опционально, токен для `docker login ghcr.io`
-
-Ожидания от сервера:
-
-- runtime уже установлен через `scripts/install-runtime.sh`;
-- в runtime-каталоге есть `.env`, `docker-compose.yml`, `docker-compose.vless.yml`;
-- у SSH-пользователя есть право запускать `docker compose`.
-
-Если образы GHCR публичные, `GHCR_USERNAME` и `GHCR_TOKEN` можно не задавать.
-
-## Общий toolbox runtime
-
-- Все агентные команды исполняются в общем `opencode` runtime-контейнере, а не в каждом проекте отдельно.
-- В этот runtime заранее заложены типовые dev-инструменты: `git`, `gh`, `docker`, `node`, `python`, `pipx`, `uv`, `ripgrep`, `fd`, `playwright`, `chromium` и системные browser deps.
-- Volume `toolbox_data` монтируется в `/toolbox` и сохраняет shared installs/caches между рестартами и обновлениями образов.
-- Toolbox path layout закреплен явно: `/toolbox/npm-global`, `/toolbox/pnpm/store`, `/toolbox/pipx`, `/toolbox/python-user`, `/toolbox/playwright`, `/toolbox/cache/*`, `/toolbox/bin`.
-- За счет этого новые global CLI, поставленные внутри toolbox, становятся доступны всем проектам без дублирования по project-контейнерам.
-
-## Опциональный VLESS после установки
-
-Можно включать/выключать режим через Mini App -> `CLI/Proxy`.
-При сохранении настроек backend автоматически обновляет:
+Backend перепишет:
 
 - `infra/vless/proxy.env`
-- `docker-compose.vless.yml` (в `direct` режиме файл становится no-op override)
+- `infra/vless/xray.json`
+- `docker-compose.vless.yml`
 
-После изменения примените compose:
+После этого Compose поднимет `vless-proxy` и подключит выбранные сервисы к proxy network.
 
-```bash
-cd /opt/remote-vibe-station-runtime
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d
-```
+## Обновление Runtime
 
-Либо делайте это вручную как раньше:
-
-1. Отредактируйте `infra/vless/xray.json` (подставьте реальные VLESS параметры вместо `CHANGE_ME_*`).
-2. При необходимости скорректируйте `infra/vless/proxy.env`.
-3. Запустите стек с override:
+Обычный deploy flow:
 
 ```bash
 cd /opt/remote-vibe-station-runtime
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml pull
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
 ```
 
-Чтобы вернуться на прямой доступ без прокси:
+GitHub Actions workflow `Deploy Runtime` перед pull/up обновляет `.env` на конкретный image tag, сохраняет предыдущий файл как `.env.previous`, затем выполняет те же compose-команды по SSH. Для auto-deploy после `master/main` используется tag `sha-<commit>`, а для ручного workflow можно передать `image_tag` и `runtime_version`.
+
+Необходимые secrets:
+
+- `DEPLOY_HOST`
+- `DEPLOY_USER`
+- `DEPLOY_SSH_KEY`
+- `DEPLOY_PORT` optional
+- `DEPLOY_RUNTIME_DIR` optional
+- `GHCR_USERNAME` optional
+- `GHCR_TOKEN` optional
+
+## Проверка После Установки
 
 ```bash
 cd /opt/remote-vibe-station-runtime
-docker compose --env-file .env -f docker-compose.yml up -d
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml ps
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml logs --tail=100 backend bot miniapp opencode cliproxy proxy
 ```
+
+Ожидаемые URLs:
+
+```text
+https://<domain>/miniapp
+https://<opencode-domain>
+```
+
+## Обслуживание
+
+Installer создаёт `runtime-maintenance.sh` и systemd timer `remote-vibe-station-maintenance.timer`.
+
+Cleanup удаляет:
+
+- unused images older than configured window;
+- stopped containers;
+- unused networks;
+- Docker build cache.
+
+Cleanup не удаляет Docker volumes.
+
+## Удаление
+
+Остановить runtime без удаления данных:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml stop
+```
+
+Полное удаление контейнеров без удаления named volumes:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml down
+```
+
+Named volumes удаляйте только если точно больше не нужны данные runtime.

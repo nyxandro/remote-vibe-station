@@ -5,7 +5,14 @@ on:
     branches:
       - master
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional extra image tag to publish for all runtime services"
+        required: false
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -55,6 +62,12 @@ jobs:
           TAGS="${IMAGE}:sha-${GITHUB_SHA}"
           if [ "${GITHUB_REF_NAME}" = "master" ] || [ "${GITHUB_REF_NAME}" = "main" ]; then
             TAGS="${TAGS},${IMAGE}:latest"
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAGS="${TAGS},${IMAGE}:${GITHUB_REF_NAME}"
+          fi
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            TAGS="${TAGS},${IMAGE}:${{ inputs.image_tag }}"
           fi
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 

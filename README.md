@@ -106,6 +106,7 @@ The Mini App provides a richer control plane for tasks that are awkward in plain
 ### OpenCode runtime
 
 The OpenCode container starts in server mode and is configured dynamically.
+It is intentionally trusted as the remote admin-agent runtime: it has host Docker access, `/hostfs`, host PID namespace, and the `rvs-host` helper for server-level installs/configuration.
 
 At startup, the entrypoint:
 
@@ -247,6 +248,7 @@ In the standard runtime flow:
 
 - pushes to `master` trigger image builds and publication to GHCR;
 - the deploy workflow connects to the server runtime over SSH;
+- the deploy workflow writes versioned `sha-<commit>` image refs to runtime `.env`;
 - the runtime host performs `docker compose pull` and `docker compose up -d --remove-orphans`.
 
 Relevant workflows:
@@ -275,19 +277,9 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml
 - manage project files, Git, terminal access, and deploy routes from the Mini App;
 - operate voice-control flows for Telegram voice messages.
 
-## Documentation index
+## Documentation
 
-Start here for deeper operational docs:
-
-- `docs/runtime-install.md` - full runtime installation guide
-- `docs/PROJECT_DEPLOYMENT.md` - project deploy model and route exposure
-- `docs/OPENCODE_WEB_AUTH.md` - OpenCode browser auth and access flow
-- `docs/TELEGRAM_PROVIDERS.md` - Telegram-side provider connection flow
-- `docs/TELEGRAM_VOICE_CONTROL.md` - voice-control flow and configuration
-- `docs/OPENCODE_VERSION_MANAGEMENT.md` - OpenCode version/runtime management
-- `docs/PROJECT_ENV_SETTINGS.md` - project env-file discovery and constraints
-- `docs/DATA_STORAGE.md` - persistent JSON stores and runtime data layout
-- `docs/VOLUME_MIGRATION.md` - migration notes for volume-based persistence
+The maintained operational guide is `docs/runtime-install.md`.
 
 ## Scripts and infrastructure
 

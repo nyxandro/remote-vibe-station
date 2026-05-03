@@ -69,6 +69,7 @@ mkdir -p "$WORK_DIR/templates"
 # Fetch required installer components that install-runtime.sh expects nearby.
 download_file "$REPO" "$REF" "scripts/install-runtime.sh" "$WORK_DIR/install-runtime.sh"
 download_file "$REPO" "$REF" "scripts/install-runtime-preflight.sh" "$WORK_DIR/install-runtime-preflight.sh"
+download_file "$REPO" "$REF" "scripts/runtime-installer-lib.sh" "$WORK_DIR/runtime-installer-lib.sh"
 download_file "$REPO" "$REF" "scripts/templates/runtime-docker-compose.yml" "$WORK_DIR/templates/runtime-docker-compose.yml"
 download_file "$REPO" "$REF" "scripts/templates/runtime-docker-compose.vless.yml" "$WORK_DIR/templates/runtime-docker-compose.vless.yml"
 download_file "$REPO" "$REF" "scripts/templates/vless-proxy.env" "$WORK_DIR/templates/vless-proxy.env"

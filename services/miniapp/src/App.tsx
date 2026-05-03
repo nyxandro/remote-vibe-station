@@ -34,6 +34,7 @@ import { useProxySettings } from "./hooks/use-proxy-settings";
 import { useServerMetrics } from "./hooks/use-server-metrics";
 import { useTerminalEvents } from "./hooks/use-terminal-events";
 import { useRuntimeServices } from "./hooks/use-runtime-services";
+import { useRuntimeVersion } from "./hooks/use-runtime-version";
 import { useVoiceControlSettings } from "./hooks/use-voice-control-settings";
 import { iconForFileEntry } from "./utils/file-icons";
 
@@ -152,6 +153,18 @@ export const App = () => {
   } = useServerMetrics(setError);
   const { snapshot: runtimeServices, isLoading: isRuntimeServicesLoading, restartingByService, loadSnapshot: loadRuntimeServices, restartService: restartRuntimeService } = useRuntimeServices(setError);
   const {
+    snapshot: runtimeVersion,
+    isLoading: isRuntimeVersionLoading,
+    isChecking: isRuntimeVersionChecking,
+    isUpdating: isRuntimeUpdating,
+    isRollingBack: isRuntimeRollingBack,
+    lastResult: runtimeVersionLastResult,
+    loadSnapshot: loadRuntimeVersion,
+    checkLatest: checkRuntimeVersion,
+    updateRuntime,
+    rollbackRuntime
+  } = useRuntimeVersion(setError);
+  const {
     snapshot: proxySettings,
     isLoading: isProxySettingsLoading,
     isSaving: isProxySettingsSaving,
@@ -232,7 +245,8 @@ export const App = () => {
         loadRuntime(projectId),
         loadGithubAuthStatus(),
         loadServerMetrics(),
-        loadRuntimeServices()
+        loadRuntimeServices(),
+        loadRuntimeVersion()
       ];
 
     if (canControlTelegramStream) {
@@ -280,6 +294,7 @@ export const App = () => {
     loadGithubAuthStatus,
     loadServerMetrics,
     loadRuntimeServices,
+    loadRuntimeVersion,
     loadProviderOverview,
     loadProxySettings,
     loadCliproxyAccounts
@@ -436,9 +451,21 @@ export const App = () => {
           onUpdateOpenCodeVersion={() => void updateOpenCodeVersionNow()}
           serverMetrics={{ snapshot: serverMetrics, isLoading: isServerMetricsLoading }}
           runtimeServices={{ snapshot: runtimeServices, isLoading: isRuntimeServicesLoading, restartingByService }}
+          runtimeVersion={{
+            snapshot: runtimeVersion,
+            isLoading: isRuntimeVersionLoading,
+            isChecking: isRuntimeVersionChecking,
+            isUpdating: isRuntimeUpdating,
+            isRollingBack: isRuntimeRollingBack,
+            lastResult: runtimeVersionLastResult
+          }}
           onReloadServerMetrics={() => void loadServerMetrics()}
           onReloadRuntimeServices={() => void loadRuntimeServices()}
           onRestartRuntimeService={(serviceId) => void restartRuntimeService(serviceId)}
+          onReloadRuntimeVersion={() => void loadRuntimeVersion()}
+          onCheckRuntimeVersion={() => void checkRuntimeVersion()}
+          onUpdateRuntime={() => void updateRuntime()}
+          onRollbackRuntime={() => void rollbackRuntime()}
           iconForEntry={(name, kind) => iconForFileEntry(name, kind)}
           onGitCheckout={(branch) => withActiveProject((id) => void checkoutBranch(id, branch))}
           onGitCommit={(message) => withActiveProject((id) => void commitAll(id, message))}

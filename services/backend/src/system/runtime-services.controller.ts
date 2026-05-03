@@ -13,6 +13,7 @@ import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
 import { createAppErrorBody, normalizeUnknownErrorToAppError } from "../logging/app-error";
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { RuntimeServicesService } from "./runtime-services.service";
+import { RuntimeUpdateService } from "./runtime-update.service";
 
 @Controller("api/telegram/system")
 export class RuntimeServicesController {
@@ -20,6 +21,7 @@ export class RuntimeServicesController {
 
   public constructor(
     private readonly runtimeServices: RuntimeServicesService,
+    private readonly runtimeUpdate: RuntimeUpdateService,
     private readonly events: EventsService
   ) {}
 
@@ -29,6 +31,89 @@ export class RuntimeServicesController {
     /* Service dashboard is admin-only because it exposes runtime topology and restart controls. */
     this.requireAdminIdentity(req);
     return this.runtimeServices.getSnapshot();
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Get("runtime/version")
+  public async getRuntimeVersion(@Req() req: Request) {
+    /* Runtime version is admin-only because it exposes image refs and rollback availability. */
+    this.requireAdminIdentity(req);
+    try {
+      return await this.runtimeUpdate.getVersionSnapshot();
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_RUNTIME_VERSION_READ_FAILED",
+          fallbackMessage: "Failed to read runtime version.",
+          fallbackHint: "Check runtime .env mount and retry opening settings."
+        })
+      );
+    }
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Post("runtime/version/check")
+  @HttpCode(HttpStatus.OK)
+  public async checkRuntimeVersion(@Req() req: Request) {
+    /* Manual check keeps outbound GitHub calls controlled by an explicit operator action. */
+    this.requireAdminIdentity(req);
+    try {
+      return await this.runtimeUpdate.checkLatestVersion();
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_RUNTIME_VERSION_CHECK_FAILED",
+          fallbackMessage: "Failed to check runtime updates.",
+          fallbackHint: "Check GitHub access from the server and retry update check."
+        })
+      );
+    }
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Post("runtime/update")
+  @HttpCode(HttpStatus.OK)
+  public async updateRuntime(@Req() req: Request) {
+    /* Runtime update rewrites image refs and applies Docker Compose on the host-mounted runtime directory. */
+    const adminId = this.requireAdminIdentity(req);
+    try {
+      const result = await this.runtimeUpdate.updateToLatest();
+      await this.publishRuntimeChanged(adminId, "runtime.update");
+      return result;
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_RUNTIME_UPDATE_FAILED",
+          fallbackMessage: "Failed to update runtime.",
+          fallbackHint: "Check Docker/GHCR access and retry runtime update."
+        })
+      );
+    }
+  }
+
+  @UseGuards(AppAuthGuard)
+  @Post("runtime/rollback")
+  @HttpCode(HttpStatus.OK)
+  public async rollbackRuntime(@Req() req: Request) {
+    /* Rollback restores .env.previous and re-applies Compose with the previous image refs. */
+    const adminId = this.requireAdminIdentity(req);
+    try {
+      const result = await this.runtimeUpdate.rollback();
+      await this.publishRuntimeChanged(adminId, "runtime.rollback");
+      return result;
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_RUNTIME_ROLLBACK_FAILED",
+          fallbackMessage: "Failed to rollback runtime.",
+          fallbackHint: "Check .env.previous and Docker runtime state, then retry rollback."
+        })
+      );
+    }
   }
 
   @UseGuards(AppAuthGuard)
@@ -88,5 +173,20 @@ export class RuntimeServicesController {
     }
 
     return adminId;
+  }
+
+  private async publishRuntimeChanged(adminId: number, reason: string): Promise<void> {
+    /* Best-effort workspace refresh notifies open Mini App sessions after runtime mutations. */
+    try {
+      await publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId,
+        surfaces: ["settings", "providers"],
+        reason
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to publish runtime update event: ${message}`);
+    }
   }
 }

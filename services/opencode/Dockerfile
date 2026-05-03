@@ -70,6 +70,7 @@ RUN apt-get update \
     ripgrep \
     rsync \
     unzip \
+    util-linux \
     wget \
     xz-utils \
     zip \
@@ -117,6 +118,7 @@ COPY kanban-tools-plugin.ts /usr/local/share/opencode/kanban-tools-plugin.ts
 COPY telegram-media-tools-plugin.ts /usr/local/share/opencode/telegram-media-tools-plugin.ts
 COPY skills /usr/local/share/opencode/skills
 COPY --chmod=755 docker-wrapper.sh /usr/local/bin/docker
+COPY --chmod=755 rvs-host.sh /usr/local/bin/rvs-host
 COPY toolbox-profile.sh /etc/profile.d/toolbox.sh
 
 ENTRYPOINT ["/usr/local/bin/opencode-entrypoint.sh"]

@@ -66,6 +66,8 @@ services:
       context: ./services/opencode
       dockerfile: Dockerfile
     working_dir: ${PROJECTS_ROOT:-/srv/projects}
+    privileged: true
+    pid: host
     environment:
       - BACKEND_URL=http://backend:3000
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:-dev-bot-backend-token}
@@ -76,6 +78,7 @@ services:
       - CLIPROXY_API_KEY=${CLIPROXY_API_KEY:-sk-cliproxy-local}
       - CLIPROXY_DEFAULT_MODEL_ID=${CLIPROXY_DEFAULT_MODEL_ID:-}
       - HOST_ROOT_PATH=/hostfs
+      - RVS_HOST_COMMAND=rvs-host
       # Ask backend for short-lived GitHub App credentials so agent git auth stays global across projects.
       - GIT_CONFIG_COUNT=1
       - GIT_CONFIG_KEY_0=credential.https://github.com.helper

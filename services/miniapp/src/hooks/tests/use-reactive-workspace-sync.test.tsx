@@ -39,6 +39,7 @@ const buildInput = (overrides: Partial<HookInput> = {}): HookInput => ({
   loadGithubAuthStatus: vi.fn().mockResolvedValue(undefined),
   loadServerMetrics: vi.fn().mockResolvedValue(undefined),
   loadRuntimeServices: vi.fn().mockResolvedValue(undefined),
+  loadRuntimeVersion: vi.fn().mockResolvedValue(undefined),
   loadProviderOverview: vi.fn().mockResolvedValue(undefined),
   loadProxySettings: vi.fn().mockResolvedValue(undefined),
   loadCliproxyAccounts: vi.fn().mockResolvedValue(undefined),

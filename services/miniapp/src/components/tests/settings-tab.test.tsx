@@ -684,4 +684,66 @@ describe("SettingsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Restart service" }));
     expect(onRestartRuntimeService).toHaveBeenCalledWith("opencode");
   });
+
+  it("renders runtime version controls and runs update/rollback actions", () => {
+    /* Settings should expose station-level runtime updates separately from OpenCode package updates. */
+    const onCheckRuntimeVersion = vi.fn();
+    const onUpdateRuntime = vi.fn();
+    const onRollbackRuntime = vi.fn();
+
+    render(
+      <SettingsTab
+        activeId={null}
+        themeMode="light"
+        overview={null}
+        activeFile={null}
+        onChangeTheme={vi.fn()}
+        onRefreshProjects={vi.fn()}
+        onSyncProjects={vi.fn()}
+        onRestartOpenCode={vi.fn()}
+        onLoadOverview={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreateFile={vi.fn()}
+        onSaveActiveFile={vi.fn()}
+        onDeleteActiveProject={vi.fn()}
+        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
+        onSaveProjectRuntimeSettings={vi.fn()}
+        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
+        runtimeVersion={{
+          snapshot: {
+            runtimeConfigDir: "/runtime",
+            currentVersion: "sha-old",
+            currentCommitSha: "oldsha",
+            latestVersion: "v1.2.3",
+            latestCheckedAt: "2026-05-03T12:00:00.000Z",
+            updateAvailable: true,
+            rollbackAvailable: true,
+            images: {
+              backend: "backend:sha-old",
+              miniapp: "miniapp:sha-old",
+              bot: "bot:sha-old",
+              opencode: "opencode:sha-old"
+            }
+          },
+          isLoading: false,
+          isChecking: false,
+          isUpdating: false,
+          isRollingBack: false,
+          lastResult: "idle"
+        }}
+        onCheckRuntimeVersion={onCheckRuntimeVersion}
+        onUpdateRuntime={onUpdateRuntime}
+        onRollbackRuntime={onRollbackRuntime}
+      />
+    );
+
+    expect(screen.getByText("Runtime updates")).toBeTruthy();
+    expect(screen.getByText("sha-old")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update runtime" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rollback" }));
+    expect(onCheckRuntimeVersion).toHaveBeenCalledTimes(1);
+    expect(onUpdateRuntime).toHaveBeenCalledTimes(1);
+    expect(onRollbackRuntime).toHaveBeenCalledTimes(1);
+  });
 });

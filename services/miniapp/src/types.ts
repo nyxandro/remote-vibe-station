@@ -385,6 +385,28 @@ export type RuntimeServicesSnapshot = {
   services: RuntimeServiceSnapshot[];
 };
 
+export type RuntimeVersionSnapshot = {
+  runtimeConfigDir: string;
+  currentVersion: string;
+  currentCommitSha: string | null;
+  latestVersion: string | null;
+  latestCheckedAt: string | null;
+  updateAvailable: boolean;
+  images: {
+    backend: string;
+    miniapp: string;
+    bot: string;
+    opencode: string;
+  };
+  rollbackAvailable: boolean;
+};
+
+export type RuntimeUpdateResult = {
+  applied: boolean;
+  previous: RuntimeVersionSnapshot;
+  current: RuntimeVersionSnapshot;
+};
+
 export type FileEntry = {
   name: string;
   kind: "file" | "dir";

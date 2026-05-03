@@ -76,6 +76,7 @@ import { SystemMetricsController } from "./system/system-metrics.controller";
 import { SystemMetricsService } from "./system/system-metrics.service";
 import { RuntimeServicesController } from "./system/runtime-services.controller";
 import { RuntimeServicesService } from "./system/runtime-services.service";
+import { RuntimeUpdateService } from "./system/runtime-update.service";
 import { ProxySettingsController } from "./proxy/proxy-settings.controller";
 import { ProxySettingsService } from "./proxy/proxy-settings.service";
 import { ProxySettingsStore } from "./proxy/proxy-settings.store";
@@ -173,6 +174,7 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     GithubAppService,
     SystemMetricsService,
     RuntimeServicesService,
+    RuntimeUpdateService,
     ProxySettingsStore,
     ProxySettingsService,
     CliproxyManagementClient,

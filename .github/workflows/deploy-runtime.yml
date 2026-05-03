@@ -7,6 +7,15 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Runtime service image tag to deploy, for example sha-<commit> or v1.2.3"
+        required: false
+        type: string
+      runtime_version:
+        description: "Runtime version label written to .env"
+        required: false
+        type: string
 
 concurrency:
   group: deploy-runtime-production
@@ -55,7 +64,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      - name: Deploy latest runtime images
+      - name: Deploy runtime images
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
@@ -63,16 +72,41 @@ jobs:
           DEPLOY_RUNTIME_DIR: ${{ secrets.DEPLOY_RUNTIME_DIR || '/opt/remote-vibe-station-runtime' }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          DEPLOY_IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          DEPLOY_COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
+          if [ -z "$DEPLOY_IMAGE_TAG" ]; then
+            DEPLOY_IMAGE_TAG="sha-${DEPLOY_COMMIT_SHA}"
+          fi
+          if [ -z "$DEPLOY_RUNTIME_VERSION" ]; then
+            DEPLOY_RUNTIME_VERSION="$DEPLOY_IMAGE_TAG"
+          fi
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "DEPLOY_RUNTIME_DIR='$DEPLOY_RUNTIME_DIR' GHCR_USERNAME='$GHCR_USERNAME' GHCR_TOKEN='$GHCR_TOKEN' bash -s" <<'EOF'
+            "DEPLOY_RUNTIME_DIR='$DEPLOY_RUNTIME_DIR' GHCR_USERNAME='$GHCR_USERNAME' GHCR_TOKEN='$GHCR_TOKEN' DEPLOY_IMAGE_TAG='$DEPLOY_IMAGE_TAG' DEPLOY_RUNTIME_VERSION='$DEPLOY_RUNTIME_VERSION' DEPLOY_COMMIT_SHA='$DEPLOY_COMMIT_SHA' bash -s" <<'EOF'
           set -euo pipefail
           cd "$DEPLOY_RUNTIME_DIR"
 
           if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           fi
+
+          cp .env .env.previous
+          if grep -q '^RVS_RUNTIME_VERSION=' .env; then
+            sed -i "s#^RVS_RUNTIME_VERSION=.*#RVS_RUNTIME_VERSION=${DEPLOY_RUNTIME_VERSION}#" .env
+          else
+            printf '\nRVS_RUNTIME_VERSION=%s\n' "$DEPLOY_RUNTIME_VERSION" >> .env
+          fi
+          if grep -q '^RVS_RUNTIME_COMMIT_SHA=' .env; then
+            sed -i "s#^RVS_RUNTIME_COMMIT_SHA=.*#RVS_RUNTIME_COMMIT_SHA=${DEPLOY_COMMIT_SHA}#" .env
+          else
+            printf 'RVS_RUNTIME_COMMIT_SHA=%s\n' "$DEPLOY_COMMIT_SHA" >> .env
+          fi
+          sed -i "s#^RVS_BACKEND_IMAGE=.*#RVS_BACKEND_IMAGE=ghcr.io/nyxandro/remote-vibe-station-backend:${DEPLOY_IMAGE_TAG}#" .env
+          sed -i "s#^RVS_MINIAPP_IMAGE=.*#RVS_MINIAPP_IMAGE=ghcr.io/nyxandro/remote-vibe-station-miniapp:${DEPLOY_IMAGE_TAG}#" .env
+          sed -i "s#^RVS_BOT_IMAGE=.*#RVS_BOT_IMAGE=ghcr.io/nyxandro/remote-vibe-station-bot:${DEPLOY_IMAGE_TAG}#" .env
+          sed -i "s#^RVS_OPENCODE_IMAGE=.*#RVS_OPENCODE_IMAGE=ghcr.io/nyxandro/remote-vibe-station-opencode:${DEPLOY_IMAGE_TAG}#" .env
 
           docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml pull
           docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
