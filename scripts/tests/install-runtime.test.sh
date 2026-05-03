@@ -24,7 +24,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
   --admin-id "100500" \
   --domain "example.com" \
   --tls-email "ops@example.com" \
-  --runtime-version "v9.8.7" \
+  --runtime-version "9.8.7" \
   --runtime-commit-sha "abc123def456" \
   --image-tag "v9.8.7"
 
@@ -52,7 +52,8 @@ grep -q '^ADMIN_IDS=100500$' "$ENV_FILE"
 grep -q '^PUBLIC_DOMAIN=example.com$' "$ENV_FILE"
 grep -q '^OPENCODE_PUBLIC_DOMAIN=code.example.com$' "$ENV_FILE"
 grep -q '^PROJECTS_ROOT='"$TMP_DIR"'/runtime/projects$' "$ENV_FILE"
-grep -q '^RVS_RUNTIME_VERSION=v9.8.7$' "$ENV_FILE"
+grep -q '^RVS_RUNTIME_VERSION=9.8.7$' "$ENV_FILE"
+grep -q '^RVS_RUNTIME_IMAGE_TAG=v9.8.7$' "$ENV_FILE"
 grep -q '^RVS_RUNTIME_COMMIT_SHA=abc123def456$' "$ENV_FILE"
 
 # Ensure secrets are generated and non-empty.
@@ -137,7 +138,7 @@ printf '%s\n' '{"Account":"keep"}' >"$ACME_FILE"
   --admin-id "100500" \
   --domain "example.com" \
   --tls-email "ops@example.com" \
-  --runtime-version "v9.8.7" \
+  --runtime-version "9.8.7" \
   --runtime-commit-sha "abc123def456" \
   --image-tag "v9.8.7"
 grep -q '^BOT_BACKEND_AUTH_TOKEN='"$INITIAL_BOT_AUTH_TOKEN"'$' "$ENV_FILE"

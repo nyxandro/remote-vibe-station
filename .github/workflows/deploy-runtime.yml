@@ -66,7 +66,7 @@ jobs:
             DEPLOY_IMAGE_TAG="sha-${DEPLOY_COMMIT_SHA}"
           fi
           if [ -z "$DEPLOY_RUNTIME_VERSION" ]; then
-            DEPLOY_RUNTIME_VERSION="$DEPLOY_IMAGE_TAG"
+            DEPLOY_RUNTIME_VERSION="${DEPLOY_IMAGE_TAG#v}"
           fi
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
             "DEPLOY_RUNTIME_DIR='$DEPLOY_RUNTIME_DIR' GHCR_USERNAME='$GHCR_USERNAME' GHCR_TOKEN='$GHCR_TOKEN' DEPLOY_IMAGE_TAG='$DEPLOY_IMAGE_TAG' DEPLOY_RUNTIME_VERSION='$DEPLOY_RUNTIME_VERSION' DEPLOY_COMMIT_SHA='$DEPLOY_COMMIT_SHA' bash -s" <<'EOF'
@@ -82,6 +82,11 @@ jobs:
             sed -i "s#^RVS_RUNTIME_VERSION=.*#RVS_RUNTIME_VERSION=${DEPLOY_RUNTIME_VERSION}#" .env
           else
             printf '\nRVS_RUNTIME_VERSION=%s\n' "$DEPLOY_RUNTIME_VERSION" >> .env
+          fi
+          if grep -q '^RVS_RUNTIME_IMAGE_TAG=' .env; then
+            sed -i "s#^RVS_RUNTIME_IMAGE_TAG=.*#RVS_RUNTIME_IMAGE_TAG=${DEPLOY_IMAGE_TAG}#" .env
+          else
+            printf 'RVS_RUNTIME_IMAGE_TAG=%s\n' "$DEPLOY_IMAGE_TAG" >> .env
           fi
           if grep -q '^RVS_RUNTIME_COMMIT_SHA=' .env; then
             sed -i "s#^RVS_RUNTIME_COMMIT_SHA=.*#RVS_RUNTIME_COMMIT_SHA=${DEPLOY_COMMIT_SHA}#" .env

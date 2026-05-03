@@ -29,7 +29,7 @@ Optional:
   --projects-root <path>     Host projects root mounted into containers (default: /srv/projects)
   --miniapp-short-name <id>  Telegram Mini App short name
   --opencode-domain <domain> OpenCode UI domain (default: code.<domain>)
-  --runtime-version <value>  Installed runtime version label (default: image tag)
+  --runtime-version <value>  Installed runtime version label (default: image tag without leading v)
   --runtime-commit-sha <sha> Installed source commit SHA label
   --image-tag <tag>          Use one tag for all RVS service images
   --backend-image <image>    Backend image reference
@@ -180,6 +180,7 @@ OPENCODE_PUBLIC_DOMAIN=${OPENCODE_DOMAIN}
 TLS_EMAIL=${TLS_EMAIL}
 PROJECTS_ROOT=${PROJECTS_ROOT}
 RVS_RUNTIME_VERSION=${RUNTIME_VERSION}
+RVS_RUNTIME_IMAGE_TAG=${IMAGE_TAG}
 RVS_RUNTIME_COMMIT_SHA=${RUNTIME_COMMIT_SHA}
 BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN}
 OPENCODE_SERVER_USERNAME=opencode
@@ -370,7 +371,7 @@ if [[ "$RUNTIME_VERSION_PROVIDED" != "true" && -n "${RVS_RUNTIME_VERSION:-}" ]];
   RUNTIME_VERSION="$RVS_RUNTIME_VERSION"
 fi
 if [[ -z "$RUNTIME_VERSION" ]]; then
-  RUNTIME_VERSION="$IMAGE_TAG"
+  RUNTIME_VERSION="${IMAGE_TAG#v}"
 fi
 BOT_BACKEND_AUTH_TOKEN="${BOT_BACKEND_AUTH_TOKEN:-rvs-bot-$(random_alnum 56)}"
 OPENCODE_SERVER_PASSWORD="${OPENCODE_SERVER_PASSWORD:-$(random_alnum 48)}"
