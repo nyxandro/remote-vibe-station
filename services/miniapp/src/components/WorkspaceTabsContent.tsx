@@ -28,6 +28,7 @@ import {
   ProxySettingsSnapshot,
   RuntimeServicesSnapshot,
   RuntimeVersionSnapshot,
+  RuntimeUpdateState,
   SystemMetricsSnapshot,
   ProjectGitSummary,
   ProjectRecord,
@@ -157,7 +158,9 @@ type Props = {
     isChecking: boolean;
     isUpdating: boolean;
     isRollingBack: boolean;
+    isReconnecting: boolean;
     lastResult: "idle" | "updated" | "rolled-back" | "noop";
+    updateState: RuntimeUpdateState | null;
   };
   onReloadRuntimeServices?: () => void;
   onRestartRuntimeService?: (serviceId: ManagedRuntimeServiceId) => void;

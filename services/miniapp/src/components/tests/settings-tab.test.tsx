@@ -712,9 +712,12 @@ describe("SettingsTab", () => {
         runtimeVersion={{
           snapshot: {
             runtimeConfigDir: "/runtime",
-            currentVersion: "sha-old",
+            currentVersion: "1.0.0",
+            currentImageTag: "v1.0.0",
             currentCommitSha: "oldsha",
-            latestVersion: "v1.2.3",
+            latestVersion: "1.2.3",
+            latestImageTag: "v1.2.3",
+            latestReleaseNotes: "- Better update screen",
             latestCheckedAt: "2026-05-03T12:00:00.000Z",
             updateAvailable: true,
             rollbackAvailable: true,
@@ -729,6 +732,17 @@ describe("SettingsTab", () => {
           isChecking: false,
           isUpdating: false,
           isRollingBack: false,
+          isReconnecting: false,
+          updateState: {
+            status: "available",
+            currentVersion: "1.0.0",
+            targetVersion: "1.2.3",
+            targetImageTag: "v1.2.3",
+            startedAt: "2026-05-03T12:00:00.000Z",
+            updatedAt: "2026-05-03T12:00:00.000Z",
+            error: null,
+            steps: []
+          },
           lastResult: "idle"
         }}
         onCheckRuntimeVersion={onCheckRuntimeVersion}
@@ -738,8 +752,8 @@ describe("SettingsTab", () => {
     );
 
     expect(screen.getByText("1. Runtime updates")).toBeTruthy();
-    expect(screen.getByText("sha-old")).toBeTruthy();
-    expect(screen.getByText("v1.2.3")).toBeTruthy();
+    expect(screen.getByText("1.0.0")).toBeTruthy();
+    expect(screen.getByText("1.2.3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Check" }));
     fireEvent.click(screen.getByRole("button", { name: "Update runtime" }));
     fireEvent.click(screen.getByRole("button", { name: "Rollback" }));

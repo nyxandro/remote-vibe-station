@@ -153,7 +153,9 @@ export const App = () => {
     isChecking: isRuntimeVersionChecking,
     isUpdating: isRuntimeUpdating,
     isRollingBack: isRuntimeRollingBack,
+    isReconnecting: isRuntimeReconnecting,
     lastResult: runtimeVersionLastResult,
+    updateState: runtimeUpdateState,
     loadSnapshot: loadRuntimeVersion,
     checkLatest: checkRuntimeVersion,
     updateRuntime,
@@ -446,6 +448,8 @@ export const App = () => {
             isChecking: isRuntimeVersionChecking,
             isUpdating: isRuntimeUpdating,
             isRollingBack: isRuntimeRollingBack,
+            isReconnecting: isRuntimeReconnecting,
+            updateState: runtimeUpdateState,
             lastResult: runtimeVersionLastResult
           }}
           onReloadServerMetrics={() => void loadServerMetrics()}

@@ -207,6 +207,51 @@
   background: #dbeafe;
 }
 
+.runtime-version-status.progress {
+  color: #7c2d12;
+  background: #ffedd5;
+}
+
+.runtime-update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff7ed;
+}
+
+.runtime-update-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.runtime-update-step {
+  border-radius: 10px;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: #f8fbff;
+}
+
+.runtime-update-step.completed {
+  color: #065f46;
+  background: #ecfdf5;
+}
+
+.runtime-update-step.running {
+  color: #0b2a6d;
+  background: #dbeafe;
+}
+
+.runtime-update-step.failed {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
 @media (min-width: 720px) {
   .runtime-version-summary {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
@@ -761,6 +806,18 @@ html[data-theme="dark"] .runtime-version-status.ok {
 html[data-theme="dark"] .runtime-version-status.update {
   color: #bfdbfe;
   background: #172554;
+}
+
+html[data-theme="dark"] .runtime-version-status.progress,
+html[data-theme="dark"] .runtime-update-progress {
+  color: #fed7aa;
+  background: #2f1d13;
+  border-color: #7c2d12;
+}
+
+html[data-theme="dark"] .runtime-update-step {
+  color: #b8c7e3;
+  background: #131d31;
 }
 
 html[data-theme="dark"] .settings-editor-modal-backdrop {

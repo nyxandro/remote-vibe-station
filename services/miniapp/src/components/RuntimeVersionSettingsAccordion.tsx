@@ -5,7 +5,7 @@
  * - RuntimeVersionSettingsAccordion - Renders runtime update status inside the Settings accordion shell.
  */
 
-import { RuntimeVersionSnapshot } from "../types";
+import { RuntimeUpdateState, RuntimeVersionSnapshot } from "../types";
 import { RuntimeVersionSettingsCard } from "./RuntimeVersionSettingsCard";
 
 type Props = {
@@ -15,7 +15,9 @@ type Props = {
     isChecking: boolean;
     isUpdating: boolean;
     isRollingBack: boolean;
+    isReconnecting: boolean;
     lastResult: "idle" | "updated" | "rolled-back" | "noop";
+    updateState: RuntimeUpdateState | null;
   };
   onReloadRuntimeVersion?: () => void;
   onCheckRuntimeVersion?: () => void;
@@ -35,7 +37,9 @@ export const RuntimeVersionSettingsAccordion = (props: Props) => {
             isChecking={props.runtimeVersion.isChecking}
             isUpdating={props.runtimeVersion.isUpdating}
             isRollingBack={props.runtimeVersion.isRollingBack}
+            isReconnecting={props.runtimeVersion.isReconnecting}
             lastResult={props.runtimeVersion.lastResult}
+            updateState={props.runtimeVersion.updateState}
             onLoad={props.onReloadRuntimeVersion ?? (() => {})}
             onCheck={props.onCheckRuntimeVersion ?? (() => {})}
             onUpdate={props.onUpdateRuntime ?? (() => {})}

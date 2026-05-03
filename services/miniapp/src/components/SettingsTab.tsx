@@ -16,6 +16,7 @@ import {
   ProjectRuntimeSnapshot,
   OpenCodeVersionStatus,
   RuntimeServicesSnapshot,
+  RuntimeUpdateState,
   RuntimeVersionSnapshot,
   SystemMetricsSnapshot,
   SettingsFileSummary,
@@ -105,7 +106,9 @@ type Props = {
     isChecking: boolean;
     isUpdating: boolean;
     isRollingBack: boolean;
+    isReconnecting: boolean;
     lastResult: "idle" | "updated" | "rolled-back" | "noop";
+    updateState: RuntimeUpdateState | null;
   };
   proxyState?: {
     snapshot: import("../types").ProxySettingsSnapshot | null;

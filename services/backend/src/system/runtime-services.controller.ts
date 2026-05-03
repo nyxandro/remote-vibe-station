@@ -53,6 +53,25 @@ export class RuntimeServicesController {
   }
 
   @UseGuards(AppAuthGuard)
+  @Get("runtime/update/state")
+  public async getRuntimeUpdateState(@Req() req: Request) {
+    /* Persisted update state lets Mini App reconnect after backend restarts during self-update. */
+    this.requireAdminIdentity(req);
+    try {
+      return await this.runtimeUpdate.getUpdateState();
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_RUNTIME_UPDATE_STATE_FAILED",
+          fallbackMessage: "Failed to read runtime update status.",
+          fallbackHint: "Check runtime config mount and retry opening settings."
+        })
+      );
+    }
+  }
+
+  @UseGuards(AppAuthGuard)
   @Post("runtime/version/check")
   @HttpCode(HttpStatus.OK)
   public async checkRuntimeVersion(@Req() req: Request) {

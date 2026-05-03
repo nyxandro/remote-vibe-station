@@ -388,8 +388,11 @@ export type RuntimeServicesSnapshot = {
 export type RuntimeVersionSnapshot = {
   runtimeConfigDir: string;
   currentVersion: string;
+  currentImageTag: string;
   currentCommitSha: string | null;
   latestVersion: string | null;
+  latestImageTag: string | null;
+  latestReleaseNotes: string | null;
   latestCheckedAt: string | null;
   updateAvailable: boolean;
   images: {
@@ -399,6 +402,21 @@ export type RuntimeVersionSnapshot = {
     opencode: string;
   };
   rollbackAvailable: boolean;
+};
+
+export type RuntimeUpdateState = {
+  status: "idle" | "checking" | "available" | "updating" | "restarting" | "completed" | "failed";
+  currentVersion: string | null;
+  targetVersion: string | null;
+  targetImageTag: string | null;
+  startedAt: string | null;
+  updatedAt: string | null;
+  error: string | null;
+  steps: Array<{
+    id: "checking" | "pulling" | "switching" | "restarting" | "verifying";
+    label: string;
+    status: "pending" | "running" | "completed" | "failed";
+  }>;
 };
 
 export type RuntimeUpdateResult = {
