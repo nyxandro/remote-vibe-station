@@ -128,7 +128,6 @@ CLIProxy acts as the model gateway used by OpenCode. It allows the runtime to wo
 │   ├── bot/
 │   ├── miniapp/
 │   └── opencode/
-├── docs/
 ├── infra/
 ├── scripts/
 ├── docker-compose.yml
@@ -139,7 +138,9 @@ CLIProxy acts as the model gateway used by OpenCode. It allows the runtime to wo
 
 ### Recommended: image-only runtime install
 
-The recommended production setup installs a runtime directory on the server without cloning the full repository there.
+The recommended production setup installs a runtime directory on the server without cloning the full repository there. The host receives only a runtime folder with `.env`, Compose files, and infrastructure config, while all services run from published Docker images.
+
+Use a clean Ubuntu/Debian-compatible server when possible. The installer performs host-level setup and is designed for a dedicated remote runtime.
 
 Use the bootstrap script:
 
@@ -151,16 +152,72 @@ curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master
   --tls-email "<YOUR_EMAIL>"
 ```
 
-What the installer does:
+You can also use your own domain:
 
-- installs Docker and required host dependencies;
-- prepares `/opt/remote-vibe-station-runtime`;
-- writes `.env`, Compose files, and infra config;
-- configures Traefik, CLIProxy, and optional VLESS mode;
-- enables preflight checks and persistent volumes;
-- starts the stack with Docker Compose.
+```bash
+curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master/scripts/bootstrap-runtime.sh | sudo bash -s -- \
+  --bot-token "<TELEGRAM_BOT_TOKEN>" \
+  --admin-id "<TELEGRAM_ADMIN_ID>" \
+  --domain "example.com" \
+  --tls-email "ops@example.com"
+```
 
-For full details, see `docs/runtime-install.md`.
+When `--domain auto` is used, the installer resolves the public IPv4 and builds domains like:
+
+```text
+<ip>.sslip.io
+code.<ip>.sslip.io
+```
+
+### What gets installed and configured
+
+The bootstrap script downloads only the runtime install assets and then runs `scripts/install-runtime.sh`.
+
+The installer:
+
+- installs baseline host packages such as `ca-certificates`, `curl`, `git`, `iproute2`, `jq`, `openssl`, `ufw`, and `fail2ban`;
+- installs Docker if Docker is not already present;
+- creates the runtime directory, by default `/opt/remote-vibe-station-runtime`;
+- creates the projects root, by default `/srv/projects`;
+- generates runtime secrets and writes `.env`;
+- writes `docker-compose.yml`, `docker-compose.vless.yml`, Traefik config, CLIProxy config, and optional VLESS placeholders;
+- configures Docker log rotation;
+- enables SSH hardening in key-only mode when authorized SSH keys already exist on the host;
+- opens `22`, `80`, and `443` in UFW;
+- enables `fail2ban` for SSH;
+- installs a systemd timer for Docker cleanup;
+- runs preflight checks before bringing the stack up;
+- pulls images and starts the runtime with Docker Compose.
+
+The installer never copies project source code into the runtime directory.
+
+### What the runtime contains
+
+The generated runtime directory looks like this:
+
+```text
+/opt/remote-vibe-station-runtime/
+├── .env
+├── docker-compose.yml
+├── docker-compose.vless.yml
+├── runtime-maintenance.sh
+└── infra/
+    ├── cliproxy/config.yaml
+    ├── traefik/traefik.yml
+    ├── traefik/acme.json
+    ├── traefik/dynamic/noindex.yml
+    ├── traefik/dynamic/opencode-auth.yml
+    └── vless/
+        ├── proxy.env
+        └── xray.json
+```
+
+Key runtime files:
+
+- `/opt/remote-vibe-station-runtime/.env` - runtime secrets, versions, image refs, domains, and paths;
+- `/opt/remote-vibe-station-runtime/docker-compose.yml` - the main image-only stack;
+- `/opt/remote-vibe-station-runtime/docker-compose.vless.yml` - optional VLESS override;
+- `/opt/remote-vibe-station-runtime/infra/` - Traefik, CLIProxy, and proxy-related config.
 
 ## Runtime requirements
 
@@ -183,10 +240,37 @@ The runtime directory is typically:
 
 Important files:
 
-- `/opt/remote-vibe-station-runtime/.env` - runtime images and environment variables
+- `/opt/remote-vibe-station-runtime/.env` - runtime images, versions, and environment variables
 - `/opt/remote-vibe-station-runtime/docker-compose.yml` - main Compose file
 - `/opt/remote-vibe-station-runtime/docker-compose.vless.yml` - optional override for VLESS/proxy mode
 - `/opt/remote-vibe-station-runtime/infra/` - Traefik, CLIProxy, and related configuration
+
+Important runtime variables written by the installer include:
+
+```text
+COMPOSE_PROJECT_NAME=remote-vibe-station
+TELEGRAM_BOT_TOKEN=<provided>
+ADMIN_IDS=<provided>
+PUBLIC_BASE_URL=https://<domain>
+PUBLIC_DOMAIN=<domain>
+OPENCODE_PUBLIC_BASE_URL=https://<opencode-domain>
+OPENCODE_PUBLIC_DOMAIN=<opencode-domain>
+PROJECTS_ROOT=/srv/projects
+RVS_RUNTIME_VERSION=<display-version>
+RVS_RUNTIME_IMAGE_TAG=<image-tag>
+RVS_RUNTIME_COMMIT_SHA=<source-commit-sha>
+BOT_BACKEND_AUTH_TOKEN=<generated>
+OPENCODE_SERVER_PASSWORD=<generated>
+CLIPROXY_API_KEY=<generated>
+CLIPROXY_MANAGEMENT_PASSWORD=<generated>
+RVS_BACKEND_IMAGE=<image>
+RVS_MINIAPP_IMAGE=<image>
+RVS_BOT_IMAGE=<image>
+RVS_OPENCODE_IMAGE=<image>
+RVS_CLIPROXY_IMAGE=<image>
+```
+
+`RVS_RUNTIME_VERSION` is the human-readable release version shown in the UI. `RVS_RUNTIME_IMAGE_TAG` is the actual Docker image tag used for deploys, for example `v0.2.1` or `sha-<commit>`.
 
 Important note:
 
@@ -247,14 +331,17 @@ This repository is designed around image-based deployment.
 In the standard runtime flow:
 
 - pushes to `master` trigger image builds and publication to GHCR;
-- the deploy workflow connects to the server runtime over SSH;
-- the deploy workflow writes versioned `sha-<commit>` image refs to runtime `.env`;
-- the runtime host performs `docker compose pull` and `docker compose up -d --remove-orphans`.
+- stable runtime updates are discovered from GitHub Releases such as `v0.2.1`;
+- the Mini App checks the latest release and offers `Update runtime` when a newer release exists;
+- runtime updates save the previous `.env` as `.env.previous`, pull the new images, and restart the stack;
+- `Rollback` restores the previous `.env` snapshot and reapplies Compose.
 
 Relevant workflows:
 
 - `.github/workflows/build-images.yml`
 - `.github/workflows/deploy-runtime.yml`
+
+`Deploy Runtime` is kept as a manual emergency workflow. The normal production path is image build + Mini App runtime update.
 
 ### Manual emergency rollout
 
@@ -264,6 +351,78 @@ If CI/CD is temporarily unavailable, you can refresh the runtime manually:
 cd /opt/remote-vibe-station-runtime
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml pull
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
+```
+
+### Runtime update flow in Mini App
+
+The production update path is intentionally user-driven:
+
+1. Open Mini App.
+2. Go to `Settings -> Runtime updates`.
+3. Press `Check`.
+4. If a newer release exists, press `Update runtime`.
+5. During restart the Mini App can briefly disconnect; it reconnects and shows persisted progress/state.
+6. If the new release is broken, press `Rollback` to return to the previous runtime snapshot.
+
+`Check` compares the current runtime version to the latest GitHub Release. It does not treat every `master` commit as a production update.
+
+### VLESS and proxy runtime
+
+Fresh installs keep VLESS disabled by default. The installer writes a no-op `docker-compose.vless.yml` and empty proxy config placeholders so the runtime does not start with fake credentials.
+
+The intended flow is:
+
+1. Open Mini App.
+2. Go to Providers / CLIProxy runtime settings.
+3. Switch to `vless` mode.
+4. Paste the real `vless://...` config URL.
+5. Test and save settings.
+6. Apply runtime now.
+
+The backend then rewrites the VLESS files and restarts the selected services with proxy routing.
+
+### Verification after install or update
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml ps
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml logs --tail=100 backend bot miniapp opencode cliproxy proxy
+```
+
+Expected URLs:
+
+```text
+https://<domain>/miniapp
+https://<opencode-domain>
+```
+
+### Maintenance
+
+The installer creates `runtime-maintenance.sh` and the systemd timer `remote-vibe-station-maintenance.timer`.
+
+That maintenance job safely prunes:
+
+- unused Docker images older than the configured window;
+- stopped containers;
+- unused networks;
+- Docker build cache.
+
+It does not delete Docker volumes.
+
+### Stop or remove runtime
+
+Stop the runtime without deleting data:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml stop
+```
+
+Remove containers without deleting named volumes:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml down
 ```
 
 ## Supported user workflows
@@ -276,10 +435,6 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml
 - connect provider accounts and CLIProxy-backed model sources;
 - manage project files, Git, terminal access, and deploy routes from the Mini App;
 - operate voice-control flows for Telegram voice messages.
-
-## Documentation
-
-The maintained operational guide is `docs/runtime-install.md`.
 
 ## Scripts and infrastructure
 
