@@ -8,6 +8,7 @@
  */
 
 const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/releases/latest";
+const GITHUB_PUBLIC_LATEST_RELEASE_URL = "https://github.com/nyxandro/remote-vibe-station/releases/latest";
 const GITHUB_MASTER_REF_URL = "https://api.github.com/repos/nyxandro/remote-vibe-station/commits/master";
 const GITHUB_FORBIDDEN_STATUS = 403;
 
@@ -23,11 +24,15 @@ export type RuntimeGithubTokenProvider = {
 };
 
 export async function fetchLatestRuntimeVersion(githubApp?: RuntimeGithubTokenProvider): Promise<LatestRuntimeVersion> {
-  /* Releases are the source of truth for runtime image tags; auth avoids anonymous shared-IP limits. */
+  /* The API gives full release metadata; a saved PAT is optional and only improves rate-limit stability. */
   const headers = buildGithubHeaders(githubApp);
   const response = await fetch(GITHUB_LATEST_RELEASE_URL, { headers });
   if (!response.ok) {
-    throwReleaseCheckError(response.status, Boolean(headers.Authorization));
+    if (response.status === GITHUB_FORBIDDEN_STATUS && !headers.Authorization) {
+      return fetchLatestRuntimeVersionFromPublicRedirect();
+    }
+
+    throwReleaseCheckError(response.status);
   }
 
   /* GitHub release tag maps directly to GHCR image tags, while commit metadata is diagnostic-only. */
@@ -41,7 +46,7 @@ export async function fetchLatestRuntimeVersion(githubApp?: RuntimeGithubTokenPr
 }
 
 function buildGithubHeaders(githubApp?: RuntimeGithubTokenProvider): Record<string, string> {
-  /* Saved global GitHub PAT keeps runtime release checks stable under API rate limits. */
+  /* Saved global GitHub PAT is optional; public installs must still update without credentials. */
   const token = githubApp?.getStoredToken()?.trim();
   return token
     ? {
@@ -49,6 +54,23 @@ function buildGithubHeaders(githubApp?: RuntimeGithubTokenProvider): Record<stri
         Authorization: `Bearer ${token}`
       }
     : { Accept: "application/vnd.github+json" };
+}
+
+async function fetchLatestRuntimeVersionFromPublicRedirect(): Promise<LatestRuntimeVersion> {
+  /* The public release page redirect is not API-rate-limited and exposes the latest tag in the final URL. */
+  const response = await fetch(GITHUB_PUBLIC_LATEST_RELEASE_URL, { redirect: "manual" });
+  if (response.status < 300 || response.status >= 400) {
+    throwReleaseCheckError(response.status);
+  }
+
+  /* GitHub returns Location: /owner/repo/releases/tag/vX.Y.Z; accept absolute and relative variants. */
+  const location = response.headers.get("location")?.trim();
+  const imageTag = location?.match(/\/releases\/tag\/([^/?#]+)/)?.[1]?.trim() ?? "";
+  if (!imageTag) {
+    throw new Error("APP_RUNTIME_RELEASE_REDIRECT_INVALID: GitHub public latest release redirect did not include a release tag. Retry later or open the releases page manually.");
+  }
+
+  return { version: imageTag.replace(/^v/, ""), imageTag, commitSha: null, releaseNotes: null };
 }
 
 async function fetchMasterCommitSha(headers: Record<string, string>): Promise<string | null> {
@@ -61,11 +83,7 @@ async function fetchMasterCommitSha(headers: Record<string, string>): Promise<st
   return typeof payload.sha === "string" && payload.sha.trim().length > 0 ? payload.sha.trim() : null;
 }
 
-function throwReleaseCheckError(status: number, authenticated: boolean): never {
-  /* Anonymous 403 is usually a rate limit; tell operators the exact remediation instead of generic retry text. */
-  if (status === GITHUB_FORBIDDEN_STATUS && !authenticated) {
-    throw new Error("APP_RUNTIME_GITHUB_TOKEN_REQUIRED: GitHub latest release request failed with HTTP 403 because no GitHub token is saved. Open Settings, connect a GitHub PAT, then retry update check.");
-  }
-
+function throwReleaseCheckError(status: number): never {
+  /* Keep failures actionable without requiring credentials for public self-hosted installations. */
   throw new Error(`APP_RUNTIME_RELEASE_CHECK_FAILED: GitHub latest release request failed with HTTP ${status}. Retry later. Check GitHub access from the server and retry update check.`);
 }

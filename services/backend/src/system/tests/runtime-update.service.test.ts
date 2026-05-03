@@ -74,14 +74,23 @@ describe("RuntimeUpdateService", () => {
     fetchMock.mockRestore();
   });
 
-  test("explains GitHub rate limits when no token is saved", async () => {
-    /* Operators need an actionable message because unauthenticated GitHub checks can hit shared IP limits. */
+  test("falls back to public latest release redirect when anonymous API is rate-limited", async () => {
+    /* Public installs must update without GitHub credentials even when anonymous API quota is exhausted. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-github-rate-limit-"));
-    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValueOnce({ ok: false, status: 403 } as Response);
+    const fetchMock = jest.spyOn(global, "fetch")
+      .mockResolvedValueOnce({ ok: false, status: 403 } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: "https://github.com/nyxandro/remote-vibe-station/releases/tag/v1.2.3" })
+      } as Response);
     writeRuntimeEnv(runtimeDir);
     const service = new RuntimeUpdateService({ runtimeConfigDir: () => runtimeDir });
 
-    await expect(service.checkLatestVersion()).rejects.toThrow("APP_RUNTIME_GITHUB_TOKEN_REQUIRED");
+    const snapshot = await service.checkLatestVersion();
+
+    expect(snapshot).toMatchObject({ latestVersion: "1.2.3", latestImageTag: "v1.2.3", updateAvailable: true });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining("/releases/latest"), { redirect: "manual" });
     fetchMock.mockRestore();
   });
 
