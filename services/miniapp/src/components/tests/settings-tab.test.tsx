@@ -686,7 +686,7 @@ describe("SettingsTab", () => {
   });
 
   it("renders runtime version controls inside settings accordion and runs update/rollback actions", () => {
-    /* Runtime updates should behave like neighboring settings sections instead of floating above the accordion. */
+    /* Runtime updates live at the bottom of General settings with the other app-level controls. */
     const onCheckRuntimeVersion = vi.fn();
     const onUpdateRuntime = vi.fn();
     const onRollbackRuntime = vi.fn();
@@ -751,7 +751,9 @@ describe("SettingsTab", () => {
       />
     );
 
-    expect(screen.getByText("1. Runtime updates")).toBeTruthy();
+    expect(screen.queryByText("1. Runtime updates")).toBeNull();
+    fireEvent.click(screen.getByText("10. General settings"));
+    expect(screen.getByText("Runtime updates")).toBeTruthy();
     expect(screen.getByText("1.0.0")).toBeTruthy();
     expect(screen.getByText("1.2.3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Check" }));

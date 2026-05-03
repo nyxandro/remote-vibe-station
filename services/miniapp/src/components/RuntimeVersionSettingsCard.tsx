@@ -60,13 +60,15 @@ export const RuntimeVersionSettingsCard = (props: Props) => {
   return (
     <div className="runtime-version-panel">
       <article className="runtime-version-summary">
-        <div className="runtime-version-pair">
-          <span className="runtime-version-label">Current</span>
-          <strong className="runtime-version-value">{currentVersion}</strong>
-        </div>
-        <div className="runtime-version-pair">
-          <span className="runtime-version-label">Latest</span>
-          <strong className="runtime-version-value">{props.isChecking ? "Checking..." : latestVersion}</strong>
+        <div className="runtime-version-row">
+          <div className="runtime-version-pair">
+            <span className="runtime-version-label">Current</span>
+            <strong className="runtime-version-value">{currentVersion}</strong>
+          </div>
+          <div className="runtime-version-pair runtime-version-pair-latest">
+            <span className="runtime-version-label">Latest</span>
+            <strong className="runtime-version-value">{props.isChecking ? "Checking..." : latestVersion}</strong>
+          </div>
         </div>
         <span className={statusClassName}>{props.isChecking ? "Checking" : effectiveStatus}</span>
       </article>

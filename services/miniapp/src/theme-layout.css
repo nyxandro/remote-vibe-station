@@ -148,6 +148,21 @@
   min-height: 40px;
 }
 
+.settings-general-runtime {
+  /* Runtime updates live after lightweight theme controls so General settings stays compact first. */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.settings-general-runtime-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
 /* Runtime updates expose only user-facing version state; technical paths stay out of the main UI. */
 .runtime-version-panel {
   display: flex;
@@ -156,8 +171,8 @@
 }
 
 .runtime-version-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--border);
@@ -165,11 +180,25 @@
   background: #fcfcff;
 }
 
+.runtime-version-row {
+  /* Keep installed and available versions comparable without vertical scanning. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
 .runtime-version-pair {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+}
+
+.runtime-version-pair-latest {
+  /* Latest version sits on the right as requested, including on compact Telegram widths. */
+  align-items: flex-end;
+  text-align: right;
 }
 
 .runtime-version-label {
@@ -250,13 +279,6 @@
 .runtime-update-step.failed {
   color: #991b1b;
   background: #fee2e2;
-}
-
-@media (min-width: 720px) {
-  .runtime-version-summary {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-    align-items: end;
-  }
 }
 
 /* Server diagnostics cards keep CPU/RAM/disk/network grouped and scannable. */

@@ -24,7 +24,7 @@ import {
 } from "../types";
 import { inferTextEditorLanguage } from "../utils/text-editor-language";
 import { SettingsRuntimeDashboard } from "./SettingsRuntimeDashboard";
-import { RuntimeVersionSettingsAccordion } from "./RuntimeVersionSettingsAccordion";
+import { RuntimeVersionSettingsCard } from "./RuntimeVersionSettingsCard";
 import { ThemeMode } from "../utils/theme";
 import { GitHubAuthSettingsSection } from "./GitHubAuthSettingsSection";
 import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
@@ -299,13 +299,6 @@ export const SettingsTab = (props: Props) => {
         />
       ) : null}
 
-      <RuntimeVersionSettingsAccordion
-        runtimeVersion={props.runtimeVersion}
-        onCheckRuntimeVersion={props.onCheckRuntimeVersion}
-        onUpdateRuntime={props.onUpdateRuntime}
-        onRollbackRuntime={props.onRollbackRuntime}
-      />
-
       <AgentRulesSettingsAccordion
         activeId={props.activeId}
         overview={props.overview}
@@ -468,6 +461,24 @@ export const SettingsTab = (props: Props) => {
         <summary>10. General settings</summary>
         <div className="settings-accordion-body">
           <ThemeModeToggle themeMode={props.themeMode} onChangeTheme={props.onChangeTheme} />
+          {props.runtimeVersion ? (
+            <div className="settings-general-runtime">
+              <div className="settings-general-runtime-title">Runtime updates</div>
+              <RuntimeVersionSettingsCard
+                snapshot={props.runtimeVersion.snapshot}
+                isLoading={props.runtimeVersion.isLoading}
+                isChecking={props.runtimeVersion.isChecking}
+                isUpdating={props.runtimeVersion.isUpdating}
+                isRollingBack={props.runtimeVersion.isRollingBack}
+                isReconnecting={props.runtimeVersion.isReconnecting}
+                lastResult={props.runtimeVersion.lastResult}
+                updateState={props.runtimeVersion.updateState}
+                onCheck={props.onCheckRuntimeVersion ?? (() => {})}
+                onUpdate={props.onUpdateRuntime ?? (() => {})}
+                onRollback={props.onRollbackRuntime ?? (() => {})}
+              />
+            </div>
+          ) : null}
         </div>
       </details>
 
