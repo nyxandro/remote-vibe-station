@@ -19,7 +19,6 @@ type Props = {
     lastResult: "idle" | "updated" | "rolled-back" | "noop";
     updateState: RuntimeUpdateState | null;
   };
-  onReloadRuntimeVersion?: () => void;
   onCheckRuntimeVersion?: () => void;
   onUpdateRuntime?: () => void;
   onRollbackRuntime?: () => void;
@@ -40,7 +39,6 @@ export const RuntimeVersionSettingsAccordion = (props: Props) => {
             isReconnecting={props.runtimeVersion.isReconnecting}
             lastResult={props.runtimeVersion.lastResult}
             updateState={props.runtimeVersion.updateState}
-            onLoad={props.onReloadRuntimeVersion ?? (() => {})}
             onCheck={props.onCheckRuntimeVersion ?? (() => {})}
             onUpdate={props.onUpdateRuntime ?? (() => {})}
             onRollback={props.onRollbackRuntime ?? (() => {})}

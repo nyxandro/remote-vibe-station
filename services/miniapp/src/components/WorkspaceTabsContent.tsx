@@ -164,7 +164,6 @@ type Props = {
   };
   onReloadRuntimeServices?: () => void;
   onRestartRuntimeService?: (serviceId: ManagedRuntimeServiceId) => void;
-  onReloadRuntimeVersion?: () => void;
   onCheckRuntimeVersion?: () => void;
   onUpdateRuntime?: () => void;
   onRollbackRuntime?: () => void;
@@ -397,8 +396,7 @@ export const WorkspaceTabsContent = (props: Props) => {
        onReloadServerMetrics={props.onReloadServerMetrics}
        onReloadRuntimeServices={props.onReloadRuntimeServices}
        onRestartRuntimeService={props.onRestartRuntimeService}
-        onReloadRuntimeVersion={props.onReloadRuntimeVersion}
-        onCheckRuntimeVersion={props.onCheckRuntimeVersion}
+         onCheckRuntimeVersion={props.onCheckRuntimeVersion}
         onUpdateRuntime={props.onUpdateRuntime}
         onRollbackRuntime={props.onRollbackRuntime}
        onApplyProxyRuntime={props.proxyState.onApply}

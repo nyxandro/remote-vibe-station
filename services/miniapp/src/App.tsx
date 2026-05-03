@@ -455,7 +455,6 @@ export const App = () => {
           onReloadServerMetrics={() => void loadServerMetrics()}
           onReloadRuntimeServices={() => void loadRuntimeServices()}
           onRestartRuntimeService={(serviceId) => void restartRuntimeService(serviceId)}
-          onReloadRuntimeVersion={() => void loadRuntimeVersion()}
           onCheckRuntimeVersion={() => void checkRuntimeVersion()}
           onUpdateRuntime={() => void updateRuntime()}
           onRollbackRuntime={() => void rollbackRuntime()}

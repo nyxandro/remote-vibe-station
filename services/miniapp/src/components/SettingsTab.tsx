@@ -117,7 +117,6 @@ type Props = {
   };
   onReloadRuntimeServices?: () => void;
   onRestartRuntimeService?: (serviceId: ManagedRuntimeServiceId) => void;
-  onReloadRuntimeVersion?: () => void;
   onCheckRuntimeVersion?: () => void;
   onUpdateRuntime?: () => void;
   onRollbackRuntime?: () => void;
@@ -302,7 +301,6 @@ export const SettingsTab = (props: Props) => {
 
       <RuntimeVersionSettingsAccordion
         runtimeVersion={props.runtimeVersion}
-        onReloadRuntimeVersion={props.onReloadRuntimeVersion}
         onCheckRuntimeVersion={props.onCheckRuntimeVersion}
         onUpdateRuntime={props.onUpdateRuntime}
         onRollbackRuntime={props.onRollbackRuntime}

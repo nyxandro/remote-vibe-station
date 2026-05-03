@@ -32,7 +32,6 @@ type Props = {
   isReconnecting: boolean;
   lastResult: "idle" | "updated" | "rolled-back" | "noop";
   updateState: RuntimeUpdateState | null;
-  onLoad: () => void;
   onCheck: () => void;
   onUpdate: () => void;
   onRollback: () => void;
@@ -96,9 +95,6 @@ export const RuntimeVersionSettingsCard = (props: Props) => {
       ) : null}
 
       <div className="settings-actions-grid runtime-version-actions">
-        <button className="btn outline" disabled={props.isLoading} onClick={props.onLoad} type="button">
-          {props.isLoading ? "Loading..." : "Reload"}
-        </button>
         <button className="btn outline" disabled={props.isChecking} onClick={props.onCheck} type="button">
           {props.isChecking ? "Checking..." : "Check"}
         </button>
