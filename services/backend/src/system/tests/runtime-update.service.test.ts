@@ -118,6 +118,59 @@ describe("RuntimeUpdateService", () => {
     expect(state).toMatchObject({ status: "completed", targetVersion: "1.2.3" });
   });
 
+  test("keeps target env when compose fails after restart begins", async () => {
+    /* Once compose starts recreating containers, restoring old .env can leave images and version state mixed. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-partial-restart-"));
+    writeRuntimeEnv(runtimeDir, "0.2.2");
+    const runCommand = jest.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("APP_RUNTIME_COMMAND_FAILED: compose restart failed after recreating services"));
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "0.2.3", imageTag: "v0.2.3", commitSha: "newsha" }),
+      runCommand
+    });
+
+    await expect(service.updateToLatest()).rejects.toThrow("compose restart failed");
+
+    const env = fs.readFileSync(path.join(runtimeDir, ".env"), "utf-8");
+    expect(env).toContain("RVS_RUNTIME_VERSION=0.2.3");
+    expect(env).toContain("RVS_BOT_IMAGE=ghcr.io/nyxandro/remote-vibe-station-bot:v0.2.3");
+  });
+
+  test("reconciles whole compose stack after stale container restart failure", async () => {
+    /* Docker can fail on old orphan names during grouped up; service-scoped retries should converge the stack. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-reconcile-"));
+    writeRuntimeEnv(runtimeDir, "0.2.2");
+    const staleContainerError = new Error("APP_RUNTIME_COMMAND_FAILED: Error response from daemon: No such container: stale-proxy");
+    const runCommand = jest.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(staleContainerError)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "0.2.3", imageTag: "v0.2.3", commitSha: "newsha" }),
+      runCommand
+    });
+
+    const result = await service.updateToLatest();
+
+    expect(result.applied).toBe(true);
+    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "miniapp"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(4, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "bot"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(5, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "opencode"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(6, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "cliproxy"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(7, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "proxy"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(8, "docker", expect.arrayContaining(["--no-deps", "backend"]), runtimeDir);
+  });
+
   test("rolls back by restoring previous env and applying compose", async () => {
     /* Rollback should use the exact saved .env.previous instead of trying to infer old tags. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-rollback-"));

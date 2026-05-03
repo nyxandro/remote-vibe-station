@@ -25,6 +25,7 @@ const RVS_IMAGE_PREFIX = "ghcr.io/nyxandro/remote-vibe-station";
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 const BACKEND_SERVICE = "backend";
 const NON_BACKEND_RUNTIME_SERVICES = ["miniapp", "bot", "opencode", "cliproxy", "proxy"];
+const STALE_CONTAINER_ERROR_MARKER = "No such container:";
 
 export type RuntimeVersionSnapshot = {
   runtimeConfigDir: string;
@@ -157,17 +158,21 @@ export class RuntimeUpdateService {
     }
 
     this.writeUpdateState(this.buildState("updating", before.currentVersion, this.latestCache.version, this.latestCache.imageTag, null, "switching"));
+    let restartStarted = false;
     try {
       await this.writeVersionedEnv({ version: this.latestCache.version, imageTag: this.latestCache.imageTag, commitSha: this.latestCache.commitSha });
       this.writeUpdateState(this.buildState("updating", before.currentVersion, this.latestCache.version, this.latestCache.imageTag, null, "pulling"));
       await this.pullRuntimeImages();
       this.writeUpdateState(this.buildState("restarting", before.currentVersion, this.latestCache.version, this.latestCache.imageTag, null, "restarting"));
+      restartStarted = true;
       await this.applyRuntimeCompose();
       return { applied: true, previous: before, current: await this.getVersionSnapshot() };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.restorePreviousEnvIfAvailable();
-      this.writeUpdateState(this.buildState("failed", before.currentVersion, this.latestCache.version, this.latestCache.imageTag, message, "pulling"));
+      if (!restartStarted) {
+        this.restorePreviousEnvIfAvailable();
+      }
+      this.writeUpdateState(this.buildState("failed", before.currentVersion, this.latestCache.version, this.latestCache.imageTag, message, restartStarted ? "restarting" : "pulling"));
       throw error;
     }
   }
@@ -249,8 +254,30 @@ export class RuntimeUpdateService {
     /* Restart backend last because this code is running inside backend during self-update. */
     const runtimeDir = this.deps.runtimeConfigDir();
     const args = this.buildComposeArgs(runtimeDir);
-    await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--remove-orphans", ...NON_BACKEND_RUNTIME_SERVICES], runtimeDir);
+    try {
+      await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--remove-orphans", ...NON_BACKEND_RUNTIME_SERVICES], runtimeDir);
+    } catch (error) {
+      if (!this.isStaleContainerError(error)) {
+        throw error;
+      }
+
+      /* Stale compose container names are recoverable by reconciling services one-by-one before backend restarts. */
+      await this.reconcileNonBackendRuntimeServices(args, runtimeDir);
+    }
     await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--no-deps", BACKEND_SERVICE], runtimeDir);
+  }
+
+  private async reconcileNonBackendRuntimeServices(args: string[], runtimeDir: string): Promise<void> {
+    /* Service-scoped retries avoid restarting backend before the public edge is converged. */
+    for (const service of NON_BACKEND_RUNTIME_SERVICES) {
+      await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--remove-orphans", service], runtimeDir);
+    }
+  }
+
+  private isStaleContainerError(error: unknown): boolean {
+    /* Docker may report stale container ids/names after earlier interrupted compose updates. */
+    const message = error instanceof Error ? error.message : String(error);
+    return message.includes(STALE_CONTAINER_ERROR_MARKER);
   }
 
   private buildComposeArgs(runtimeDir: string): string[] {
