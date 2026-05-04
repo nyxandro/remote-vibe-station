@@ -25,6 +25,11 @@ const writeRuntimeEnv = (dir: string, version = "sha-old"): void => {
 };
 
 describe("RuntimeUpdateService", () => {
+  afterEach(() => {
+    /* Tests stub global fetch and filesystem stats; restore them so one failure cannot poison the suite. */
+    jest.restoreAllMocks();
+  });
+
   test("checks latest release and updates runtime env with versioned image refs", async () => {
     /* Update must preserve rollback state and apply the same version tag to every RVS service image. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-update-"));
@@ -49,9 +54,10 @@ describe("RuntimeUpdateService", () => {
     expect(env).toContain("RVS_RUNTIME_COMMIT_SHA=newsha");
     expect(env).toContain("RVS_BACKEND_IMAGE=ghcr.io/nyxandro/remote-vibe-station-backend:v1.2.3");
     expect(fs.existsSync(path.join(runtimeDir, ".env.previous"))).toBe(true);
-    expect(runCommand).toHaveBeenNthCalledWith(1, "docker", expect.arrayContaining(["compose", "--project-directory", "/opt/remote-vibe-station-runtime", "pull"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime", "miniapp", "bot", "opencode", "cliproxy", "proxy"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", "ghcr.io/nyxandro/remote-vibe-station-backend:v1.2.3"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(1, "sh", expect.arrayContaining(["-lc", expect.stringContaining("docker image rm")]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["compose", "--project-directory", "/opt/remote-vibe-station-runtime", "pull"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime", "miniapp", "bot", "opencode", "cliproxy", "proxy"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(4, "docker", expect.arrayContaining(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", "ghcr.io/nyxandro/remote-vibe-station-backend:v1.2.3"]), runtimeDir);
     expect(JSON.parse(fs.readFileSync(path.join(runtimeDir, "runtime-update-state.json"), "utf-8"))).toMatchObject({ status: "restarting", targetVersion: "1.2.3" });
   });
 
@@ -148,7 +154,7 @@ describe("RuntimeUpdateService", () => {
     expect(composeArgs).toEqual(expect.arrayContaining([
       expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime"])
     ]));
-    expect(composeArgs[0]).toEqual(expect.arrayContaining(["--env-file", path.join(runtimeDir, ".env"), "-f", path.join(runtimeDir, "docker-compose.yml")]));
+    expect(composeArgs[1]).toEqual(expect.arrayContaining(["--env-file", path.join(runtimeDir, ".env"), "-f", path.join(runtimeDir, "docker-compose.yml")]));
   });
 
   test("schedules backend restart in detached helper container", async () => {
@@ -165,7 +171,7 @@ describe("RuntimeUpdateService", () => {
 
     await service.updateToLatest();
 
-    const backendRestartArgs = runCommand.mock.calls[2][1] as string[];
+    const backendRestartArgs = runCommand.mock.calls[3][1] as string[];
     expect(backendRestartArgs).toEqual(expect.arrayContaining(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", "-w", "/opt/remote-vibe-station-runtime"]));
     expect(backendRestartArgs.join(" ")).toContain("/opt/remote-vibe-station-runtime:/opt/remote-vibe-station-runtime");
     expect(backendRestartArgs.join(" ")).toContain(`/opt/remote-vibe-station-runtime:${runtimeDir}:ro`);
@@ -188,9 +194,33 @@ describe("RuntimeUpdateService", () => {
 
     await expect(service.updateToLatest()).rejects.toThrow("APP_RUNTIME_DISK_SPACE_LOW");
 
-    expect(runCommand).not.toHaveBeenCalled();
+    expect(runCommand).toHaveBeenCalledTimes(1);
+    expect(runCommand).toHaveBeenNthCalledWith(1, "sh", expect.arrayContaining(["-lc", expect.stringContaining("docker image rm")]), runtimeDir);
     expect(fs.readFileSync(path.join(runtimeDir, ".env"), "utf-8")).toContain("RVS_RUNTIME_VERSION=0.2.7");
-    statfsMock.mockRestore();
+  });
+
+  test("prunes stale runtime images before pulling new images", async () => {
+    /* Cleanup must keep target and rollback images, while deleting older RVS tags that fill the disk. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-image-cleanup-"));
+    const runCommand = jest.fn().mockResolvedValue(undefined);
+    writeRuntimeEnv(runtimeDir, "0.2.7");
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "0.2.9", imageTag: "v0.2.9", commitSha: "newsha" }),
+      runCommand
+    });
+
+    await service.updateToLatest();
+
+    expect(runCommand).toHaveBeenNthCalledWith(1, "sh", expect.arrayContaining(["-lc", expect.stringContaining("docker images --format")]), runtimeDir);
+    const cleanupScript = (runCommand.mock.calls[0][1] as string[])[1];
+    expect(cleanupScript).toContain("ghcr.io/nyxandro/remote-vibe-station-backend:v0.2.9");
+    expect(cleanupScript).toContain("ghcr.io/nyxandro/remote-vibe-station-backend:0.2.7");
+    expect(cleanupScript).toContain("docker image rm");
+    expect(cleanupScript).toContain("APP_RUNTIME_IMAGE_CLEANUP_FAILED");
+    expect(cleanupScript).toContain("image is being used");
+    expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["compose", "pull"]), runtimeDir);
   });
 
   test("recovers corrupted update state file", async () => {
@@ -227,7 +257,7 @@ describe("RuntimeUpdateService", () => {
 
     await service.updateToLatest();
 
-    expect(runCommand).toHaveBeenNthCalledWith(1, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime"]), runtimeDir);
   });
 
   test("recovers update state as completed after backend restart", async () => {
@@ -255,6 +285,7 @@ describe("RuntimeUpdateService", () => {
     writeRuntimeEnv(runtimeDir, "0.2.2");
     const runCommand = jest.fn()
       .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error("APP_RUNTIME_COMMAND_FAILED: compose restart failed after recreating services"));
     const service = new RuntimeUpdateService({
       runtimeConfigDir: () => runtimeDir,
@@ -277,6 +308,7 @@ describe("RuntimeUpdateService", () => {
     const staleContainerError = new Error("APP_RUNTIME_COMMAND_FAILED: Error response from daemon: No such container: stale-proxy");
     const runCommand = jest.fn()
       .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(staleContainerError)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
@@ -294,12 +326,12 @@ describe("RuntimeUpdateService", () => {
     const result = await service.updateToLatest();
 
     expect(result.applied).toBe(true);
-    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "miniapp"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(4, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "bot"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(5, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "opencode"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(6, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "cliproxy"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(7, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "proxy"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(8, "docker", expect.arrayContaining(["run", "-d", "--rm", "ghcr.io/nyxandro/remote-vibe-station-backend:v0.2.3"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(4, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "miniapp"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(5, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "bot"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(6, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "opencode"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(7, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "cliproxy"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(8, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "proxy"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(9, "docker", expect.arrayContaining(["run", "-d", "--rm", "ghcr.io/nyxandro/remote-vibe-station-backend:v0.2.3"]), runtimeDir);
   });
 
   test("rolls back by restoring previous env and applying compose", async () => {

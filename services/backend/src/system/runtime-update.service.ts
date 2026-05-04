@@ -18,6 +18,7 @@ import { writeJsonFileSyncAtomic } from "../storage/json-file";
 import { applyRuntimeComposeUpdate, buildRuntimeComposeArgs } from "./runtime-compose-update";
 import { assertRuntimeUpdateDiskSpace } from "./runtime-disk-space";
 import { fetchLatestRuntimeVersion, LatestRuntimeVersion } from "./runtime-github-release";
+import { pruneOldRuntimeImages } from "./runtime-image-cleanup";
 import { readFreshRuntimeLatestReleaseCache, writeRuntimeLatestReleaseCache } from "./runtime-latest-release-cache";
 
 const RUNTIME_ENV_FILE = ".env";
@@ -218,11 +219,23 @@ export class RuntimeUpdateService {
   }
 
   private async pullRuntimeImages(): Promise<void> {
-    /* Pull all images before mutating .env so failed downloads never stop the current runtime. */
+    /* Cleanup preserves target/rollback tags, then preflights disk before pulling fresh image layers. */
     const runtimeDir = this.deps.runtimeConfigDir();
+    await this.pruneOldImagesBeforePull();
     assertRuntimeUpdateDiskSpace(runtimeDir);
     const args = buildRuntimeComposeArgs(runtimeDir, this.deps.runtimeHostConfigDir());
     await this.deps.runCommand("docker", ["compose", ...args, "pull"], runtimeDir);
+  }
+
+  private async pruneOldImagesBeforePull(): Promise<void> {
+    /* Old runtime image tags are large; remove them automatically without touching volumes or rollback refs. */
+    const runtimeDir = this.deps.runtimeConfigDir();
+    const envSnapshots = [this.readEnvFile()];
+    const previousPath = path.join(runtimeDir, RUNTIME_PREVIOUS_ENV_FILE);
+    if (fs.existsSync(previousPath)) {
+      envSnapshots.push(this.readEnvFileAt(previousPath));
+    }
+    await pruneOldRuntimeImages({ runtimeDir, envSnapshots, runCommand: this.deps.runCommand });
   }
 
   private restorePreviousEnvIfAvailable(): void {
@@ -254,6 +267,11 @@ export class RuntimeUpdateService {
       throw new Error(`APP_RUNTIME_ENV_MISSING: Runtime .env is missing at ${envPath}. Re-run installer or restore runtime config.`);
     }
 
+    return this.readEnvFileAt(envPath);
+  }
+
+  private readEnvFileAt(envPath: string): Record<string, string> {
+    /* Shared parser is used for current and previous env snapshots that protect rollback image tags. */
     const env: Record<string, string> = {};
     for (const line of fs.readFileSync(envPath, "utf-8").split(/\r?\n/)) {
       if (!line || line.trimStart().startsWith("#")) {
