@@ -173,6 +173,40 @@ describe("RuntimeUpdateService", () => {
     expect(backendRestartArgs.join(" ")).toContain("up' '-d' '--no-deps' 'backend'");
   });
 
+  test("fails before pulling images when runtime disk space is too low", async () => {
+    /* Low disk space should fail fast before Docker pull can corrupt runtime state with partial writes. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-disk-low-"));
+    const runCommand = jest.fn().mockResolvedValue(undefined);
+    const statfsMock = jest.spyOn(fs, "statfsSync").mockReturnValue({ bavail: 1, bsize: 1024 } as fs.StatsFs);
+    writeRuntimeEnv(runtimeDir, "0.2.7");
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "0.2.8", imageTag: "v0.2.8", commitSha: "newsha" }),
+      runCommand
+    });
+
+    await expect(service.updateToLatest()).rejects.toThrow("APP_RUNTIME_DISK_SPACE_LOW");
+
+    expect(runCommand).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(runtimeDir, ".env"), "utf-8")).toContain("RVS_RUNTIME_VERSION=0.2.7");
+    statfsMock.mockRestore();
+  });
+
+  test("recovers corrupted update state file", async () => {
+    /* Earlier non-atomic writes could leave empty JSON on ENOSPC; Settings must recover and preserve evidence. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-corrupt-state-"));
+    writeRuntimeEnv(runtimeDir, "0.2.7");
+    fs.writeFileSync(path.join(runtimeDir, "runtime-update-state.json"), "", "utf-8");
+    const service = new RuntimeUpdateService({ runtimeConfigDir: () => runtimeDir, fetchLatestVersion: jest.fn() });
+
+    const state = await service.getUpdateState();
+
+    expect(state).toMatchObject({ status: "failed", currentVersion: "0.2.7" });
+    expect(state.error).toContain("APP_RUNTIME_UPDATE_STATE_CORRUPT");
+    expect(fs.readdirSync(runtimeDir).some((entry) => entry.startsWith("runtime-update-state.json.corrupt-"))).toBe(true);
+  });
+
   test("resolves host config directory from linux mountinfo", async () => {
     /* Bind mounts store the host subpath in the mountinfo root field, not in the filesystem source field. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-mountinfo-"));

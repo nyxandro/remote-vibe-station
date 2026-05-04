@@ -11,6 +11,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { writeJsonFileSyncAtomic } from "../storage/json-file";
 import { LatestRuntimeVersion } from "./runtime-github-release";
 
 const RUNTIME_LATEST_RELEASE_CACHE_FILE = "runtime-latest-release-cache.json";
@@ -47,7 +48,7 @@ export function readFreshRuntimeLatestReleaseCache(runtimeDir: string, now: numb
 
 export function writeRuntimeLatestReleaseCache(runtimeDir: string, cache: RuntimeLatestReleaseCache): void {
   /* Keep cache human-readable because operators may inspect runtime-config directly during update incidents. */
-  fs.writeFileSync(path.join(runtimeDir, RUNTIME_LATEST_RELEASE_CACHE_FILE), JSON.stringify(cache, null, 2), "utf-8");
+  writeJsonFileSyncAtomic(path.join(runtimeDir, RUNTIME_LATEST_RELEASE_CACHE_FILE), cache);
 }
 
 function isValidCacheShape(value: Partial<RuntimeLatestReleaseCache>): value is RuntimeLatestReleaseCache {

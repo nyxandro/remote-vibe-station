@@ -14,7 +14,9 @@ import { spawn } from "node:child_process";
 
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { GithubAppService } from "../github/github-app.service";
+import { writeJsonFileSyncAtomic } from "../storage/json-file";
 import { applyRuntimeComposeUpdate, buildRuntimeComposeArgs } from "./runtime-compose-update";
+import { assertRuntimeUpdateDiskSpace } from "./runtime-disk-space";
 import { fetchLatestRuntimeVersion, LatestRuntimeVersion } from "./runtime-github-release";
 import { readFreshRuntimeLatestReleaseCache, writeRuntimeLatestReleaseCache } from "./runtime-latest-release-cache";
 
@@ -218,6 +220,7 @@ export class RuntimeUpdateService {
   private async pullRuntimeImages(): Promise<void> {
     /* Pull all images before mutating .env so failed downloads never stop the current runtime. */
     const runtimeDir = this.deps.runtimeConfigDir();
+    assertRuntimeUpdateDiskSpace(runtimeDir);
     const args = buildRuntimeComposeArgs(runtimeDir, this.deps.runtimeHostConfigDir());
     await this.deps.runCommand("docker", ["compose", ...args, "pull"], runtimeDir);
   }
@@ -345,12 +348,20 @@ export class RuntimeUpdateService {
       const snapshotEnv = fs.existsSync(path.join(this.deps.runtimeConfigDir(), RUNTIME_ENV_FILE)) ? this.readEnvFile() : {};
       return this.buildState("idle", snapshotEnv.RVS_RUNTIME_VERSION ?? null, null, null, null, null);
     }
-    return JSON.parse(fs.readFileSync(statePath, "utf-8")) as RuntimeUpdateState;
+    try {
+      return JSON.parse(fs.readFileSync(statePath, "utf-8")) as RuntimeUpdateState;
+    } catch (error) {
+      /* Old versions could truncate this file on ENOSPC; recover Settings instead of breaking the UI. */
+      const snapshotEnv = fs.existsSync(path.join(this.deps.runtimeConfigDir(), RUNTIME_ENV_FILE)) ? this.readEnvFile() : {};
+      const state = this.buildState("failed", snapshotEnv.RVS_RUNTIME_VERSION ?? null, null, null, `APP_RUNTIME_UPDATE_STATE_CORRUPT: Runtime update state is not valid JSON. Previous state was moved aside. ${error instanceof Error ? error.message : String(error)}`, "checking");
+      fs.renameSync(statePath, `${statePath}.corrupt-${Date.now()}`);
+      return this.writeUpdateState(state);
+    }
   }
 
   private writeUpdateState(state: RuntimeUpdateState): RuntimeUpdateState {
     /* Atomic enough for one backend writer and readable by the restarted backend. */
-    fs.writeFileSync(path.join(this.deps.runtimeConfigDir(), RUNTIME_UPDATE_STATE_FILE), JSON.stringify(state, null, 2), "utf-8");
+    writeJsonFileSyncAtomic(path.join(this.deps.runtimeConfigDir(), RUNTIME_UPDATE_STATE_FILE), state);
     return state;
   }
 
