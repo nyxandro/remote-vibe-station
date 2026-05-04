@@ -8,7 +8,7 @@
  * - CliproxyAccountService - Builds statuses and proxies OAuth start/callback calls.
  */
 
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 
 import {
   CliproxyAccountQuota,
@@ -111,12 +111,12 @@ export class CliproxyAccountService {
 
   public async getState(): Promise<CliproxyAccountState> {
     /* State merges oauth auth-files, static API-key config, and observed usage into one provider view. */
-    const [authFiles, config, usageTrackingEnabled, usageDetails] = await Promise.all([
+    const [authFiles, config, usageTrackingEnabled] = await Promise.all([
       this.api.getAuthFiles(),
       this.api.getConfig(),
-      this.api.getUsageStatisticsEnabled(),
-      this.api.getUsage()
+      this.api.getUsageStatisticsEnabled()
     ]);
+    const usageDetails = await this.loadOptionalUsageDetails();
     const loweredAuthFiles = authFiles.map((item) => item.name.toLowerCase());
     const accounts = await this.buildConnectedAccountsWithQuota(authFiles, usageDetails);
 
@@ -137,6 +137,24 @@ export class CliproxyAccountService {
       providers,
       accounts
     };
+  }
+
+  private async loadOptionalUsageDetails(): Promise<CliproxyUsageDetail[]> {
+    /* CLIProxy v6.10.4 removed the historical usage endpoint; account connectivity must remain usable without telemetry. */
+    try {
+      return await this.api.getUsage();
+    } catch (error) {
+      if (this.isCliproxyUsageEndpointMissing(error)) {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  private isCliproxyUsageEndpointMissing(error: unknown): boolean {
+    /* Only tolerate the exact removed endpoint symptom; other gateway failures still surface as operator-visible errors. */
+    return error instanceof BadGatewayException && error.message.includes("/v0/management/usage") && error.message.includes("404");
   }
 
   public async startOAuth(input: CliproxyOAuthStartInput) {
@@ -280,7 +298,7 @@ export class CliproxyAccountService {
     const originalDisabledByPath = new Map(
       updates.map((entry) => [this.requireFilePath(entry), entry.disabled] as const)
     );
-    const usageDetails = await this.api.getUsage();
+    const usageDetails = await this.loadOptionalUsageDetails();
     const appliedPaths: string[] = [];
 
     try {

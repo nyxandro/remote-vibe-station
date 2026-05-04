@@ -2,7 +2,7 @@
  * @fileoverview Tests for CLIProxy account onboarding service.
  */
 
-import { BadRequestException } from "@nestjs/common";
+import { BadGatewayException, BadRequestException } from "@nestjs/common";
 
 import { CliproxyAccountService } from "../cliproxy-account.service";
 
@@ -266,6 +266,56 @@ describe("CliproxyAccountService", () => {
         }
       }
     ]);
+  });
+
+  test("keeps account state available when CLIProxy usage endpoint is missing", async () => {
+    /* Newer CLIProxy builds can omit historical usage telemetry; provider management must still load. */
+    const api = {
+      getAuthFiles: jest.fn().mockResolvedValue([
+        {
+          id: "codex-user@example.com",
+          name: "codex-user@example.com",
+          authIndex: "codex-1",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-user@example.com.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
+          email: "codex-user@example.com",
+          account: null,
+          label: null,
+          status: "ready",
+          statusMessage: "ok"
+        }
+      ]),
+      getConfig: jest.fn().mockResolvedValue({}),
+      getUsageStatisticsEnabled: jest.fn().mockResolvedValue(true),
+      getUsage: jest.fn().mockRejectedValue(
+        new BadGatewayException("CLIProxy management request failed (404) at '/v0/management/usage': 404 page not found")
+      ),
+      apiCall: jest.fn(),
+      downloadAuthFileJson: jest.fn().mockResolvedValue({}),
+      startOAuth: jest.fn(),
+      completeOAuth: jest.fn()
+    };
+    const runtime = {
+      setDisabled: jest.fn(),
+      deleteFile: jest.fn()
+    };
+
+    const service = new CliproxyAccountService(api as never, runtime as never);
+    const state = await service.getState();
+
+    expect(state.usageTrackingEnabled).toBe(true);
+    expect(state.providers.find((item: { id: string }) => item.id === "codex")?.connected).toBe(true);
+    expect(state.accounts[0]?.usage).toEqual({
+      requestCount: 0,
+      tokenCount: 0,
+      failedRequestCount: 0,
+      models: [],
+      lastUsedAt: null
+    });
   });
 
   test("extracts callback params from full URL for oauth completion", async () => {
@@ -584,5 +634,43 @@ describe("CliproxyAccountService", () => {
       filePath: "/root/.cli-proxy-api/codex-b.json",
       disabled: true
     });
+  });
+
+  test("tests selected account when CLIProxy usage endpoint is missing", async () => {
+    /* Probe model selection should fall back to provider defaults when historical usage telemetry is unavailable. */
+    const api = {
+      getAuthFiles: jest.fn().mockResolvedValue([
+        {
+          id: "codex-a",
+          name: "codex-a",
+          authIndex: "codex-1",
+          provider: "codex",
+          path: "/root/.cli-proxy-api/codex-a.json",
+          source: "file",
+          runtimeOnly: false,
+          disabled: false,
+          unavailable: false,
+          email: null,
+          account: null,
+          label: null,
+          status: "ready",
+          statusMessage: ""
+        }
+      ]),
+      getUsage: jest.fn().mockRejectedValue(
+        new BadGatewayException("CLIProxy management request failed (404) at '/v0/management/usage': 404 page not found")
+      ),
+      listModels: jest.fn().mockResolvedValue(["gpt-5.4-mini"]),
+      runChatProbe: jest.fn().mockResolvedValue(undefined)
+    };
+    const runtime = {
+      setDisabled: jest.fn().mockResolvedValue(undefined),
+      deleteFile: jest.fn()
+    };
+
+    const service = new CliproxyAccountService(api as never, runtime as never);
+    await service.testAccount({ accountId: "codex-a" });
+
+    expect(api.runChatProbe).toHaveBeenCalledWith({ modelID: "gpt-5.4-mini" });
   });
 });

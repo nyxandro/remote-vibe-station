@@ -78,7 +78,8 @@ export class RuntimeServicesController {
     /* Manual check keeps outbound GitHub calls controlled by an explicit operator action. */
     this.requireAdminIdentity(req);
     try {
-      return await this.runtimeUpdate.checkLatestVersion();
+      /* Manual checks must bypass the daily cache so newly published releases show up immediately in the Mini App. */
+      return await this.runtimeUpdate.checkLatestVersion({ forceRefresh: true });
     } catch (error) {
       throw new BadRequestException(
         normalizeUnknownErrorToAppError({
