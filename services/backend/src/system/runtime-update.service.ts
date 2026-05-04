@@ -5,6 +5,7 @@
  * - RuntimeVersionSnapshot - Current/available runtime version state for Mini App.
  * - RuntimeUpdateState - Persisted update progress that survives backend restarts.
  * - RuntimeUpdateResult - Result payload for update and rollback actions.
+ * - resolveRuntimeCommandTimeoutMs - Selects Docker command timeout by operation cost.
  * - RuntimeUpdateService - Reads runtime .env, checks GitHub releases, updates image refs and applies Compose.
  */
 
@@ -26,7 +27,9 @@ const RUNTIME_PREVIOUS_ENV_FILE = ".env.previous";
 const RUNTIME_UPDATE_STATE_FILE = "runtime-update-state.json";
 const PROC_SELF_MOUNTINFO_FILE = "/proc/self/mountinfo";
 const RVS_IMAGE_PREFIX = "ghcr.io/nyxandro/remote-vibe-station";
-const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+const COMPOSE_UP_TIMEOUT_MS = 15 * 60 * 1000;
+const COMPOSE_PULL_TIMEOUT_MS = 45 * 60 * 1000;
 
 export type RuntimeVersionSnapshot = {
   runtimeConfigDir: string;
@@ -84,6 +87,20 @@ type RuntimeUpdateDeps = {
 };
 
 type NormalizedLatestRuntimeVersion = { version: string; imageTag: string; commitSha: string | null; releaseNotes: string | null; checkedAt: string };
+
+export function resolveRuntimeCommandTimeoutMs(command: string, args: string[]): number {
+  /* Pulling the OpenCode image is the slow path on small VPS hosts, while other Docker commands should fail sooner. */
+  if (command === "docker" && args[0] === "compose" && args.includes("pull")) {
+    return COMPOSE_PULL_TIMEOUT_MS;
+  }
+
+  /* Compose up can recreate the stack and run image extraction, but should not block as long as image downloads. */
+  if (command === "docker" && args[0] === "compose" && args.includes("up")) {
+    return COMPOSE_UP_TIMEOUT_MS;
+  }
+
+  return DEFAULT_COMMAND_TIMEOUT_MS;
+}
 
 @Injectable()
 export class RuntimeUpdateService {
@@ -432,13 +449,14 @@ export class RuntimeUpdateService {
   }
 
   private async runCommand(command: string, args: string[], cwd: string): Promise<void> {
-    /* Docker compose can take several minutes when pulling fresh images. */
+    /* Docker operations have different cost profiles, so timeout is selected from the command shape. */
     await new Promise<void>((resolve, reject) => {
       const child = spawn(command, args, { cwd, stdio: "pipe" });
+      const timeoutMs = resolveRuntimeCommandTimeoutMs(command, args);
       const timer = setTimeout(() => {
         child.kill("SIGTERM");
-        reject(new Error(`APP_RUNTIME_COMMAND_TIMEOUT: Runtime command timed out after ${COMMAND_TIMEOUT_MS}ms: ${command} ${args.join(" ")}`));
-      }, COMMAND_TIMEOUT_MS);
+        reject(new Error(`APP_RUNTIME_COMMAND_TIMEOUT: Runtime command timed out after ${timeoutMs}ms: ${command} ${args.join(" ")}`));
+      }, timeoutMs);
       let stderr = "";
       child.stderr.on("data", (chunk) => { stderr += String(chunk); });
       child.on("error", (error) => {

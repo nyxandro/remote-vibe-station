@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { RuntimeUpdateService } from "../runtime-update.service";
+import { RuntimeUpdateService, resolveRuntimeCommandTimeoutMs } from "../runtime-update.service";
 
 const writeRuntimeEnv = (dir: string, version = "sha-old"): void => {
   fs.writeFileSync(
@@ -425,5 +425,12 @@ describe("RuntimeUpdateService", () => {
     expect(result.current.rollbackAvailable).toBe(false);
     expect(fs.existsSync(path.join(runtimeDir, ".env.previous"))).toBe(false);
     expect(fs.existsSync(path.join(runtimeDir, ".env.previous.consumed"))).toBe(true);
+  });
+
+  test("uses long timeout only for expensive compose operations", () => {
+    /* Runtime pulls can spend tens of minutes downloading OpenCode layers; smaller Docker commands stay bounded. */
+    expect(resolveRuntimeCommandTimeoutMs("docker", ["compose", "pull"])).toBe(45 * 60 * 1000);
+    expect(resolveRuntimeCommandTimeoutMs("docker", ["compose", "up", "-d"])).toBe(15 * 60 * 1000);
+    expect(resolveRuntimeCommandTimeoutMs("docker", ["image", "rm", "example"])).toBe(10 * 60 * 1000);
   });
 });
