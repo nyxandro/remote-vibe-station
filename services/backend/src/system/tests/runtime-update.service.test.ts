@@ -97,6 +97,58 @@ describe("RuntimeUpdateService", () => {
     expect(snapshot).toMatchObject({ latestVersion: "1.2.4", latestImageTag: "v1.2.4" });
   });
 
+  test("manual runtime check bypasses fresh latest release cache", async () => {
+    /* Operator-triggered checks must not wait a day when a new release exists after an older cached check. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-force-check-"));
+    writeRuntimeEnv(runtimeDir, "0.2.8");
+    fs.writeFileSync(path.join(runtimeDir, "runtime-latest-release-cache.json"), JSON.stringify({
+      version: "0.2.8",
+      imageTag: "v0.2.8",
+      commitSha: "oldsha",
+      releaseNotes: "Old cached release",
+      checkedAt: "2026-05-04T00:00:00.000Z"
+    }), "utf-8");
+    const fetchLatestVersion = jest.fn().mockResolvedValue({ version: "0.2.10", imageTag: "v0.2.10", commitSha: "newsha" });
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      now: () => Date.parse("2026-05-04T01:00:00.000Z"),
+      fetchLatestVersion
+    });
+
+    const snapshot = await service.checkLatestVersion({ forceRefresh: true });
+
+    expect(fetchLatestVersion).toHaveBeenCalledTimes(1);
+    expect(snapshot).toMatchObject({ latestVersion: "0.2.10", latestImageTag: "v0.2.10", updateAvailable: true });
+  });
+
+  test("runtime update bypasses fresh latest release cache", async () => {
+    /* Update button must target the actual latest release even when the daily cache still points to the old one. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-force-update-"));
+    const runCommand = jest.fn().mockResolvedValue(undefined);
+    writeRuntimeEnv(runtimeDir, "0.2.8");
+    fs.writeFileSync(path.join(runtimeDir, "runtime-latest-release-cache.json"), JSON.stringify({
+      version: "0.2.8",
+      imageTag: "v0.2.8",
+      commitSha: "oldsha",
+      releaseNotes: "Old cached release",
+      checkedAt: "2026-05-04T00:00:00.000Z"
+    }), "utf-8");
+    const fetchLatestVersion = jest.fn().mockResolvedValue({ version: "0.2.10", imageTag: "v0.2.10", commitSha: "newsha" });
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
+      now: () => Date.parse("2026-05-04T01:00:00.000Z"),
+      fetchLatestVersion,
+      runCommand
+    });
+
+    const result = await service.updateToLatest();
+
+    expect(fetchLatestVersion).toHaveBeenCalledTimes(1);
+    expect(result.applied).toBe(true);
+    expect(fs.readFileSync(path.join(runtimeDir, ".env"), "utf-8")).toContain("RVS_RUNTIME_VERSION=0.2.10");
+  });
+
   test("uses saved GitHub token for release checks", async () => {
     /* Authenticated GitHub API calls avoid anonymous rate limits during runtime update checks. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-github-token-"));

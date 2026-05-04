@@ -70,6 +70,10 @@ export type RuntimeUpdateResult = {
   current: RuntimeVersionSnapshot;
 };
 
+type RuntimeLatestVersionCheckOptions = {
+  forceRefresh?: boolean;
+};
+
 type RuntimeUpdateDeps = {
   runtimeConfigDir: () => string;
   runtimeHostConfigDir: () => string;
@@ -121,9 +125,9 @@ export class RuntimeUpdateService {
     return state;
   }
 
-  public async checkLatestVersion(): Promise<RuntimeVersionSnapshot> {
+  public async checkLatestVersion(options?: RuntimeLatestVersionCheckOptions): Promise<RuntimeVersionSnapshot> {
     /* Daily persisted cache prevents self-hosted installs from spending GitHub anonymous API quota. */
-    const release = await this.readLatestReleaseWithCache();
+    const release = await this.readLatestReleaseWithCache(options);
     this.latestCache = release;
     const snapshot = await this.getVersionSnapshot();
     this.writeUpdateState(this.buildState(snapshot.updateAvailable ? "available" : "idle", snapshot.currentVersion, release.version, release.imageTag, null, "checking"));
@@ -132,7 +136,7 @@ export class RuntimeUpdateService {
 
   public async updateToLatest(): Promise<RuntimeUpdateResult> {
     /* Update uses the latest checked release, fetching it first when the UI did not check explicitly. */
-    const before = await this.checkLatestVersion();
+    const before = await this.checkLatestVersion({ forceRefresh: true });
     if (!this.latestCache) {
       throw new Error("APP_RUNTIME_LATEST_VERSION_MISSING: Latest runtime version is unavailable. Check for updates first and retry.");
     }
@@ -334,10 +338,10 @@ export class RuntimeUpdateService {
     return value.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)));
   }
 
-  private async readLatestReleaseWithCache(): Promise<NormalizedLatestRuntimeVersion> {
-    /* Persisted cache is authoritative for one day; update clicks should not become GitHub polling. */
+  private async readLatestReleaseWithCache(options?: RuntimeLatestVersionCheckOptions): Promise<NormalizedLatestRuntimeVersion> {
+    /* Cached latest release is fine for passive reads, but operator-triggered checks must be able to bypass it. */
     const runtimeDir = this.deps.runtimeConfigDir();
-    const cached = readFreshRuntimeLatestReleaseCache(runtimeDir, this.deps.now());
+    const cached = options?.forceRefresh ? null : readFreshRuntimeLatestReleaseCache(runtimeDir, this.deps.now());
     if (cached) {
       return cached;
     }
