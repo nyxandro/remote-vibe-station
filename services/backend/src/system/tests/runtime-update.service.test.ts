@@ -407,4 +407,23 @@ describe("RuntimeUpdateService", () => {
     expect(env).toContain("RVS_BACKEND_IMAGE=old-backend");
     expect(runCommand).toHaveBeenCalledTimes(2);
   });
+
+  test("consumes rollback snapshot after successful rollback", async () => {
+    /* Once rollback reaches the previous version, there is no older rollback image to protect until a new update runs. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-rollback-consumed-"));
+    writeRuntimeEnv(runtimeDir, "v1.2.3");
+    fs.writeFileSync(path.join(runtimeDir, ".env.previous"), "RVS_RUNTIME_VERSION=1.2.2\nRVS_RUNTIME_COMMIT_SHA=oldsha\nRVS_BACKEND_IMAGE=old-backend\nRVS_MINIAPP_IMAGE=old-miniapp\nRVS_BOT_IMAGE=old-bot\nRVS_OPENCODE_IMAGE=old-opencode\n", "utf-8");
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => runtimeDir,
+      fetchLatestVersion: jest.fn(),
+      runCommand: jest.fn().mockResolvedValue(undefined)
+    });
+
+    const result = await service.rollback();
+
+    expect(result.current.rollbackAvailable).toBe(false);
+    expect(fs.existsSync(path.join(runtimeDir, ".env.previous"))).toBe(false);
+    expect(fs.existsSync(path.join(runtimeDir, ".env.previous.consumed"))).toBe(true);
+  });
 });

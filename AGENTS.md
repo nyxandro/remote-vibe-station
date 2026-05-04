@@ -102,6 +102,16 @@
 - In all environments the edge reverse proxy runs in Docker (Nginx or Traefik) and proxies traffic to the `frontend` and `backend` containers.
 - **For development, prefer `stop`/`start` instead of `down` to preserve data and enable fast restarts.**
 
+### Versioned Release Flow
+
+- When preparing a versioned runtime release, keep `master` and `develop` synchronized on the same commit.
+- Create an annotated semver tag such as `v0.2.15` on the release commit.
+- Push both branches and the tag: `master`, `develop`, `vX.Y.Z`.
+- Create a GitHub Release for the same tag; Mini App runtime updates discover stable versions from GitHub Releases, not from arbitrary `master` commits.
+- Wait for GitHub Actions `Build And Publish Images` to succeed for both `master` and the release tag before telling the operator the release is ready.
+- Release images must come from GHCR tags published by CI, for example `ghcr.io/nyxandro/remote-vibe-station-backend:vX.Y.Z`; never build or patch production images manually on the server.
+- Do not force-push or rewrite release tags unless the operator explicitly asks and understands the deployment impact.
+
 ### Remote Dev Deploy Flow
 
 - The built-in per-project deploy API was intentionally removed.

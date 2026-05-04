@@ -100,6 +100,9 @@ grep -q 'docker compose --env-file \.env -f docker-compose.yml -f docker-compose
 
 # Ensure maintenance script prunes safe Docker garbage without touching named volumes.
 grep -q 'docker image prune -af --filter "until=168h"' "$MAINTENANCE_SCRIPT"
+grep -q 'prune_old_rvs_images()' "$MAINTENANCE_SCRIPT"
+grep -q 'RVS_BACKEND_IMAGE RVS_MINIAPP_IMAGE RVS_BOT_IMAGE RVS_OPENCODE_IMAGE' "$MAINTENANCE_SCRIPT"
+grep -q 'docker image rm "$image"' "$MAINTENANCE_SCRIPT"
 grep -q 'docker builder prune --help' "$MAINTENANCE_SCRIPT"
 grep -q -- '--reserved-space 512MB' "$MAINTENANCE_SCRIPT"
 if grep -q 'docker volume prune' "$MAINTENANCE_SCRIPT"; then

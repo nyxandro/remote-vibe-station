@@ -575,4 +575,59 @@ describe("SettingsTab", () => {
     expect(onUpdateRuntime).toHaveBeenCalledTimes(1);
     expect(onRollbackRuntime).toHaveBeenCalledTimes(1);
   });
+
+  it("disables runtime rollback when no rollback snapshot remains", () => {
+    /* After a rollback the backend consumes .env.previous, so UI must not offer another rollback until the next update. */
+    render(
+      <SettingsTab
+        activeId={null}
+        themeMode="light"
+        overview={null}
+        activeFile={null}
+        onChangeTheme={vi.fn()}
+        onRefreshProjects={vi.fn()}
+        onSyncProjects={vi.fn()}
+        onRestartOpenCode={vi.fn()}
+        onLoadOverview={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreateFile={vi.fn()}
+        onSaveActiveFile={vi.fn()}
+        onDeleteActiveProject={vi.fn()}
+        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
+        runtimeVersion={{
+          snapshot: {
+            runtimeConfigDir: "/runtime",
+            currentVersion: "1.0.0",
+            currentImageTag: "v1.0.0",
+            currentCommitSha: "oldsha",
+            latestVersion: "1.2.3",
+            latestImageTag: "v1.2.3",
+            latestReleaseNotes: null,
+            latestCheckedAt: null,
+            updateAvailable: true,
+            rollbackAvailable: false,
+            images: {
+              backend: "backend:v1.0.0",
+              miniapp: "miniapp:v1.0.0",
+              bot: "bot:v1.0.0",
+              opencode: "opencode:v1.0.0"
+            }
+          },
+          isLoading: false,
+          isChecking: false,
+          isUpdating: false,
+          isRollingBack: false,
+          isReconnecting: false,
+          updateState: null,
+          lastResult: "rolled-back"
+        }}
+        onCheckRuntimeVersion={vi.fn()}
+        onUpdateRuntime={vi.fn()}
+        onRollbackRuntime={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText("10. General settings"));
+    expect(screen.getByRole("button", { name: "Rollback" }).hasAttribute("disabled")).toBe(true);
+  });
 });

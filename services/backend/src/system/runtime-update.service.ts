@@ -166,10 +166,11 @@ export class RuntimeUpdateService {
   }
 
   public async rollback(): Promise<RuntimeUpdateResult> {
-    /* Rollback restores the last saved .env and applies Compose with those image refs. */
+    /* Rollback is single-use: after restoring previous .env, consume the snapshot so the UI cannot ping-pong versions. */
     const runtimeDir = this.deps.runtimeConfigDir();
     const envPath = path.join(runtimeDir, RUNTIME_ENV_FILE);
     const previousPath = path.join(runtimeDir, RUNTIME_PREVIOUS_ENV_FILE);
+    const consumedPreviousPath = `${previousPath}.consumed`;
     const before = await this.getVersionSnapshot();
     if (!fs.existsSync(previousPath)) {
       throw new Error("APP_RUNTIME_ROLLBACK_UNAVAILABLE: Previous runtime .env is missing. Update once before retrying rollback.");
@@ -177,6 +178,7 @@ export class RuntimeUpdateService {
 
     fs.copyFileSync(envPath, `${envPath}.rollback-current`);
     fs.copyFileSync(previousPath, envPath);
+    fs.renameSync(previousPath, consumedPreviousPath);
     await this.applyRuntimeCompose();
     return { applied: true, previous: before, current: await this.getVersionSnapshot() };
   }

@@ -154,7 +154,42 @@ EOF
 
 set -euo pipefail
 
-# Reclaim safe Docker garbage without touching named volumes or the newest rollback images.
+# Reclaim stale RVS tags while preserving current and rollback image refs.
+prune_old_rvs_images() {
+  local keep_images=""
+  local env_file
+  local key
+  local image
+
+  for env_file in .env .env.previous; do
+    if [[ ! -f "\$env_file" ]]; then
+      continue
+    fi
+
+    for key in RVS_BACKEND_IMAGE RVS_MINIAPP_IMAGE RVS_BOT_IMAGE RVS_OPENCODE_IMAGE; do
+      image="\$(grep -E "^\${key}=" "\$env_file" | tail -n 1 | cut -d= -f2- || true)"
+      if [[ -n "\$image" ]]; then
+        keep_images="\${keep_images}\n\${image}"
+      fi
+    done
+  done
+
+  docker images --format '{{.Repository}}:{{.Tag}}' | while IFS= read -r image; do
+    case "\$image" in
+      ghcr.io/nyxandro/remote-vibe-station-backend:*|ghcr.io/nyxandro/remote-vibe-station-miniapp:*|ghcr.io/nyxandro/remote-vibe-station-bot:*|ghcr.io/nyxandro/remote-vibe-station-opencode:*) ;;
+      *) continue ;;
+    esac
+
+    if printf '%b\n' "\$keep_images" | grep -Fxq "\$image"; then
+      continue
+    fi
+
+    docker image rm "\$image" || true
+  done
+}
+
+# Reclaim safe Docker garbage without touching named volumes or rollback images.
+prune_old_rvs_images
 docker image prune -af --filter "until=${DOCKER_IMAGE_PRUNE_UNTIL}"
 docker container prune -f
 docker network prune -f
