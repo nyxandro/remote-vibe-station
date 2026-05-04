@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { GithubAppService } from "../github/github-app.service";
+import { applyRuntimeComposeUpdate, buildRuntimeComposeArgs } from "./runtime-compose-update";
 import { fetchLatestRuntimeVersion, LatestRuntimeVersion } from "./runtime-github-release";
 import { readFreshRuntimeLatestReleaseCache, writeRuntimeLatestReleaseCache } from "./runtime-latest-release-cache";
 
@@ -23,9 +24,6 @@ const RUNTIME_UPDATE_STATE_FILE = "runtime-update-state.json";
 const PROC_SELF_MOUNTINFO_FILE = "/proc/self/mountinfo";
 const RVS_IMAGE_PREFIX = "ghcr.io/nyxandro/remote-vibe-station";
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
-const BACKEND_SERVICE = "backend";
-const NON_BACKEND_RUNTIME_SERVICES = ["miniapp", "bot", "opencode", "cliproxy", "proxy"];
-const STALE_CONTAINER_ERROR_MARKER = "No such container:";
 
 export type RuntimeVersionSnapshot = {
   runtimeConfigDir: string;
@@ -220,7 +218,7 @@ export class RuntimeUpdateService {
   private async pullRuntimeImages(): Promise<void> {
     /* Pull all images before mutating .env so failed downloads never stop the current runtime. */
     const runtimeDir = this.deps.runtimeConfigDir();
-    const args = this.buildComposeArgs(runtimeDir);
+    const args = buildRuntimeComposeArgs(runtimeDir, this.deps.runtimeHostConfigDir());
     await this.deps.runCommand("docker", ["compose", ...args, "pull"], runtimeDir);
   }
 
@@ -234,47 +232,15 @@ export class RuntimeUpdateService {
   }
 
   private async applyRuntimeCompose(): Promise<void> {
-    /* Restart backend last because this code is running inside backend during self-update. */
+    /* Backend self-restart is delegated to a detached helper so killing this container does not abort Compose. */
     const runtimeDir = this.deps.runtimeConfigDir();
-    const args = this.buildComposeArgs(runtimeDir);
-    try {
-      await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--remove-orphans", ...NON_BACKEND_RUNTIME_SERVICES], runtimeDir);
-    } catch (error) {
-      if (!this.isStaleContainerError(error)) {
-        throw error;
-      }
-
-      /* Stale compose container names are recoverable by reconciling services one-by-one before backend restarts. */
-      await this.reconcileNonBackendRuntimeServices(args, runtimeDir);
-    }
-    await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--no-deps", BACKEND_SERVICE], runtimeDir);
-  }
-
-  private async reconcileNonBackendRuntimeServices(args: string[], runtimeDir: string): Promise<void> {
-    /* Service-scoped retries avoid restarting backend before the public edge is converged. */
-    for (const service of NON_BACKEND_RUNTIME_SERVICES) {
-      await this.deps.runCommand("docker", ["compose", ...args, "up", "-d", "--remove-orphans", service], runtimeDir);
-    }
-  }
-
-  private isStaleContainerError(error: unknown): boolean {
-    /* Docker may report stale container ids/names after earlier interrupted compose updates. */
-    const message = error instanceof Error ? error.message : String(error);
-    return message.includes(STALE_CONTAINER_ERROR_MARKER);
-  }
-
-  private buildComposeArgs(runtimeDir: string): string[] {
-    /* Docker daemon resolves relative bind mounts on the host, not inside the backend container. */
-    return [
-      "--project-directory",
-      this.deps.runtimeHostConfigDir(),
-      "--env-file",
-      path.join(runtimeDir, RUNTIME_ENV_FILE),
-      "-f",
-      path.join(runtimeDir, "docker-compose.yml"),
-      "-f",
-      path.join(runtimeDir, "docker-compose.vless.yml")
-    ];
+    const env = this.readEnvFile();
+    await applyRuntimeComposeUpdate({
+      runtimeDir,
+      runtimeHostDir: this.deps.runtimeHostConfigDir(),
+      backendImage: this.requireEnv(env, "RVS_BACKEND_IMAGE"),
+      runCommand: this.deps.runCommand
+    });
   }
 
   private readEnvFile(): Record<string, string> {

@@ -51,7 +51,7 @@ describe("RuntimeUpdateService", () => {
     expect(fs.existsSync(path.join(runtimeDir, ".env.previous"))).toBe(true);
     expect(runCommand).toHaveBeenNthCalledWith(1, "docker", expect.arrayContaining(["compose", "--project-directory", "/opt/remote-vibe-station-runtime", "pull"]), runtimeDir);
     expect(runCommand).toHaveBeenNthCalledWith(2, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime", "miniapp", "bot", "opencode", "cliproxy", "proxy"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["--project-directory", "/opt/remote-vibe-station-runtime", "backend"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(3, "docker", expect.arrayContaining(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", "ghcr.io/nyxandro/remote-vibe-station-backend:v1.2.3"]), runtimeDir);
     expect(JSON.parse(fs.readFileSync(path.join(runtimeDir, "runtime-update-state.json"), "utf-8"))).toMatchObject({ status: "restarting", targetVersion: "1.2.3" });
   });
 
@@ -151,6 +151,28 @@ describe("RuntimeUpdateService", () => {
     expect(composeArgs[0]).toEqual(expect.arrayContaining(["--env-file", path.join(runtimeDir, ".env"), "-f", path.join(runtimeDir, "docker-compose.yml")]));
   });
 
+  test("schedules backend restart in detached helper container", async () => {
+    /* Backend cannot synchronously replace itself: Compose kills the caller before the new backend starts. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-detached-backend-"));
+    const runCommand = jest.fn().mockResolvedValue(undefined);
+    writeRuntimeEnv(runtimeDir);
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      runtimeHostConfigDir: () => "/opt/remote-vibe-station-runtime",
+      fetchLatestVersion: jest.fn().mockResolvedValue({ version: "1.2.3", imageTag: "v1.2.3", commitSha: "newsha" }),
+      runCommand
+    });
+
+    await service.updateToLatest();
+
+    const backendRestartArgs = runCommand.mock.calls[2][1] as string[];
+    expect(backendRestartArgs).toEqual(expect.arrayContaining(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", "-w", "/opt/remote-vibe-station-runtime"]));
+    expect(backendRestartArgs.join(" ")).toContain("/opt/remote-vibe-station-runtime:/opt/remote-vibe-station-runtime");
+    expect(backendRestartArgs.join(" ")).toContain(`/opt/remote-vibe-station-runtime:${runtimeDir}:ro`);
+    expect(backendRestartArgs).toEqual(expect.arrayContaining(["ghcr.io/nyxandro/remote-vibe-station-backend:v1.2.3", "sh", "-lc"]));
+    expect(backendRestartArgs.join(" ")).toContain("up' '-d' '--no-deps' 'backend'");
+  });
+
   test("resolves host config directory from linux mountinfo", async () => {
     /* Bind mounts store the host subpath in the mountinfo root field, not in the filesystem source field. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-mountinfo-"));
@@ -243,7 +265,7 @@ describe("RuntimeUpdateService", () => {
     expect(runCommand).toHaveBeenNthCalledWith(5, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "opencode"]), runtimeDir);
     expect(runCommand).toHaveBeenNthCalledWith(6, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "cliproxy"]), runtimeDir);
     expect(runCommand).toHaveBeenNthCalledWith(7, "docker", expect.arrayContaining(["up", "-d", "--remove-orphans", "proxy"]), runtimeDir);
-    expect(runCommand).toHaveBeenNthCalledWith(8, "docker", expect.arrayContaining(["--no-deps", "backend"]), runtimeDir);
+    expect(runCommand).toHaveBeenNthCalledWith(8, "docker", expect.arrayContaining(["run", "-d", "--rm", "ghcr.io/nyxandro/remote-vibe-station-backend:v0.2.3"]), runtimeDir);
   });
 
   test("rolls back by restoring previous env and applying compose", async () => {
