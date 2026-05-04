@@ -12,12 +12,11 @@ describe("ProjectsController status endpoint", () => {
     };
     const gitSummaryService = {} as any;
     const gitOps = {} as any;
-    const deployment = {} as any;
     const workspace = {} as any;
     const events = {} as any;
 
     return {
-      controller: new ProjectsController(projects as any, gitSummaryService, gitOps, deployment, workspace, events),
+      controller: new ProjectsController(projects as any, gitSummaryService, gitOps, workspace, events),
       projects
     };
   };

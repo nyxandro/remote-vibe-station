@@ -279,54 +279,6 @@ html[data-theme="dark"] .project-card.active {
   word-break: break-all;
 }
 
-.project-deploy-links {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-}
-
-.project-deploy-link {
-  display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(71, 132, 255, 0.28);
-  background: linear-gradient(180deg, rgba(233, 242, 255, 0.92) 0%, rgba(221, 234, 255, 0.76) 100%);
-  text-decoration: none;
-  min-width: 0;
-}
-
-.project-deploy-link-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #2156b8;
-}
-
-.project-deploy-link-url {
-  font-size: 13px;
-  color: #10213f;
-  overflow-wrap: anywhere;
-  text-align: left;
-}
-
-html[data-theme="dark"] .project-deploy-link {
-  border-color: rgba(92, 147, 255, 0.3);
-  background: linear-gradient(180deg, rgba(19, 36, 66, 0.95) 0%, rgba(15, 28, 52, 0.88) 100%);
-}
-
-html[data-theme="dark"] .project-deploy-link-label {
-  color: #82b0ff;
-}
-
-html[data-theme="dark"] .project-deploy-link-url {
-  color: #eef4ff;
-}
-
 .project-git-stats {
   display: inline-flex;
   align-items: center;
@@ -408,11 +360,6 @@ html[data-theme="dark"] .project-deploy-link-url {
 }
 
 @media (max-width: 560px) {
-  .project-deploy-link {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-
   .project-actions-footer {
     grid-template-columns: 1fr;
   }
@@ -860,10 +807,6 @@ html[data-theme="dark"] .project-deploy-link-url {
     flex-direction: column;
     gap: 10px;
     animation: slideDownFade 0.2s ease-out;
-  }
-
-  .project-deploy-links {
-    width: 100%;
   }
 
   .project-actions-footer {

@@ -104,14 +104,9 @@
 
 ### Remote Dev Deploy Flow
 
-- For remote dev on the shared VDS, prefer agent automation over manual per-project infra edits.
-- Default flow for a new Docker project:
-  1. `POST /api/projects/:id/deploy/autoconfigure` - infer public routes from compose (`web`, `api`, `admin`) without editing the project.
-  2. Inspect returned `routes` + `previewUrl`.
-  3. If needed, refine via `POST /api/projects/:id/deploy/settings` with explicit `routes`.
-  4. Start exposure with `POST /api/projects/:id/deploy/start`.
-- Keep server-specific deploy routing in backend runtime settings, not in project repo files.
-- Do not rewrite project compose files just to fit the shared VDS unless autoconfig and runtime overrides are insufficient.
+- The built-in per-project deploy API was intentionally removed.
+- For remote dev projects, follow the explicit operator/agent instructions provided in the current task instead of calling `POST /api/projects/:id/deploy/*` endpoints.
+- Do not reintroduce Mini App deploy buttons, deploy route autoconfiguration, or backend runtime override generation without a new explicit product requirement.
 
 ## Frontend development rules
 

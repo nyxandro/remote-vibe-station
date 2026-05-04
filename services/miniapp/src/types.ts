@@ -2,7 +2,7 @@
  * @fileoverview Shared types for Mini App.
  *
  * Exports:
- * - ProjectRecord (L17) - Project data from backend.
+ * - ProjectRecord - Project data from backend.
  * - ProjectStatus (L30) - Container status response.
  * - ProjectGitSummary - Compact active-branch and local change counters.
  * - GitOverview - Branch and changed files overview for GitHub tab.
@@ -36,16 +36,6 @@ export type ProjectRecord = {
   status: "running" | "stopped" | "unknown";
   domain?: string;
   lastStartedAt?: string;
-  deploy?: {
-    previewUrl: string;
-    deployed: boolean;
-    routes: Array<{
-      id: string;
-      previewUrl: string;
-      subdomain: string | null;
-      pathPrefix: string | null;
-    }>;
-  };
 };
 
 export type KanbanStatus = "backlog" | "refinement" | "ready" | "queued" | "in_progress" | "blocked" | "done";
@@ -93,26 +83,6 @@ export type ProjectStatus = {
 };
 
 export type ContainerAction = "start" | "restart" | "stop";
-
-export type ProjectRuntimeMode = "docker" | "static";
-
-export type ProjectRuntimeSnapshot = {
-  slug: string;
-  mode: ProjectRuntimeMode;
-  serviceName: string | null;
-  internalPort: number | null;
-  staticRoot: string | null;
-  availableServices: string[];
-  previewUrl: string;
-  deployed: boolean;
-};
-
-export type ProjectRuntimeSettingsPatch = {
-  mode?: ProjectRuntimeMode;
-  serviceName?: string | null;
-  internalPort?: number | null;
-  staticRoot?: string | null;
-};
 
 export type ProjectGitSummary = {
   currentBranch?: string;

@@ -58,8 +58,6 @@ import { ProjectTerminalService } from "./projects/project-terminal.service";
 import { ProjectGitService } from "./projects/project-git.service";
 import { ProjectGitOpsService } from "./projects/project-git-ops.service";
 import { ProjectWorkspaceService } from "./projects/project-workspace.service";
-import { ProjectDeploymentService } from "./projects/project-deployment.service";
-import { ProjectRuntimeSettingsStore } from "./projects/project-runtime-settings.store";
 import { AdminHeaderGuard } from "./security/admin-header.guard";
 import { BotBackendGuard } from "./security/bot-backend.guard";
 import { AppAuthGuard } from "./security/app-auth.guard";
@@ -143,8 +141,6 @@ import { KanbanAgentGuard } from "./security/kanban-agent.guard";
     ProjectGitService,
     ProjectGitOpsService,
     ProjectWorkspaceService,
-    ProjectDeploymentService,
-    ProjectRuntimeSettingsStore,
     OpenCodeProjectSyncService,
     OpenCodeSettingsService,
     OpenCodeRuntimeService,

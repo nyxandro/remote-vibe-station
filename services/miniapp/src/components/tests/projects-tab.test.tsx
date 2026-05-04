@@ -42,8 +42,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -65,8 +63,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={onSelectProject}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -76,7 +72,8 @@ describe("ProjectsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
 
     expect(onSelectProject).toHaveBeenCalledWith("tvoc");
-    expect(screen.getByRole("button", { name: "Deploy" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Deploy" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop deploy" })).toBeNull();
   });
 
   it("hides manual sync/filter controls from toolbar", () => {
@@ -90,8 +87,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -119,8 +114,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -140,8 +133,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{ tvoc: { additions: 12, deletions: 5, filesChanged: 3, currentBranch: "feature/ui-branch" } }}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -164,8 +155,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{ tvoc: { additions: 0, deletions: 0, filesChanged: 0, currentBranch: "main" } }}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
@@ -181,8 +170,6 @@ describe("ProjectsTab", () => {
     /* Project creation should stay inside one centered modal instead of expanding inline panels under the toolbar. */
     const onCreateProjectFolder = vi.fn();
     const onCloneRepository = vi.fn();
-    const onDeployProject = vi.fn();
-    const onStopProjectDeploy = vi.fn();
     render(
       <ProjectsTab
         visibleProjects={[buildProject()]}
@@ -192,8 +179,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={onDeployProject}
-        onStopProjectDeploy={onStopProjectDeploy}
         onCreateProjectFolder={onCreateProjectFolder}
         onCloneRepository={onCloneRepository}
       />
@@ -223,11 +208,6 @@ describe("ProjectsTab", () => {
       expect(onCloneRepository).toHaveBeenCalledWith("https://github.com/acme/repo.git", undefined);
       expect(screen.queryByRole("dialog", { name: "Add project" })).toBeNull();
     });
-
-    fireEvent.click(screen.getByText("tvoc"));
-    fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
-    expect(onDeployProject).toHaveBeenCalledWith("tvoc");
-    expect(onStopProjectDeploy).not.toHaveBeenCalled();
   });
 
   it("closes the add-project modal from the top-right close control without mutating projects", async () => {
@@ -244,8 +224,6 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={onCreateProjectFolder}
         onCloneRepository={onCloneRepository}
       />
@@ -266,21 +244,13 @@ describe("ProjectsTab", () => {
     expect(onCloneRepository).not.toHaveBeenCalled();
   });
 
-  it("renders deploy route links inside expanded project card", () => {
-    /* Expanded cards should expose every public deploy URL so operators can jump to web/admin surfaces. */
+  it("does not render deploy route links inside expanded project card", () => {
+    /* Project cards must not expose the removed shared-server deploy mechanism. */
     const { container } = render(
       <ProjectsTab
         visibleProjects={[
           buildProject({
-            status: "running",
-            deploy: {
-              previewUrl: "https://tvoc.dev.example.com",
-              deployed: true,
-              routes: [
-                { id: "web", previewUrl: "https://tvoc.dev.example.com", subdomain: null, pathPrefix: null },
-                { id: "admin", previewUrl: "https://admin.tvoc.dev.example.com", subdomain: "admin", pathPrefix: null }
-              ]
-            }
+            status: "running"
           })
         ]}
         activeId="tvoc"
@@ -289,27 +259,18 @@ describe("ProjectsTab", () => {
         gitSummaryMap={{}}
         onQueryChange={vi.fn()}
         onSelectProject={vi.fn()}
-        onDeployProject={vi.fn()}
-        onStopProjectDeploy={vi.fn()}
         onCreateProjectFolder={vi.fn()}
         onCloneRepository={vi.fn()}
       />
     );
 
     fireEvent.click(screen.getByText("tvoc"));
-    const webLink = screen.getByRole("link", { name: "Open web" });
-    const adminLink = screen.getByRole("link", { name: "Open admin" });
-
-    expect(webLink.getAttribute("href")).toBe("https://tvoc.dev.example.com");
-    expect(adminLink.getAttribute("href")).toBe("https://admin.tvoc.dev.example.com");
-    expect(screen.getByText("tvoc.dev.example.com")).toBeTruthy();
-    expect(screen.getByText("admin.tvoc.dev.example.com")).toBeTruthy();
 
     const expandedCard = container.querySelector(".project-card");
     const linksBlock = expandedCard?.querySelector(".project-deploy-links");
     const actionsBlock = expandedCard?.querySelector(".project-actions-footer");
-    expect(linksBlock).toBeTruthy();
+    expect(linksBlock).toBeNull();
     expect(actionsBlock).toBeTruthy();
-    expect((linksBlock as Node).compareDocumentPosition(actionsBlock as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Open / })).toBeNull();
   });
 });

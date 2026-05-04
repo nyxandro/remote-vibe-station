@@ -24,7 +24,6 @@ import { persistTabSelection, readTabPersistenceState } from "./hooks/use-tab-me
 import { useThemeMode } from "./hooks/use-theme-mode";
 import { useProjectWorkspace } from "./hooks/use-project-workspace";
 import { useWorkspaceRuntimeActions } from "./hooks/use-workspace-runtime-actions";
-import { useProjectRuntime } from "./hooks/use-project-runtime";
 import { useReactiveWorkspaceSync } from "./hooks/use-reactive-workspace-sync";
 import { useWorkspaceEvents } from "./hooks/use-workspace-events";
 import { useWorkspaceSelection } from "./hooks/use-workspace-selection";
@@ -189,15 +188,6 @@ export const App = () => {
   } = useCliproxyAccounts(setError, refreshProvidersSurface);
   const { createProjectFolder, cloneProjectRepository, deleteProjectFolder } = useProjectWorkspace(setError, loadProjects, clearActiveSelection);
   const {
-    runtime,
-    isRuntimeLoading,
-    isRuntimeSaving,
-    loadRuntime,
-    saveSettings,
-    deployStart,
-    deployStop
-  } = useProjectRuntime(setError, loadProjects);
-  const {
     restartOpenCodeState,
     syncOpenCodeAtStartup,
     syncOpenCodeNow,
@@ -239,7 +229,6 @@ export const App = () => {
     const requests: Array<Promise<void>> = [
         loadSettingsOverview(projectId),
         checkOpenCodeVersionStatus(),
-        loadRuntime(projectId),
         loadGithubAuthStatus(),
         loadServerMetrics(),
         loadRuntimeServices(),
@@ -285,7 +274,6 @@ export const App = () => {
     loadFiles,
     loadSettingsOverview,
     loadOpenCodeVersionStatus,
-    loadRuntime,
     loadVoiceControlSettings,
     loadGithubAuthStatus,
     loadServerMetrics,
@@ -366,8 +354,6 @@ export const App = () => {
           settingsActiveFile={settingsActiveFile}
           onQueryChange={setQuery}
           onSelectProject={(id) => void selectProject(id)}
-          onDeployProject={(id) => void deployStart(id)}
-          onStopProjectDeploy={(id) => void deployStop(id)}
           onCreateProjectFolder={(name) => void createProjectFolder(name)}
           onCloneRepository={(repositoryUrl, folderName) => void cloneProjectRepository(repositoryUrl, folderName)}
           onRunComposeAction={(action) => withActiveProject((id) => void runAction(id, action))}
@@ -411,17 +397,6 @@ export const App = () => {
               return;
             }
             await deleteProjectFolder(activeId);
-          }}
-          projectRuntime={{
-            snapshot: runtime,
-            isLoading: isRuntimeLoading,
-            isSaving: isRuntimeSaving
-          }}
-          onSaveProjectRuntimeSettings={(patch) => {
-            if (!activeId) {
-              return;
-            }
-            void saveSettings(activeId, patch);
           }}
           restartOpenCodeState={restartOpenCodeState}
           voiceControl={canControlTelegramStream ? voiceControlState : undefined}

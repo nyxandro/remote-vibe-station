@@ -15,11 +15,10 @@ const createController = () => {
   } as any;
   const gitSummaryService = {} as any;
   const gitOps = {} as any;
-  const deployment = {} as any;
   const workspace = {} as any;
   const events = {} as any;
 
-  return new ProjectsController(projects, gitSummaryService, gitOps, deployment, workspace, events);
+  return new ProjectsController(projects, gitSummaryService, gitOps, workspace, events);
 };
 
 describe("ProjectsController structured errors", () => {

@@ -51,17 +51,6 @@ export type ProjectListItem = {
   /** Optional routing domain (prod mode). */
   domain?: string;
   lastStartedAt?: string;
-  /** Public deploy links available for this project on shared runtime. */
-  deploy?: {
-    previewUrl: string;
-    deployed: boolean;
-    routes: Array<{
-      id: string;
-      previewUrl: string;
-      subdomain: string | null;
-      pathPrefix: string | null;
-    }>;
-  };
 };
 
 export type ProjectGitSummary = {

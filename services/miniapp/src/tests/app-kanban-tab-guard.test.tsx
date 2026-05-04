@@ -102,18 +102,6 @@ vi.mock("../hooks/use-project-workspace", () => ({
   })
 }));
 
-vi.mock("../hooks/use-project-runtime", () => ({
-  useProjectRuntime: () => ({
-    runtime: null,
-    isRuntimeLoading: false,
-    isRuntimeSaving: false,
-    loadRuntime: vi.fn(),
-    saveSettings: vi.fn(),
-    deployStart: vi.fn(),
-    deployStop: vi.fn()
-  })
-}));
-
 vi.mock("../hooks/use-cliproxy-accounts", () => ({
   useCliproxyAccounts: () => ({
     state: null,

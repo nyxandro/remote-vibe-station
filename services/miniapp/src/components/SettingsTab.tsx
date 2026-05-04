@@ -12,8 +12,6 @@ import {
   GithubAuthStatus,
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
-  ProjectRuntimeSettingsPatch,
-  ProjectRuntimeSnapshot,
   OpenCodeVersionStatus,
   RuntimeServicesSnapshot,
   RuntimeUpdateState,
@@ -27,7 +25,6 @@ import { SettingsRuntimeDashboard } from "./SettingsRuntimeDashboard";
 import { RuntimeVersionSettingsCard } from "./RuntimeVersionSettingsCard";
 import { ThemeMode } from "../utils/theme";
 import { GitHubAuthSettingsSection } from "./GitHubAuthSettingsSection";
-import { ProjectRuntimeSettingsBlock } from "./ProjectRuntimeSettingsBlock";
 import { ServerParametersAccordion } from "./ServerParametersAccordion";
 import { SettingsProjectDangerZone } from "./SettingsProjectDangerZone";
 import { SettingsEditorModal } from "./SettingsEditorModal";
@@ -57,12 +54,6 @@ type Props = {
   onCreateFile: (kind: OpenCodeSettingsKind, name?: string) => void;
   onSaveActiveFile: (content: string) => Promise<void> | void;
   onDeleteActiveProject: () => Promise<void> | void;
-  projectRuntime: {
-    snapshot: ProjectRuntimeSnapshot | null;
-    isLoading: boolean;
-    isSaving: boolean;
-  };
-  onSaveProjectRuntimeSettings: (patch: ProjectRuntimeSettingsPatch) => void;
   restartOpenCodeState: {
     isRestarting: boolean;
     lastResult: "idle" | "success" | "error";
@@ -381,14 +372,6 @@ export const SettingsTab = (props: Props) => {
         <div className="settings-accordion-body">
           {props.activeId ? (
             <>
-              <ProjectRuntimeSettingsBlock
-                activeId={props.activeId}
-                snapshot={props.projectRuntime.snapshot}
-                isLoading={props.projectRuntime.isLoading}
-                isSaving={props.projectRuntime.isSaving}
-                onSaveSettings={props.onSaveProjectRuntimeSettings}
-              />
-
               {(props.overview?.projectEnvFiles ?? []).length === 0 ? (
                 <div className="placeholder">No env files found in this project.</div>
               ) : null}

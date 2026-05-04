@@ -19,7 +19,6 @@ export type ReactiveWorkspaceSyncInput = {
   loadFiles: (projectId: string, path: string) => Promise<void> | void;
   loadSettingsOverview: (projectId: string | null) => Promise<void> | void;
   loadOpenCodeVersionStatus: () => Promise<void> | void;
-  loadRuntime: (projectId: string | null) => Promise<void> | void;
   loadVoiceControlSettings: () => Promise<void> | void;
   loadGithubAuthStatus: () => Promise<void> | void;
   loadServerMetrics: () => Promise<void> | void;
@@ -97,7 +96,6 @@ export const useReactiveWorkspaceSync = (input: ReactiveWorkspaceSyncInput): voi
         const settingsRequests: Array<Promise<void> | void> = [
           current.loadSettingsOverview(current.activeId),
           current.loadOpenCodeVersionStatus(),
-          current.loadRuntime(current.activeId),
           current.loadGithubAuthStatus(),
           current.loadServerMetrics(),
           current.loadRuntimeServices(),

@@ -14,12 +14,11 @@
  * - gitSummary (L160) - Handler for GET /api/projects/:id/git-summary.
  */
 
-import { Body, Controller, Get, Headers, Logger, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
 import { AppAuthGuard } from "../security/app-auth.guard";
 import { ProjectGitOpsService } from "./project-git-ops.service";
-import { ProjectDeploymentService } from "./project-deployment.service";
 import { ProjectGitService } from "./project-git.service";
 import { publishProjectLifecycleEvent } from "./project-lifecycle-events";
 import { ProjectWorkspaceService } from "./project-workspace.service";
@@ -27,7 +26,6 @@ import {
   branchRequiredError,
   commitMessageRequiredError,
   createProjectsControllerBadRequest,
-  deployPatchRequiredError,
   filePathRequiredError,
   projectNameRequiredError,
   projectPayloadInvalidError,
@@ -39,18 +37,14 @@ import { ProjectCreateRequest } from "./project.types";
 import { ProjectsService } from "./projects.service";
 import { EventsService } from "../events/events.service";
 import { publishWorkspaceStateChangedEvent } from "../events/workspace-events";
-import { ProjectRuntimeSettingsPatch } from "./project-runtime.types";
 
 @Controller("api/projects")
 @UseGuards(AppAuthGuard)
 export class ProjectsController {
-  private readonly logger = new Logger(ProjectsController.name);
-
   public constructor(
     private readonly projects: ProjectsService,
     private readonly gitSummaryService: ProjectGitService,
     private readonly gitOps: ProjectGitOpsService,
-    private readonly deployment: ProjectDeploymentService,
     private readonly workspace: ProjectWorkspaceService,
     private readonly events: EventsService
   ) {}
@@ -72,35 +66,8 @@ export class ProjectsController {
 
   @Get()
   public async list() {
-    /* Return discovered projects enriched with deploy links for expandable Mini App cards. */
-    const items = await this.projects.list();
-
-    return Promise.all(
-      items.map(async (item) => {
-        /* Keep projects list resilient when one runtime snapshot is temporarily unavailable. */
-        try {
-          const runtime = await this.deployment.getRuntimeSnapshot(item.slug);
-          return {
-            ...item,
-            deploy: {
-              previewUrl: runtime.previewUrl,
-              deployed: runtime.deployed,
-              routes: runtime.routes.map((route) => ({
-                id: route.id,
-                previewUrl: route.previewUrl,
-                subdomain: route.subdomain,
-                pathPrefix: route.pathPrefix
-              }))
-            }
-          };
-        } catch (error) {
-          /* Log and keep the base project card usable instead of failing the whole response. */
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.warn(`Failed to load deploy snapshot for project ${item.slug}: ${message}`);
-          return item;
-        }
-      })
-    );
+    /* Return filesystem-discovered projects without extra per-project runtime enrichment. */
+    return this.projects.list();
   }
 
   @Get("active")
@@ -213,89 +180,6 @@ export class ProjectsController {
     const result = await this.projects.restartProject(id);
     void publishProjectLifecycleEvent({ projects: this.projects, events: this.events, adminId, slug: id, action: "restart" });
     return result;
-  }
-
-  @Get(":id/deploy/settings")
-  public async getDeploySettings(@Param("id") id: string) {
-    /* Return project deploy settings snapshot used by Mini App settings panel. */
-    try {
-      return await this.deployment.getRuntimeSnapshot(id);
-    } catch (error) {
-      throw createProjectsControllerBadRequest({
-        error,
-        fallbackCode: "APP_PROJECT_DEPLOY_SETTINGS_READ_FAILED",
-        fallbackMessage: "Failed to read project deploy settings.",
-        fallbackHint: "Check deployment settings storage and retry loading project deploy settings."
-      });
-    }
-  }
-
-  @Post(":id/deploy/settings")
-  public async updateDeploySettings(@Param("id") id: string, @Body() body: ProjectRuntimeSettingsPatch) {
-    /* Persist project deploy settings from Mini App Project settings accordion. */
-    const hasPatch =
-      typeof body === "object" &&
-      body !== null &&
-      ("mode" in body || "serviceName" in body || "internalPort" in body || "staticRoot" in body || "routes" in body);
-    if (!hasPatch) {
-      throw deployPatchRequiredError();
-    }
-
-    try {
-      return await this.deployment.updateRuntimeSettings(id, body);
-    } catch (error) {
-      throw createProjectsControllerBadRequest({
-        error,
-        fallbackCode: "APP_PROJECT_DEPLOY_SETTINGS_UPDATE_FAILED",
-        fallbackMessage: "Failed to update project deploy settings.",
-        fallbackHint: "Check runtime mode fields/routes and retry saving deploy settings."
-      });
-    }
-  }
-
-  @Post(":id/deploy/start")
-  public async startDeploy(@Param("id") id: string) {
-    /* Start external deployment endpoint for selected project domain. */
-    try {
-      return await this.deployment.startDeployment(id);
-    } catch (error) {
-      throw createProjectsControllerBadRequest({
-        error,
-        fallbackCode: "APP_PROJECT_DEPLOY_START_FAILED",
-        fallbackMessage: "Failed to start project deployment.",
-        fallbackHint: "Check deploy settings and runtime availability, then retry deployment start."
-      });
-    }
-  }
-
-  @Post(":id/deploy/autoconfigure")
-  public async autoConfigureDeploy(@Param("id") id: string) {
-    /* Agent-oriented helper infers common public routes before first deploy on remote dev VDS. */
-    try {
-      return await this.deployment.autoConfigureDeployment(id);
-    } catch (error) {
-      throw createProjectsControllerBadRequest({
-        error,
-        fallbackCode: "APP_PROJECT_DEPLOY_AUTOCONFIG_FAILED",
-        fallbackMessage: "Failed to autoconfigure project deployment routes.",
-        fallbackHint: "Check compose/runtime metadata and retry deployment autoconfiguration."
-      });
-    }
-  }
-
-  @Post(":id/deploy/stop")
-  public async stopDeploy(@Param("id") id: string) {
-    /* Stop external deployment endpoint for selected project domain. */
-    try {
-      return await this.deployment.stopDeployment(id);
-    } catch (error) {
-      throw createProjectsControllerBadRequest({
-        error,
-        fallbackCode: "APP_PROJECT_DEPLOY_STOP_FAILED",
-        fallbackMessage: "Failed to stop project deployment.",
-        fallbackHint: "Check runtime availability and retry deployment stop."
-      });
-    }
   }
 
   @Post(":id/containers/:service/:action")

@@ -15,9 +15,8 @@ It is designed for a server-first workflow: deploy the stack on a remote Linux h
 ## Core capabilities
 
 - Telegram-first OpenCode workflow for prompts, slash commands, progress, approvals, runtime notices, and session control.
-- Telegram Mini App for project selection, file browsing, Git operations, deployments, runtime settings, providers, and project tools.
+- Telegram Mini App for project selection, file browsing, Git operations, runtime settings, providers, and project tools.
 - Secure browser access to OpenCode Web UI through magic-link/forward-auth flow.
-- Project-level deploy orchestration for Docker Compose applications with auto-configured public routes.
 - CLIProxy-backed model catalog with dynamic model discovery for the OpenCode runtime.
 - Runtime service management for backend, bot, Mini App, OpenCode, reverse proxy, and auxiliary infrastructure.
 - Voice control support for Telegram voice messages via Groq transcription.
@@ -30,7 +29,7 @@ The runtime is split into a small number of focused services:
 | Service | Purpose |
 | --- | --- |
 | `services/bot` | Telegram bot built with Telegraf. Accepts admin commands, forwards prompts, polls backend outbox, and grants browser access to OpenCode. |
-| `services/backend` | NestJS orchestration layer. Owns projects, prompts, sessions, runtime events, deploy flows, file APIs, provider management, and Telegram-facing APIs. |
+| `services/backend` | NestJS orchestration layer. Owns projects, prompts, sessions, runtime events, file APIs, provider management, and Telegram-facing APIs. |
 | `services/miniapp` | React + Vite Telegram Mini App for visual workspace management. |
 | `services/opencode` | OpenCode server runtime exposed behind Traefik and configured dynamically at container startup. |
 | `cliproxy` | OpenAI-compatible model gateway used by OpenCode for provider/model access. |
@@ -69,13 +68,13 @@ The backend is the heart of the system. It provides:
 - project discovery, activation, creation, cloning, and deletion;
 - OpenCode session management and prompt dispatch;
 - runtime event subscription and Telegram outbox generation;
-- file, terminal, Git, deploy, and settings APIs for the Mini App;
+- file, terminal, Git, and settings APIs for the Mini App;
 - provider and CLIProxy account management;
 - browser access token and auth flows for OpenCode Web UI.
 
 Important areas:
 
-- `services/backend/src/projects/` - project lifecycle, files, Git, deploy, terminal
+- `services/backend/src/projects/` - project lifecycle, files, Git, terminal
 - `services/backend/src/prompt/` - prompt orchestration into OpenCode
 - `services/backend/src/open-code/` - OpenCode HTTP/SSE integration
 - `services/backend/src/telegram/` - Telegram APIs, preferences, outbox bridge, provider settings
@@ -99,7 +98,7 @@ The Mini App provides a richer control plane for tasks that are awkward in plain
 - project switching;
 - file browsing and uploads;
 - Git operations and status;
-- project deploy settings and start/stop actions;
+- project file, terminal, and container inspection actions;
 - provider/runtime/settings management;
 - Kanban/task board, runtime details, and operational views.
 
@@ -320,7 +319,7 @@ cd services/bot && npm run typecheck
 cd services/miniapp && npm test
 ```
 
-The backend and bot contain focused tests for Telegram bridging, runtime orchestration, session control, and provider/deploy flows.
+The backend and bot contain focused tests for Telegram bridging, runtime orchestration, session control, and provider flows.
 
 ## Deployment model
 
@@ -433,7 +432,7 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml
 - review tool progress, file updates, todos, and permission prompts in chat;
 - configure model/provider/agent preferences;
 - connect provider accounts and CLIProxy-backed model sources;
-- manage project files, Git, terminal access, and deploy routes from the Mini App;
+- manage project files, Git, and terminal access from the Mini App;
 - operate voice-control flows for Telegram voice messages.
 
 ## Scripts and infrastructure

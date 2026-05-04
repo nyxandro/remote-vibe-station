@@ -33,8 +33,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
       />
     );
@@ -62,8 +60,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
       />
     );
@@ -100,8 +96,6 @@ describe("SettingsTab", () => {
         onCreateFile={onCreateFile}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
       />
     );
@@ -146,8 +140,6 @@ describe("SettingsTab", () => {
         onCreateFile={onCreateFile}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
       />
     );
@@ -163,9 +155,8 @@ describe("SettingsTab", () => {
     expect(onCreateFile).toHaveBeenCalledWith("projectEnv");
   });
 
-  it("updates project runtime mode from project settings accordion", () => {
-    /* Deploy mode switch should be configurable without leaving Settings tab. */
-    const onSaveProjectRuntimeSettings = vi.fn();
+  it("does not render removed deploy runtime settings", () => {
+    /* Project settings should keep env/danger controls only after removing shared-server deploy UI. */
     render(
       <SettingsTab
         activeId="demo"
@@ -181,177 +172,14 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{
-          snapshot: {
-            slug: "demo",
-            mode: "docker",
-            serviceName: null,
-            internalPort: null,
-            staticRoot: null,
-            availableServices: [],
-            previewUrl: "https://demo.dev.example.com",
-            deployed: false
-          },
-          isLoading: false,
-          isSaving: false
-        }}
-        onSaveProjectRuntimeSettings={onSaveProjectRuntimeSettings}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
       />
     );
 
     fireEvent.click(screen.getByText("6. Project settings"));
-    fireEvent.change(screen.getByLabelText("Run mode"), { target: { value: "static" } });
-    fireEvent.change(screen.getByLabelText("Static root path"), { target: { value: "public" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save deploy settings" }));
-    expect(onSaveProjectRuntimeSettings).toHaveBeenCalledWith({
-      mode: "static",
-      serviceName: null,
-      internalPort: null,
-      staticRoot: "public"
-    });
-  });
-
-  it("renders advanced runtime fields for docker/static mode", () => {
-    /* Project runtime settings should expose service/port/static root overrides in UI. */
-    const onSaveProjectRuntimeSettings = vi.fn();
-    render(
-      <SettingsTab
-        activeId="demo"
-        themeMode="light"
-        overview={null}
-        activeFile={null}
-        onChangeTheme={vi.fn()}
-        onRefreshProjects={vi.fn()}
-        onSyncProjects={vi.fn()}
-        onRestartOpenCode={vi.fn()}
-        onLoadOverview={vi.fn()}
-        onOpenFile={vi.fn()}
-        onCreateFile={vi.fn()}
-        onSaveActiveFile={vi.fn()}
-        onDeleteActiveProject={vi.fn()}
-        projectRuntime={{
-          snapshot: {
-            slug: "demo",
-            mode: "docker",
-            serviceName: "web",
-            internalPort: 8080,
-            staticRoot: "public",
-            availableServices: ["web", "api"],
-            previewUrl: "https://demo.dev.example.com",
-            deployed: false
-          },
-          isLoading: false,
-          isSaving: false
-        }}
-        onSaveProjectRuntimeSettings={onSaveProjectRuntimeSettings}
-        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
-      />
-    );
-
-    fireEvent.click(screen.getByText("6. Project settings"));
-    expect(screen.getByLabelText("Docker service name")).toBeTruthy();
-    expect(screen.getByLabelText("Docker internal port")).toBeTruthy();
-    expect(screen.getByLabelText("Static root path")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Use web" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Use api" }));
-    expect(screen.getByRole("button", { name: "Save deploy settings" })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Docker internal port"), { target: { value: "5173" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save deploy settings" }));
-    expect(onSaveProjectRuntimeSettings).toHaveBeenCalledWith({
-      mode: "docker",
-      serviceName: "api",
-      internalPort: 5173,
-      staticRoot: "public"
-    });
-  });
-
-  it("requires static root before saving static mode", () => {
-    /* Frontend should block invalid static save requests before backend validation. */
-    const onSaveProjectRuntimeSettings = vi.fn();
-    render(
-      <SettingsTab
-        activeId="demo"
-        themeMode="light"
-        overview={null}
-        activeFile={null}
-        onChangeTheme={vi.fn()}
-        onRefreshProjects={vi.fn()}
-        onSyncProjects={vi.fn()}
-        onRestartOpenCode={vi.fn()}
-        onLoadOverview={vi.fn()}
-        onOpenFile={vi.fn()}
-        onCreateFile={vi.fn()}
-        onSaveActiveFile={vi.fn()}
-        onDeleteActiveProject={vi.fn()}
-        projectRuntime={{
-          snapshot: {
-            slug: "demo",
-            mode: "docker",
-            serviceName: null,
-            internalPort: null,
-            staticRoot: null,
-            availableServices: [],
-            previewUrl: "https://demo.dev.example.com",
-            deployed: false
-          },
-          isLoading: false,
-          isSaving: false
-        }}
-        onSaveProjectRuntimeSettings={onSaveProjectRuntimeSettings}
-        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
-      />
-    );
-
-    fireEvent.click(screen.getByText("6. Project settings"));
-    fireEvent.change(screen.getByLabelText("Run mode"), { target: { value: "static" } });
-    expect(screen.getByText("Static mode requires static root path.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Save deploy settings" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(onSaveProjectRuntimeSettings).not.toHaveBeenCalled();
-  });
-
-  it("blocks save when docker port value is invalid", () => {
-    /* Port validation should fail fast in UI before calling backend. */
-    const onSaveProjectRuntimeSettings = vi.fn();
-    render(
-      <SettingsTab
-        activeId="demo"
-        themeMode="light"
-        overview={null}
-        activeFile={null}
-        onChangeTheme={vi.fn()}
-        onRefreshProjects={vi.fn()}
-        onSyncProjects={vi.fn()}
-        onRestartOpenCode={vi.fn()}
-        onLoadOverview={vi.fn()}
-        onOpenFile={vi.fn()}
-        onCreateFile={vi.fn()}
-        onSaveActiveFile={vi.fn()}
-        onDeleteActiveProject={vi.fn()}
-        projectRuntime={{
-          snapshot: {
-            slug: "demo",
-            mode: "docker",
-            serviceName: "web",
-            internalPort: null,
-            staticRoot: null,
-            availableServices: ["web"],
-            previewUrl: "https://demo.dev.example.com",
-            deployed: false
-          },
-          isLoading: false,
-          isSaving: false
-        }}
-        onSaveProjectRuntimeSettings={onSaveProjectRuntimeSettings}
-        restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
-      />
-    );
-
-    fireEvent.click(screen.getByText("6. Project settings"));
-    fireEvent.change(screen.getByLabelText("Docker internal port"), { target: { value: "70000" } });
-    expect(screen.getByText("Docker internal port must be an integer in range 1-65535.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Save deploy settings" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(onSaveProjectRuntimeSettings).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Run mode")).toBeNull();
+    expect(screen.queryByText("Save deploy settings")).toBeNull();
+    expect(screen.queryByText(/Preview URL:/)).toBeNull();
   });
 
   it("opens settings editor in fullscreen modal and allows closing", async () => {
@@ -379,8 +207,6 @@ describe("SettingsTab", () => {
       onCreateFile: vi.fn(),
       onSaveActiveFile,
       onDeleteActiveProject: vi.fn(),
-      projectRuntime: { snapshot: null, isLoading: false, isSaving: false },
-      onSaveProjectRuntimeSettings: vi.fn(),
       restartOpenCodeState: { isRestarting: false as const, lastResult: "idle" as const }
     };
 
@@ -440,8 +266,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
       />
     );
@@ -484,8 +308,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
       />
     );
@@ -514,8 +336,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
         voiceControl={{
           apiKey: "",
@@ -564,8 +384,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
         voiceControl={{
           apiKey: "gsk_test_123",
@@ -603,8 +421,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
         openCodeVersion={{
           status: {
@@ -646,8 +462,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
         runtimeServices={{
           snapshot: {
@@ -706,8 +520,6 @@ describe("SettingsTab", () => {
         onCreateFile={vi.fn()}
         onSaveActiveFile={vi.fn()}
         onDeleteActiveProject={vi.fn()}
-        projectRuntime={{ snapshot: null, isLoading: false, isSaving: false }}
-        onSaveProjectRuntimeSettings={vi.fn()}
         restartOpenCodeState={{ isRestarting: false, lastResult: "idle" }}
         runtimeVersion={{
           snapshot: {

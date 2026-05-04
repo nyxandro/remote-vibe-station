@@ -6,8 +6,7 @@
  * - projectPayloadInvalidError - Invalid create/register payload error.
  * - projectNameRequiredError - Missing project name error.
  * - repositoryUrlRequiredError - Missing repository URL error.
- * - deployPatchRequiredError - Missing deploy settings patch error.
- * - unsupportedContainerActionError - Invalid container lifecycle action error.
+* - unsupportedContainerActionError - Invalid container lifecycle action error.
  * - filePathRequiredError - Missing project file path error.
  * - terminalInputRequiredError - Missing terminal input error.
  * - branchRequiredError - Missing git branch error.
@@ -65,17 +64,6 @@ export const repositoryUrlRequiredError = (): BadRequestException => {
       code: "APP_PROJECT_REPOSITORY_URL_REQUIRED",
       message: "Repository URL is required.",
       hint: "Provide a git repository URL and retry the clone operation."
-    })
-  );
-};
-
-export const deployPatchRequiredError = (): BadRequestException => {
-  /* Deploy settings writes must include at least one supported field. */
-  return new BadRequestException(
-    createAppErrorBody({
-      code: "APP_PROJECT_DEPLOY_PATCH_REQUIRED",
-      message: "Deploy settings patch is required.",
-      hint: "Send one or more deploy fields such as mode, serviceName, internalPort, staticRoot or routes."
     })
   );
 };
