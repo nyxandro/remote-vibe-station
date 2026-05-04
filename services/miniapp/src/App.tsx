@@ -449,6 +449,7 @@ export const App = () => {
             onSubmitOAuthCode: () => void submitProviderOAuthCode(),
             onCompleteOAuthAuto: () => void completeProviderOAuthAuto(),
             onDisconnect: (providerID) => void disconnectProvider(providerID),
+            onCloseProviderAuthModal: () => setProviderOAuthState(null),
             onChangeOAuthCodeDraft: (value) =>
               setProviderOAuthState((prev) => (prev ? { ...prev, codeDraft: value } : prev))
           }}

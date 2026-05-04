@@ -49,6 +49,19 @@ export const useProviderAuth = (setError: (value: string | null) => void) => {
 
       const methods = overview?.authMethods?.[input.providerID] ?? [];
       const selected = methods[input.methodIndex];
+      if (!selected && methods.length === 0) {
+        /* OpenCode lists many API-key providers in /config/providers but only special OAuth flows in /provider/auth. */
+        setOAuthState({
+          providerID: input.providerID,
+          methodIndex: 0,
+          method: "code",
+          url: "",
+          instructions: "api",
+          codeDraft: ""
+        });
+        return;
+      }
+
       if (!selected) {
         setError("Method not found");
         return;

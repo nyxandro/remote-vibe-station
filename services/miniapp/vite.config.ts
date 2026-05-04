@@ -56,12 +56,14 @@ export default defineConfig({
     proxy: {
       "/api": {
         target: backendUrl,
-        changeOrigin: true
+        /* Preserve localhost Host so backend dev-only auth bypass can verify the real browser origin. */
+        changeOrigin: false
       },
       "/events": {
         target: backendUrl,
         ws: true,
-        changeOrigin: true
+        /* WebSocket token exchange follows the same localhost-only auth constraints as REST calls. */
+        changeOrigin: false
       }
     }
   },

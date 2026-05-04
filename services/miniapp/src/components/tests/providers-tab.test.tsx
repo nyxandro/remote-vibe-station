@@ -104,7 +104,7 @@ describe("ProvidersTab", () => {
   });
 
   it("renders API key flow and submits credentials", () => {
-    /* Manual key method should render secure input and submit button. */
+    /* Manual key method should render inside the same compact modal shell as CLIProxy auth. */
     const { props } = renderProvidersTab({
       providers: [{ id: "openai", name: "OpenAI", connected: false }],
       authMethods: { openai: [{ type: "api", label: "API key" }] },
@@ -118,12 +118,48 @@ describe("ProvidersTab", () => {
       }
     });
 
+    const dialog = screen.getByRole("dialog", { name: "API key для OpenAI" });
+
     fireEvent.change(screen.getByPlaceholderText("Введите API ключ"), {
       target: { value: "sk-live" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Подключить по API ключу" }));
+    fireEvent.click(dialog.querySelector(".btn.primary") as HTMLButtonElement);
 
     expect(props.onSubmitApiKey).toHaveBeenCalledWith({ providerID: "openai", key: "sk-live" });
+  });
+
+  it("closes OpenCode provider auth modal without submitting", () => {
+    /* OpenCode auth modal should mirror CLIProxy modal dismissal behavior. */
+    const { props } = renderProvidersTab({
+      providers: [{ id: "openai", name: "OpenAI", connected: false }],
+      authMethods: { openai: [{ type: "api", label: "API key" }] },
+      oauthState: {
+        providerID: "openai",
+        methodIndex: 0,
+        method: "code",
+        url: "",
+        instructions: "api",
+        codeDraft: ""
+      }
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
+
+    expect(props.onCloseProviderAuthModal).toHaveBeenCalledTimes(1);
+    expect(props.onSubmitApiKey).not.toHaveBeenCalled();
+  });
+
+  it("starts manual API key flow when OpenCode provider has no explicit auth methods", () => {
+    /* OpenCode exposes many providers in /config/providers but /provider/auth only lists special OAuth flows for a few of them. */
+    const { props } = renderProvidersTab({
+      providers: [{ id: "deepseek", name: "DeepSeek", connected: false }],
+      authMethods: {}
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Добавить провайдера" }));
+    fireEvent.click(screen.getByRole("button", { name: "DeepSeek" }));
+
+    expect(props.onStartConnect).toHaveBeenCalledWith({ providerID: "deepseek", methodIndex: 0 });
   });
 
   it("mounts CLIProxy section under providers and forwards provider reconnect", () => {
@@ -198,6 +234,7 @@ describe("ProvidersTab", () => {
     expect(screen.getByPlaceholderText("Введите OAuth code").getAttribute("id")).toBe(
       PROVIDERS_TAB_FIELD_IDS.oauthCode
     );
+    expect(screen.getByRole("dialog", { name: "Подключить Anthropic" })).toBeTruthy();
   });
 
   it("requires a successful config test before saving vless settings", () => {

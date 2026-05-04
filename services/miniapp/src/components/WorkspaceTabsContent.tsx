@@ -183,6 +183,7 @@ type Props = {
     onSubmitOAuthCode: () => void;
     onCompleteOAuthAuto: () => void;
     onDisconnect: (providerID: string) => void;
+    onCloseProviderAuthModal: () => void;
     onChangeOAuthCodeDraft: (value: string) => void;
   };
   proxyState: {
@@ -312,6 +313,7 @@ export const WorkspaceTabsContent = (props: Props) => {
         onSubmitOAuthCode={props.providersState.onSubmitOAuthCode}
         onCompleteOAuthAuto={props.providersState.onCompleteOAuthAuto}
         onDisconnect={props.providersState.onDisconnect}
+        onCloseProviderAuthModal={props.providersState.onCloseProviderAuthModal}
         onChangeOAuthCodeDraft={props.providersState.onChangeOAuthCodeDraft}
         cliproxyAccounts={props.proxyState.cliproxyAccounts}
         cliproxyOAuthStart={props.proxyState.cliproxyOAuthStart}

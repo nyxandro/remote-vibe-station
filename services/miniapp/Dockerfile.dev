@@ -1,0 +1,7 @@
+# Development image for the Mini App Vite server.
+# Provides npm/node for docker-compose.dev.yml hot-reload command.
+
+FROM node:22-alpine
+
+# Keep the compose-mounted source tree as the runtime working directory.
+WORKDIR /app

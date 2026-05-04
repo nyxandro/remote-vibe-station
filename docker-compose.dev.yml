@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - NODE_ENV=development
       - BOT_BACKEND_AUTH_TOKEN=${BOT_BACKEND_AUTH_TOKEN:-dev-bot-backend-token}
       - BACKEND_URL=http://localhost:3000
       - ADMIN_IDS=${ADMIN_IDS}
@@ -16,6 +17,8 @@ services:
       - OPENCODE_SERVER_URL=http://opencode:4096
       - OPENCODE_SERVER_PASSWORD=${OPENCODE_SERVER_PASSWORD}
       - OPENCODE_SERVER_USERNAME=${OPENCODE_SERVER_USERNAME}
+      - CLIPROXY_MANAGEMENT_URL=http://cliproxy:8317
+      - CLIPROXY_MANAGEMENT_PASSWORD=${CLIPROXY_MANAGEMENT_PASSWORD:-dev-management-password}
       - KANBAN_RUNNER_ENABLED=${KANBAN_RUNNER_ENABLED:-true}
       # Ask backend for short-lived GitHub App credentials so git auth stays global across all projects.
       - GIT_CONFIG_COUNT=1
@@ -44,7 +47,11 @@ services:
         condition: service_healthy
 
   miniapp:
-    image: node:22-alpine
+    build:
+      context: ./services/miniapp
+      dockerfile: Dockerfile.dev
+    image: remote-vibe-station-miniapp-dev
+    entrypoint: []
     working_dir: /app
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 4173 --strictPort"
     environment:

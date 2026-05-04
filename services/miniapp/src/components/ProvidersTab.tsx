@@ -20,6 +20,7 @@ import {
 } from "../types";
 import { ProviderOAuthState } from "../hooks/use-provider-auth";
 import { CliproxyAccountsSection } from "./CliproxyAccountsSection";
+import { ProviderAuthModal } from "./ProviderAuthModal";
 import { PROVIDERS_TAB_FIELD_IDS } from "./providers-tab-field-ids";
 
 const CLIPROXY_PROVIDER_ID = "cliproxy";
@@ -53,6 +54,7 @@ type Props = {
   onSubmitOAuthCode: () => void;
   onCompleteOAuthAuto: () => void;
   onDisconnect: (providerID: string) => void;
+  onCloseProviderAuthModal: () => void;
   onChangeOAuthCodeDraft?: (value: string) => void;
   onReloadCliproxy?: () => void;
   onStartCliproxyAuth: (provider: CliproxyAccountState["providers"][number]["id"]) => void;
@@ -111,7 +113,6 @@ export const ProvidersTab = (props: Props) => {
     });
   }, [connectableProviders, providerSearch]);
 
-  const isApiFlow = props.oauthState?.instructions === "api";
   const hasSuccessfulProxyTest =
     proxyMode !== "vless"
       ? true
@@ -206,11 +207,7 @@ export const ProvidersTab = (props: Props) => {
               <div key={`connect:${provider.id}`} className="providers-method-card">
                 <button
                   className="btn outline providers-provider-btn"
-                  onClick={() => {
-                    if (methods.length > 0) {
-                      props.onStartConnect({ providerID: provider.id, methodIndex: 0 });
-                    }
-                  }}
+                  onClick={() => props.onStartConnect({ providerID: provider.id, methodIndex: 0 })}
                   type="button"
                 >
                   {provider.name}
@@ -373,77 +370,28 @@ export const ProvidersTab = (props: Props) => {
         ) : null}
       </div>
 
-      {props.oauthState && isApiFlow ? (
-        <div className="providers-auth-card">
-          <div className="project-create-note">
-            API key для {providerMap.get(props.oauthState.providerID) ?? props.oauthState.providerID}
-          </div>
-          <input
-            id={PROVIDERS_TAB_FIELD_IDS.apiKey}
-            name={PROVIDERS_TAB_FIELD_IDS.apiKey}
-            aria-label="API key"
-            className="input settings-input-compact"
-            placeholder="Введите API ключ"
-            type="password"
-            autoComplete="new-password"
-            value={apiKeyDraft}
-            onChange={(event) => setApiKeyDraft(event.target.value)}
-          />
-          <button
-            className="btn primary"
-            type="button"
-            disabled={props.isSubmitting}
-            onClick={() =>
-              props.onSubmitApiKey({ providerID: props.oauthState?.providerID ?? "", key: apiKeyDraft })
-            }
-          >
-            Подключить по API ключу
-          </button>
-        </div>
-      ) : null}
+      <ProviderAuthModal
+        oauthState={props.oauthState}
+        providerLabel={props.oauthState ? (providerMap.get(props.oauthState.providerID) ?? props.oauthState.providerID) : "Unknown provider"}
+        isSubmitting={props.isSubmitting}
+        apiKeyDraft={apiKeyDraft}
+        codeDraft={localCodeDraft}
+        onApiKeyChange={setApiKeyDraft}
+        onCodeChange={(value) => {
+          setLocalCodeDraft(value);
+          props.onChangeOAuthCodeDraft?.(value);
+        }}
+        onClose={props.onCloseProviderAuthModal}
+        onSubmitApiKey={() => {
+          if (!props.oauthState?.providerID) {
+            return;
+          }
 
-      {props.oauthState && !isApiFlow ? (
-        <div className="providers-auth-card">
-          <div className="project-create-note">{props.oauthState.instructions}</div>
-          <a className="btn outline" href={props.oauthState.url} target="_blank" rel="noreferrer">
-            Открыть авторизацию
-          </a>
-
-          {props.oauthState.method === "auto" ? (
-            <button
-              className="btn primary"
-              type="button"
-              disabled={props.isSubmitting}
-              onClick={props.onCompleteOAuthAuto}
-            >
-              Проверить подключение
-            </button>
-          ) : (
-            <>
-              <input
-                id={PROVIDERS_TAB_FIELD_IDS.oauthCode}
-                name={PROVIDERS_TAB_FIELD_IDS.oauthCode}
-                aria-label="OAuth code"
-                className="input settings-input-compact"
-                placeholder="Введите OAuth code"
-                value={localCodeDraft}
-                onChange={(event) => {
-                  setLocalCodeDraft(event.target.value);
-                  props.onChangeOAuthCodeDraft?.(event.target.value);
-                }}
-              />
-              <button
-                className="btn primary"
-                type="button"
-                disabled={props.isSubmitting}
-                onClick={props.onSubmitOAuthCode}
-              >
-                Завершить OAuth
-              </button>
-            </>
-          )}
-        </div>
-      ) : null}
+          props.onSubmitApiKey({ providerID: props.oauthState.providerID, key: apiKeyDraft });
+        }}
+        onSubmitOAuthCode={props.onSubmitOAuthCode}
+        onCompleteOAuthAuto={props.onCompleteOAuthAuto}
+      />
     </section>
   );
 };
