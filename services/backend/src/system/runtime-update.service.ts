@@ -15,6 +15,7 @@ import { spawn } from "node:child_process";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { GithubAppService } from "../github/github-app.service";
 import { fetchLatestRuntimeVersion, LatestRuntimeVersion } from "./runtime-github-release";
+import { readFreshRuntimeLatestReleaseCache, writeRuntimeLatestReleaseCache } from "./runtime-latest-release-cache";
 
 const RUNTIME_ENV_FILE = ".env";
 const RUNTIME_PREVIOUS_ENV_FILE = ".env.previous";
@@ -77,9 +78,11 @@ type RuntimeUpdateDeps = {
   runCommand: (command: string, args: string[], cwd: string) => Promise<void>;
 };
 
+type NormalizedLatestRuntimeVersion = { version: string; imageTag: string; commitSha: string | null; releaseNotes: string | null; checkedAt: string };
+
 @Injectable()
 export class RuntimeUpdateService {
-  private latestCache: { version: string; imageTag: string; commitSha: string | null; releaseNotes: string | null; checkedAt: string } | null = null;
+  private latestCache: NormalizedLatestRuntimeVersion | null = null;
   private readonly deps: RuntimeUpdateDeps;
   @Optional() @Inject(GithubAppService) private readonly githubApp?: GithubAppService;
 
@@ -118,23 +121,11 @@ export class RuntimeUpdateService {
   }
 
   public async checkLatestVersion(): Promise<RuntimeVersionSnapshot> {
-    /* GitHub release check is explicit because network errors should not block opening Settings. */
-    const release = await this.deps.fetchLatestVersion();
-    const version = typeof release.version === "string" ? release.version.trim() : "";
-    if (!version) {
-      throw new Error("APP_RUNTIME_LATEST_VERSION_INVALID: GitHub release response does not include a version tag. Retry later or create a release.");
-    }
-    const imageTag = typeof release.imageTag === "string" && release.imageTag.trim().length > 0 ? release.imageTag.trim() : version;
-
-    const commitSha = typeof release.commitSha === "string" && release.commitSha.trim().length > 0
-      ? release.commitSha.trim()
-      : null;
-    const releaseNotes = typeof release.releaseNotes === "string" && release.releaseNotes.trim().length > 0
-      ? release.releaseNotes.trim()
-      : null;
-    this.latestCache = { version, imageTag, commitSha, releaseNotes, checkedAt: this.isoNow() };
+    /* Daily persisted cache prevents self-hosted installs from spending GitHub anonymous API quota. */
+    const release = await this.readLatestReleaseWithCache();
+    this.latestCache = release;
     const snapshot = await this.getVersionSnapshot();
-    this.writeUpdateState(this.buildState(snapshot.updateAvailable ? "available" : "idle", snapshot.currentVersion, version, imageTag, null, "checking"));
+    this.writeUpdateState(this.buildState(snapshot.updateAvailable ? "available" : "idle", snapshot.currentVersion, release.version, release.imageTag, null, "checking"));
     return snapshot;
   }
 
@@ -354,6 +345,31 @@ export class RuntimeUpdateService {
   private decodeMountInfoPath(value: string): string {
     /* Linux mountinfo escapes spaces and other bytes as octal sequences. */
     return value.replace(/\\([0-7]{3})/g, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)));
+  }
+
+  private async readLatestReleaseWithCache(): Promise<NormalizedLatestRuntimeVersion> {
+    /* Persisted cache is authoritative for one day; update clicks should not become GitHub polling. */
+    const runtimeDir = this.deps.runtimeConfigDir();
+    const cached = readFreshRuntimeLatestReleaseCache(runtimeDir, this.deps.now());
+    if (cached) {
+      return cached;
+    }
+
+    const release = this.normalizeLatestRelease(await this.deps.fetchLatestVersion(), this.isoNow());
+    writeRuntimeLatestReleaseCache(runtimeDir, release);
+    return release;
+  }
+
+  private normalizeLatestRelease(release: LatestRuntimeVersion, checkedAt: string): NormalizedLatestRuntimeVersion {
+    /* Release identity is required; metadata remains nullable because public fallback exposes only the tag. */
+    const version = typeof release.version === "string" ? release.version.trim() : "";
+    if (!version) {
+      throw new Error("APP_RUNTIME_LATEST_VERSION_INVALID: GitHub release response does not include a version tag. Retry later or create a release.");
+    }
+    const imageTag = typeof release.imageTag === "string" && release.imageTag.trim().length > 0 ? release.imageTag.trim() : version;
+    const commitSha = typeof release.commitSha === "string" && release.commitSha.trim().length > 0 ? release.commitSha.trim() : null;
+    const releaseNotes = typeof release.releaseNotes === "string" && release.releaseNotes.trim().length > 0 ? release.releaseNotes.trim() : null;
+    return { version, imageTag, commitSha, releaseNotes, checkedAt };
   }
 
   private readUpdateState(): RuntimeUpdateState {

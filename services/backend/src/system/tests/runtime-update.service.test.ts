@@ -55,6 +55,42 @@ describe("RuntimeUpdateService", () => {
     expect(JSON.parse(fs.readFileSync(path.join(runtimeDir, "runtime-update-state.json"), "utf-8"))).toMatchObject({ status: "restarting", targetVersion: "1.2.3" });
   });
 
+  test("reuses persisted latest release cache for one day", async () => {
+    /* Repeated update checks should not poll GitHub while a fresh persisted cache is available. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-release-cache-"));
+    const fetchLatestVersion = jest.fn().mockResolvedValue({ version: "1.2.3", imageTag: "v1.2.3", commitSha: "newsha", releaseNotes: "Cached release" });
+    writeRuntimeEnv(runtimeDir);
+    const service = new RuntimeUpdateService({
+      runtimeConfigDir: () => runtimeDir,
+      now: () => Date.parse("2026-05-03T12:00:00.000Z"),
+      fetchLatestVersion
+    });
+
+    await service.checkLatestVersion();
+    await service.checkLatestVersion();
+
+    expect(fetchLatestVersion).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fs.readFileSync(path.join(runtimeDir, "runtime-latest-release-cache.json"), "utf-8"))).toMatchObject({ version: "1.2.3", imageTag: "v1.2.3" });
+  });
+
+  test("refreshes persisted latest release cache after one day", async () => {
+    /* Stale cache must be refreshed so installations eventually discover new releases without manual cleanup. */
+    const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-release-cache-stale-"));
+    let now = Date.parse("2026-05-03T12:00:00.000Z");
+    const fetchLatestVersion = jest.fn()
+      .mockResolvedValueOnce({ version: "1.2.3", imageTag: "v1.2.3", commitSha: "oldsha" })
+      .mockResolvedValueOnce({ version: "1.2.4", imageTag: "v1.2.4", commitSha: "newsha" });
+    writeRuntimeEnv(runtimeDir);
+    const service = new RuntimeUpdateService({ runtimeConfigDir: () => runtimeDir, now: () => now, fetchLatestVersion });
+
+    await service.checkLatestVersion();
+    now = Date.parse("2026-05-04T12:00:01.000Z");
+    const snapshot = await service.checkLatestVersion();
+
+    expect(fetchLatestVersion).toHaveBeenCalledTimes(2);
+    expect(snapshot).toMatchObject({ latestVersion: "1.2.4", latestImageTag: "v1.2.4" });
+  });
+
   test("uses saved GitHub token for release checks", async () => {
     /* Authenticated GitHub API calls avoid anonymous rate limits during runtime update checks. */
     const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "rvs-runtime-github-token-"));
