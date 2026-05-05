@@ -42,7 +42,7 @@ describe("GitHubAuthSettingsSection", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("7. GitHub для git"));
+    fireEvent.click(screen.getByText("8. GitHub для git"));
     fireEvent.change(screen.getByLabelText("GitHub personal access token"), {
       target: { value: "github_pat_next" }
     });
@@ -80,7 +80,7 @@ describe("GitHubAuthSettingsSection", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("7. GitHub для git"));
+    fireEvent.click(screen.getByText("8. GitHub для git"));
     expect(screen.getByText(/Сохраненный token: gith...3456/i)).toBeTruthy();
     expect(screen.getByText(/Агент и git используют этот GitHub token глобально/i)).toBeTruthy();
 
@@ -111,7 +111,7 @@ describe("GitHubAuthSettingsSection", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("7. GitHub для git"));
+    fireEvent.click(screen.getByText("8. GitHub для git"));
     expect(screen.getByText(/Personal access tokens -> Fine-grained tokens/i)).toBeTruthy();
     expect(screen.getByText(/Contents: Read and write/i)).toBeTruthy();
   });

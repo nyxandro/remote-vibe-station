@@ -15,7 +15,7 @@ describe("WorkspaceHeader", () => {
     cleanup();
   });
 
-  it("renders eight icon-only tab buttons in the expected order", () => {
+  it("renders nine icon-only tab buttons in the expected order", () => {
     /* Top menu order should match the operator workflow from project context to settings. */
     render(
       <WorkspaceHeader
@@ -38,6 +38,7 @@ describe("WorkspaceHeader", () => {
       "Tasks",
       "Containers",
       "Providers",
+      "Skills",
       "Terminal",
       "Settings"
     ]);
