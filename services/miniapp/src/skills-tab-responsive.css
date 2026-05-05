@@ -5,6 +5,48 @@
  * - none (global CSS classes consumed by SkillsTab).
  */
 
+/* Pager — client-side "load more" action, sits between the list and the refresh footer. */
+.skills-pager {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.skills-load-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  min-height: 44px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-accent-soft);
+  border: 1px solid var(--sk-accent);
+  color: var(--sk-accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.skills-load-more:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.skills-load-more:focus-visible {
+  outline: 2px solid var(--sk-accent);
+  outline-offset: 3px;
+}
+
+.skills-load-more:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.skills-load-more-count {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
 /* Footer — manual refresh action lives below the list. */
 .skills-footer {
   display: flex;

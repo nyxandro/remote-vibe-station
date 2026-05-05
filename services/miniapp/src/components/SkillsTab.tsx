@@ -57,6 +57,10 @@ const FILTER_OPTIONS: FilterOption[] = [
 /* Debounce delay keeps NeuralDeep search reactive without hammering the upstream API. */
 const SEARCH_DEBOUNCE_MS = 350;
 
+/* Client-side pagination: NeuralDeep returns the full catalog in one array, so we cap
+   what the user sees and let them request the next page on demand. */
+const PAGE_SIZE = 20;
+
 /* Smooth ramp tunable for the install/uninstall progress bar. Larger = slower ramp. */
 const PROGRESS_RAMP_TAU_MS = 1800;
 
@@ -98,6 +102,8 @@ export const SkillsTab = (props: Props) => {
   const [filter, setFilter] = useState<SkillCatalogFilter>("all");
   /* Track elapsed mutation time locally so progress UI stays smooth between renders. */
   const [progressTick, setProgressTick] = useState<number>(0);
+  /* Visible window for client-side pagination — grows by PAGE_SIZE on each "load more" click. */
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
 
   const isInitialLoadRef = useRef<boolean>(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,7 +182,15 @@ export const SkillsTab = (props: Props) => {
     });
   }, [props.installedSkills, props.catalog]);
 
-  const visibleItems = filter === "installed" ? installedView : props.catalog;
+  const allItems = filter === "installed" ? installedView : props.catalog;
+  /* Reset the visible window whenever the underlying dataset changes (search/filter/refresh). */
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [query, filter, allItems.length]);
+
+  const visibleItems = allItems.slice(0, visibleCount);
+  const hasMore = visibleItems.length < allItems.length;
+  const remainingCount = allItems.length - visibleItems.length;
 
   const onSubmitSearch = (): void => {
     /* Manual submit just bypasses debounce — same dataflow path. */
@@ -419,6 +433,23 @@ export const SkillsTab = (props: Props) => {
             })
           : null}
       </div>
+
+      {/* Load-more pager — visible only when more items exist beyond the current window. */}
+      {!showSkeletons && hasMore ? (
+        <div className="skills-pager">
+          <button
+            type="button"
+            className="skills-load-more"
+            disabled={props.isLoading || Boolean(props.mutatingSkillName)}
+            onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
+          >
+            <span>Загрузить ещё</span>
+            <span className="skills-load-more-count">
+              +{Math.min(PAGE_SIZE, remainingCount)} из {remainingCount}
+            </span>
+          </button>
+        </div>
+      ) : null}
 
       {/* Manual refresh — useful when NeuralDeep changes outside the user's session. */}
       <div className="skills-footer">
