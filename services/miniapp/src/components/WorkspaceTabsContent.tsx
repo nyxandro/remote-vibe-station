@@ -19,6 +19,8 @@ import {
   FileReadResponse,
   GithubAuthStatus,
   GroqTranscriptionModel,
+  InstalledOpenCodeSkill,
+  NeuralDeepSkillCatalogItem,
   OpenCodeSettingsKind,
   OpenCodeSettingsOverview,
   OpenCodeVersionStatus,
@@ -32,6 +34,7 @@ import {
   SystemMetricsSnapshot,
   ProjectGitSummary,
   ProjectRecord,
+  SkillCatalogFilter,
   ManagedRuntimeServiceId,
   ProjectStatus
 } from "../types";
@@ -40,6 +43,7 @@ const ContainersTab = lazy(async () => ({ default: (await import("./ContainersTa
 const FilesTab = lazy(async () => ({ default: (await import("./FilesTab")).FilesTab }));
 const GitHubTab = lazy(async () => ({ default: (await import("./GitHubTab")).GitHubTab }));
 const ProvidersTab = lazy(async () => ({ default: (await import("./ProvidersTab")).ProvidersTab }));
+const SkillsTab = lazy(async () => ({ default: (await import("./SkillsTab")).SkillsTab }));
 const SettingsTab = lazy(async () => ({ default: (await import("./SettingsTab")).SettingsTab }));
 const TerminalTab = lazy(async () => ({ default: (await import("./TerminalTab")).TerminalTab }));
 const KanbanProjectTab = lazy(async () => ({ default: (await import("./KanbanProjectTab")).KanbanProjectTab }));
@@ -76,6 +80,24 @@ type Props = {
     content: string;
     exists: boolean;
   } | null;
+  skillsState: {
+    catalog: NeuralDeepSkillCatalogItem[];
+    installedSkills: InstalledOpenCodeSkill[];
+    isLoading: boolean;
+    mutatingSkillName: string | null;
+    mutatingKind: "install" | "uninstall" | null;
+    mutationStartedAt: number | null;
+    mutationStatus: {
+      kind: "install" | "uninstall";
+      outcome: "success" | "error";
+      skillName: string;
+      message: string;
+    } | null;
+    search: (query: string, filter: SkillCatalogFilter) => Promise<void> | void;
+    install: (skill: { id: string; name: string; owner: string | null; repo: string | null }, query: string, filter: SkillCatalogFilter) => Promise<void> | void;
+    uninstall: (name: string, query: string, filter: SkillCatalogFilter) => Promise<void> | void;
+    dismissMutationStatus: () => void;
+  };
   onQueryChange: (value: string) => void;
   onSelectProject: (id: string) => void;
   onCreateProjectFolder: (name: string) => void;
@@ -337,6 +359,24 @@ export const WorkspaceTabsContent = (props: Props) => {
         onSaveProxy={props.proxyState.onSave}
         onTestProxy={props.proxyState.onTest}
         onApplyProxy={props.proxyState.onApply}
+      />
+    );
+  }
+
+  if (props.activeTab === "skills") {
+    return renderLazyTab(
+      <SkillsTab
+        catalog={props.skillsState.catalog}
+        installedSkills={props.skillsState.installedSkills}
+        isLoading={props.skillsState.isLoading}
+        mutatingSkillName={props.skillsState.mutatingSkillName}
+        mutatingKind={props.skillsState.mutatingKind}
+        mutationStartedAt={props.skillsState.mutationStartedAt}
+        mutationStatus={props.skillsState.mutationStatus}
+        onSearch={props.skillsState.search}
+        onInstall={props.skillsState.install}
+        onUninstall={props.skillsState.uninstall}
+        onDismissStatus={props.skillsState.dismissMutationStatus}
       />
     );
   }

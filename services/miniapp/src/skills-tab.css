@@ -1,0 +1,472 @@
+/**
+ * @fileoverview Mobile-first styles for the OpenCode skills tab.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by SkillsTab).
+ */
+
+.skills-shell {
+  /* Theme tokens are kept in one block so dark-mode override only flips a single layer. */
+  --sk-surface: #ffffff;
+  --sk-surface-alt: #f6f9ff;
+  --sk-border: #dde6f5;
+  --sk-border-strong: #c5d3ec;
+  --sk-text: #0f172a;
+  --sk-muted: #5b6b85;
+  --sk-accent: #1d4ed8;
+  --sk-accent-soft: rgba(29, 78, 216, 0.08);
+  --sk-accent-fill: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
+  --sk-success: #166534;
+  --sk-success-bg: #ecfdf5;
+  --sk-success-border: #86efac;
+  --sk-danger: #b91c1c;
+  --sk-danger-bg: #fef2f2;
+  --sk-danger-border: #fca5a5;
+  --sk-shadow-card: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  --sk-radius-card: 16px;
+  --sk-radius-pill: 999px;
+  --sk-tap: 44px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--sk-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hero — compact title bar with installed counter. */
+.skills-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--sk-radius-card);
+  background: linear-gradient(135deg, #eef4ff 0%, #f5f9ff 60%, #e8f5ff 100%);
+  border: 1px solid var(--sk-border-strong);
+}
+
+.skills-hero-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--sk-text);
+}
+
+.skills-hero-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skills-hero-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Sticky controls — search + segmented filter stay in view while scrolling cards. */
+.skills-controls {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.skills-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: var(--sk-tap);
+  border-radius: 12px;
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.skills-search:focus-within {
+  border-color: var(--sk-accent);
+  background: var(--sk-surface);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+.skills-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--sk-text);
+  font-size: 16px; /* 16px prevents iOS zoom on focus. */
+  outline: none;
+  padding: 0;
+}
+
+.skills-search-input::placeholder {
+  color: var(--sk-muted);
+}
+
+.skills-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--sk-muted);
+  cursor: pointer;
+}
+
+.skills-search-clear:active {
+  background: var(--sk-accent-soft);
+  color: var(--sk-accent);
+}
+
+.skills-filter {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+}
+
+.skills-filter-chip {
+  flex: 1;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--sk-muted);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, transform 80ms ease;
+}
+
+.skills-filter-chip:active {
+  transform: scale(0.97);
+}
+
+.skills-filter-chip.is-active {
+  background: var(--sk-surface);
+  color: var(--sk-accent);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* Toast — banner-style status with explicit dismiss button. */
+.skills-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  animation: skills-toast-in 180ms ease-out;
+}
+
+.skills-toast-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.skills-toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.skills-toast-close:active {
+  opacity: 1;
+}
+
+.skills-toast-success {
+  background: var(--sk-success-bg);
+  border-color: var(--sk-success-border);
+  color: var(--sk-success);
+}
+
+.skills-toast-error {
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+@keyframes skills-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* List + cards — single column on mobile, scales up on wider viewports only. */
+.skills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skill-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  box-shadow: var(--sk-shadow-card);
+  transition: border-color 160ms ease, transform 120ms ease, box-shadow 160ms ease;
+}
+
+.skill-card.is-installed {
+  border-color: var(--sk-success-border);
+}
+
+.skill-card.is-busy {
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft), var(--sk-shadow-card);
+}
+
+.skill-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skill-card-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sk-text);
+  word-break: break-word;
+}
+
+.skill-badge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--sk-radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  white-space: nowrap;
+}
+
+.skill-badge.is-installed {
+  background: var(--sk-success-bg);
+  border-color: var(--sk-success-border);
+  color: var(--sk-success);
+}
+
+.skill-card-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--sk-muted);
+  /* Clamp keeps cards uniform; users can install based on title + key meta. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.skill-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skill-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.skill-tag {
+  padding: 3px 8px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-accent-soft);
+  color: var(--sk-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.skill-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.skill-action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--sk-tap);
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.skill-action:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.skill-action:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.skill-action-primary {
+  background: var(--sk-accent);
+  border-color: var(--sk-accent);
+  color: #ffffff;
+}
+
+.skill-action-primary:active:not(:disabled) {
+  background: #1e40af;
+}
+
+.skill-action-danger {
+  background: var(--sk-surface);
+  color: var(--sk-danger);
+  border-color: var(--sk-danger-border);
+}
+
+.skill-action-danger:active:not(:disabled) {
+  background: var(--sk-danger-bg);
+}
+
+/* Progress overlay — bar + phase narration anchored at the bottom of the card. */
+.skill-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.skill-progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-accent-soft);
+  overflow: hidden;
+}
+
+.skill-progress-fill {
+  height: 100%;
+  background: var(--sk-accent-fill);
+  border-radius: var(--sk-radius-pill);
+  transition: width 220ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Diagonal stripes give visual motion while real progress is asymptotic. */
+.skill-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.32) 0%,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0) 65%,
+    rgba(255, 255, 255, 0.32) 100%
+  );
+  background-size: 200% 100%;
+  animation: skills-shimmer 1300ms linear infinite;
+}
+
+@keyframes skills-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skill-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sk-muted);
+}
+
+.skill-progress-pct {
+  color: var(--sk-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Spinner used inside action buttons while a mutation is in flight. */
+.skill-spin {
+  animation: skills-spin 900ms linear infinite;
+}
+
+@keyframes skills-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

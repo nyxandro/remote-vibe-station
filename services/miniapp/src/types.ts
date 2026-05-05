@@ -7,6 +7,9 @@
  * - ProjectGitSummary - Compact active-branch and local change counters.
  * - GitOverview - Branch and changed files overview for GitHub tab.
  * - OpenCodeSettingsOverview (L72) - Accordion metadata for settings files.
+ * - SkillCatalogFilter - Filter mode for NeuralDeep skill catalog results.
+ * - NeuralDeepSkillCatalogItem - Remote skill catalog row enriched with local install state.
+ * - InstalledOpenCodeSkill - Locally installed OpenCode skill summary.
  * - GroqTranscriptionModel (L91) - Supported Groq speech-to-text models.
  * - VoiceControlSettings (L93) - Persisted Telegram voice-control settings.
  * - GithubAuthStatus - Global GitHub PAT status used for agent git operations.
@@ -137,6 +140,29 @@ export type OpenCodeSettingsKind =
   | "config"
   | "agent"
   | "command";
+
+export type SkillCatalogFilter = "all" | "installed" | "available";
+
+export type NeuralDeepSkillCatalogItem = {
+  id: string;
+  name: string;
+  owner: string | null;
+  repo: string | null;
+  description: string | null;
+  installs: number | null;
+  trending24h: number | null;
+  category: string | null;
+  tags: string[];
+  featured: boolean;
+  githubStars: number | null;
+  type: string | null;
+  installed: boolean;
+};
+
+export type InstalledOpenCodeSkill = {
+  name: string;
+  relativePath: string;
+};
 
 export type GroqTranscriptionModel = "whisper-large-v3-turbo" | "whisper-large-v3";
 

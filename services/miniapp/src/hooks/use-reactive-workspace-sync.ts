@@ -25,6 +25,7 @@ export type ReactiveWorkspaceSyncInput = {
   loadRuntimeServices: () => Promise<void> | void;
   checkRuntimeVersion: () => Promise<void> | void;
   loadProviderOverview: () => Promise<void> | void;
+  loadSkills: () => Promise<void> | void;
   loadProxySettings: () => Promise<void> | void;
   loadCliproxyAccounts: () => Promise<void> | void;
 };
@@ -33,6 +34,7 @@ const REACTIVE_POLL_INTERVAL_MS: Partial<Record<TabKey, number>> = {
   github: 12000,
   projects: 15000,
   providers: 20000,
+  skills: 30000,
   settings: 30000
 };
 
@@ -117,6 +119,14 @@ export const useReactiveWorkspaceSync = (input: ReactiveWorkspaceSyncInput): voi
           current.loadProxySettings(),
           current.loadCliproxyAccounts()
         ]);
+        return;
+      }
+
+      if (current.activeTab === "skills") {
+        markRefreshStarted();
+
+        /* Skills tab combines remote catalog status with local OpenCode config state. */
+        await current.loadSkills();
       }
     } catch (error) {
       /* Loader hooks usually handle their own errors, but unexpected throws must not escape fire-and-forget sync. */

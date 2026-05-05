@@ -1,0 +1,59 @@
+/**
+ * @fileoverview Loading and empty-state styles for the OpenCode skills tab.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by SkillsTab).
+ */
+
+/* Skeletons keep layout stable during initial network fetch. */
+.skill-card-skeleton {
+  pointer-events: none;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.06) 0%,
+    rgba(15, 23, 42, 0.12) 50%,
+    rgba(15, 23, 42, 0.06) 100%
+  );
+  background-size: 200% 100%;
+  animation: skills-shimmer 1300ms linear infinite;
+  border-radius: 8px;
+}
+
+.skeleton-line {
+  height: 12px;
+}
+
+.skeleton-line-title {
+  width: 60%;
+  height: 16px;
+}
+
+.skeleton-line-short {
+  width: 40%;
+}
+
+/* Empty state replaces the list when there are no items to show. */
+.skills-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  text-align: center;
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  border: 1px dashed var(--sk-border-strong);
+  color: var(--sk-muted);
+}
+
+.skills-empty-title {
+  font-weight: 700;
+  color: var(--sk-text);
+}
+
+.skills-empty-hint {
+  font-size: 13px;
+}

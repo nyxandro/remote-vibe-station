@@ -14,6 +14,7 @@ import {
   ListTodo,
   LucideIcon,
   Plug,
+  Sparkles,
   Settings,
   Terminal
 } from "lucide-react";
@@ -27,6 +28,7 @@ export type TabKey =
   | "tasks"
   | "containers"
   | "providers"
+  | "skills"
   | "terminal"
   | "settings";
 
@@ -44,6 +46,7 @@ const TAB_ITEMS: Array<{ key: TabKey; title: string; icon: LucideIcon }> = [
   { key: "tasks", title: "Tasks", icon: ListTodo },
   { key: "containers", title: "Containers", icon: Box },
   { key: "providers", title: "Providers", icon: Plug },
+  { key: "skills", title: "Skills", icon: Sparkles },
   { key: "terminal", title: "Terminal", icon: Terminal },
   { key: "settings", title: "Settings", icon: Settings }
 ];
@@ -59,6 +62,7 @@ export const WorkspaceHeader = (props: Props) => {
           const disabled =
             tab.key !== "projects" &&
             tab.key !== "providers" &&
+            tab.key !== "skills" &&
             tab.key !== "settings" &&
             !props.canUseProjectTabs;
 

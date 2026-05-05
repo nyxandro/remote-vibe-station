@@ -10,7 +10,7 @@
  * - apiGet - Authenticated GET helper that parses JSON responses.
  * - apiPost - Authenticated JSON POST helper.
  * - apiPostFormData - Authenticated multipart POST helper for file uploads.
- * - apiDelete - Authenticated DELETE helper.
+ * - apiDelete - Authenticated JSON DELETE helper.
  * - apiDownload - Authenticated GET helper that returns a Blob for browser downloads.
  */
 
@@ -319,9 +319,9 @@ export const apiPostFormData = async <T>(path: string, body: FormData): Promise<
   return parseJsonResponse<T>(response);
 };
 
-export const apiDelete = async <T>(path: string): Promise<T> => {
-  /* Perform authenticated DELETE request. */
-  return apiWithJsonBody<T>(path, "DELETE");
+export const apiDelete = async <T>(path: string, body?: unknown): Promise<T> => {
+  /* Perform authenticated DELETE request with optional JSON body for named resources. */
+  return apiWithJsonBody<T>(path, "DELETE", body);
 };
 
 export const apiDownload = async (path: string): Promise<Blob> => {

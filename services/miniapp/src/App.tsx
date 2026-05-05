@@ -15,6 +15,7 @@ import { useContainerStatusPolling } from "./hooks/use-container-status-polling"
 import { useGithubAuth } from "./hooks/use-github-auth";
 import { useOpenCodeAdminActions } from "./hooks/use-open-code-admin-actions";
 import { useOpenCodeSettings } from "./hooks/use-opencode-settings";
+import { useOpenCodeSkills } from "./hooks/use-opencode-skills";
 import { useOpenCodeVersion } from "./hooks/use-opencode-version";
 import { useProjectCatalogState } from "./hooks/use-project-catalog-state";
 import { useProjectFiles } from "./hooks/use-project-files";
@@ -81,6 +82,7 @@ export const App = () => {
     saveActiveFile: saveSettingsFile,
     createFile: createSettingsFile
   } = useOpenCodeSettings(setError, refreshGitAndProjectsAfterWorkspaceMutation);
+  const openCodeSkills = useOpenCodeSkills(setError);
   const {
     overview: providerOverview,
     isLoading: isProviderLoading,
@@ -280,6 +282,7 @@ export const App = () => {
     loadRuntimeServices,
     checkRuntimeVersion,
     loadProviderOverview,
+    loadSkills: () => openCodeSkills.search("", "all"),
     loadProxySettings,
     loadCliproxyAccounts
   });
@@ -352,6 +355,7 @@ export const App = () => {
           providerOverview={providerOverview}
           settingsOverview={settingsOverview}
           settingsActiveFile={settingsActiveFile}
+          skillsState={openCodeSkills}
           onQueryChange={setQuery}
           onSelectProject={(id) => void selectProject(id)}
           onCreateProjectFolder={(name) => void createProjectFolder(name)}

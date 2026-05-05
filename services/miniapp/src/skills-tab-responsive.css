@@ -1,0 +1,96 @@
+/**
+ * @fileoverview Responsive and theme styles for the OpenCode skills tab.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by SkillsTab).
+ */
+
+/* Footer — manual refresh action lives below the list. */
+.skills-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.skills-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  min-height: 40px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.skills-refresh:active:not(:disabled) {
+  background: var(--sk-accent-soft);
+  color: var(--sk-accent);
+  border-color: var(--sk-accent);
+}
+
+.skills-refresh:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Scale up gracefully past mobile breakpoints — two columns at tablet, three at desktop. */
+@media (min-width: 640px) {
+  .skills-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .skills-shell {
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .skills-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Dark theme — only token overrides; structural rules above stay intact. */
+html[data-theme="dark"] .skills-shell {
+  --sk-surface: #131c2e;
+  --sk-surface-alt: #0f1726;
+  --sk-border: #2a3a58;
+  --sk-border-strong: #345083;
+  --sk-text: #e6efff;
+  --sk-muted: #97a8c7;
+  --sk-accent: #60a5fa;
+  --sk-accent-soft: rgba(96, 165, 250, 0.16);
+  --sk-accent-fill: linear-gradient(90deg, #3b82f6 0%, #22d3ee 100%);
+  --sk-success: #86efac;
+  --sk-success-bg: rgba(34, 197, 94, 0.12);
+  --sk-success-border: rgba(34, 197, 94, 0.4);
+  --sk-danger: #fca5a5;
+  --sk-danger-bg: rgba(220, 38, 38, 0.12);
+  --sk-danger-border: rgba(220, 38, 38, 0.4);
+  --sk-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .skills-hero {
+  background: linear-gradient(135deg, #0f1c33 0%, #11203b 60%, #0d2433 100%);
+  border-color: #2c4570;
+}
+
+html[data-theme="dark"] .skill-action-primary {
+  color: #0b1220;
+}
+
+html[data-theme="dark"] .skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+}
