@@ -1,0 +1,629 @@
+/**
+ * @fileoverview Mobile-first skin for the Providers tab — visually unified with the Skills tab.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by ProvidersTab and embedded sub-sections).
+ *
+ * Strategy:
+ * - Apply the same --sk-* tokens used by SkillsTab to .providers-shell so cards, lists, badges,
+ *   pickers, inputs and modals share one visual language.
+ * - Scope every override under .providers-shell so the shared ActionModal / DangerConfirmModal
+ *   keep working unchanged outside the Providers screen.
+ */
+
+/* ── Design tokens ────────────────────────────────────────────────────────────────────────────── */
+.providers-shell {
+  --sk-surface: #ffffff;
+  --sk-surface-alt: #f6f9ff;
+  --sk-border: #dde6f5;
+  --sk-border-strong: #c5d3ec;
+  --sk-text: #0f172a;
+  --sk-muted: #5b6b85;
+  --sk-accent: #1d4ed8;
+  --sk-accent-soft: rgba(29, 78, 216, 0.08);
+  --sk-success: #166534;
+  --sk-success-bg: #ecfdf5;
+  --sk-success-border: #86efac;
+  --sk-warning: #92400e;
+  --sk-warning-bg: #fff7ed;
+  --sk-warning-border: #fcd34d;
+  --sk-danger: #b91c1c;
+  --sk-danger-bg: #fef2f2;
+  --sk-danger-border: #fca5a5;
+  --sk-shadow-card: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  --sk-radius-card: 16px;
+  --sk-radius-pill: 999px;
+  --sk-tap: 44px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--sk-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-theme="dark"] .providers-shell {
+  --sk-surface: #131c2e;
+  --sk-surface-alt: #0f1726;
+  --sk-border: #2a3a58;
+  --sk-border-strong: #345083;
+  --sk-text: #e6efff;
+  --sk-muted: #97a8c7;
+  --sk-accent: #60a5fa;
+  --sk-accent-soft: rgba(96, 165, 250, 0.16);
+  --sk-success: #86efac;
+  --sk-success-bg: rgba(34, 197, 94, 0.12);
+  --sk-success-border: rgba(34, 197, 94, 0.4);
+  --sk-warning: #fbbf24;
+  --sk-warning-bg: rgba(245, 158, 11, 0.14);
+  --sk-warning-border: rgba(245, 158, 11, 0.4);
+  --sk-danger: #fca5a5;
+  --sk-danger-bg: rgba(220, 38, 38, 0.12);
+  --sk-danger-border: rgba(220, 38, 38, 0.4);
+  --sk-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────────────────────────── */
+.providers-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--sk-radius-card);
+  background: linear-gradient(135deg, #eef4ff 0%, #f5f9ff 60%, #e8f5ff 100%);
+  border: 1px solid var(--sk-border-strong);
+}
+
+html[data-theme="dark"] .providers-hero {
+  background: linear-gradient(135deg, #0f1c33 0%, #11203b 60%, #0d2433 100%);
+  border-color: #2c4570;
+}
+
+.providers-hero-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--sk-text);
+}
+
+.providers-hero-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.providers-hero-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Native button reset for buttons that don't carry .btn (account summary). ─────────────────── */
+.providers-shell button {
+  font: inherit;
+  text-align: inherit;
+}
+
+/* ── Buttons — pill controls aligned with skills/settings vibe. ───────────────────────────────── */
+.providers-shell .btn,
+.providers-shell .btn.outline,
+.providers-shell .btn.ghost,
+.providers-shell .btn.primary {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.providers-shell .btn:not(.outline):not(.ghost):not(.danger),
+.providers-shell .btn.primary {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.providers-shell .btn.outline {
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+}
+
+.providers-shell .btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sk-muted);
+}
+
+.providers-shell .btn.ghost:hover:not(:disabled) {
+  background: var(--sk-surface-alt);
+  color: var(--sk-text);
+}
+
+.providers-shell .btn.outline.danger,
+.providers-shell .btn.danger {
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+.providers-shell .btn:active:not(:disabled),
+.providers-shell .btn.outline:active:not(:disabled),
+.providers-shell .btn.ghost:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.providers-shell .btn:disabled,
+.providers-shell .btn.outline:disabled,
+.providers-shell .btn.ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Inputs / selects — pill-shaped, accent focus ring. ───────────────────────────────────────── */
+.providers-shell .input,
+.providers-shell input.input,
+.providers-shell select.input,
+.providers-shell .input.settings-input-compact {
+  min-height: var(--sk-tap);
+  padding: 0 14px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.providers-shell select.input {
+  /* Strip native combobox chrome and draw a custom chevron with two CSS gradients.
+     Two linear-gradient layers form the `\` and `/` strokes of a v-chevron. Avoiding data-URI
+     SVGs sidesteps WebView parser quirks that previously rendered the icon as a tiled pattern.
+     Each layer carries its own no-repeat/position/size so cascade can never silently lose them. */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 40px;
+  cursor: pointer;
+  line-height: calc(var(--sk-tap) - 2px);
+  background:
+    linear-gradient(135deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    var(--sk-surface);
+  background-position:
+    right 20px center,
+    right 12px center,
+    0 0;
+  background-size:
+    8px 8px,
+    8px 8px,
+    auto;
+}
+
+.providers-shell select.input::-ms-expand {
+  /* IE/legacy Edge — hide the residual expand button so the chevron isn't doubled. */
+  display: none;
+}
+
+/* Native <option> styling is platform-dependent, but at least we can keep the popup readable
+   inside dark theme on browsers that respect it (Chromium-based). */
+html[data-theme="dark"] .providers-shell select.input option {
+  background-color: var(--sk-surface);
+  color: var(--sk-text);
+}
+
+.providers-shell .input:focus,
+.providers-shell .input:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+/* ── Provider list / cards — same rhythm as skill cards. ──────────────────────────────────────── */
+.providers-shell .providers-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.providers-shell .providers-item-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  color: var(--sk-text);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.providers-shell .providers-item-card:hover {
+  border-color: var(--sk-border-strong);
+  transform: translateY(-1px);
+}
+
+.providers-shell .providers-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.providers-shell .providers-item-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--sk-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Status badges — pill chips matching success/warning/danger token palette. ────────────────── */
+.providers-shell .providers-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: var(--sk-radius-pill);
+  padding: 4px 10px;
+  background: var(--sk-danger-bg);
+  border: 1px solid var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+.providers-shell .providers-badge.connected {
+  background: var(--sk-success-bg);
+  border-color: var(--sk-success-border);
+  color: var(--sk-success);
+}
+
+.providers-shell .providers-badge.warning {
+  background: var(--sk-warning-bg);
+  border-color: var(--sk-warning-border);
+  color: var(--sk-warning);
+}
+
+.providers-shell .providers-badge.error {
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+/* ── Provider picker — sticky search + scrollable method grid with custom scrollbar. ──────────── */
+.providers-shell .providers-method-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  max-height: min(420px, 56vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface-alt);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.providers-shell .providers-method-grid::-webkit-scrollbar {
+  width: 8px;
+}
+
+.providers-shell .providers-method-grid::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.providers-shell .providers-method-grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.providers-shell .providers-method-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  color: var(--sk-text);
+}
+
+.providers-shell .providers-provider-btn {
+  /* Provider name acts as the headline of the method card — make it visually heavier. */
+  background: var(--sk-accent-soft) !important;
+  border-color: var(--sk-accent) !important;
+  color: var(--sk-accent) !important;
+  font-weight: 700 !important;
+}
+
+/* ── Auth / runtime cards (CLIProxy runtime + accounts wrappers). ─────────────────────────────── */
+.providers-shell .providers-auth-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  color: var(--sk-text);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  /* Prevent the card itself from being widened by intrinsic content (long option strings, long
+     env-preview values, copy-pasted VLESS URLs). Combined with min-width:0 on grid children below,
+     this keeps the card pinned to its parent column width on every viewport. */
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Default for grid items is `min-width: auto`, which lets long content push columns wider than
+   the card. Force min-width:0 so inputs, selects, action grids and notes always stay inside the
+   card padding. `max-width: 100%` is a belt-and-braces guard for legacy WebViews. */
+.providers-shell .providers-auth-card > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.providers-shell .providers-auth-card .input,
+.providers-shell .providers-auth-card select.input,
+.providers-shell .providers-auth-card input.input {
+  /* Explicit width keeps the pill-shaped <select>/<input> from inheriting an intrinsic width
+     based on the longest option/placeholder, which previously made it overflow the card. */
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+
+.providers-shell .providers-auth-card .settings-actions-grid {
+  /* Action grid columns must collapse below 160px when the card is narrow; without this the
+     auto-fit minmax() would force a 160px column and overflow the card on small phones. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.providers-shell .providers-auth-card .settings-actions-grid .btn {
+  /* Ensure buttons stretch to fill their grid cell instead of growing to fit long labels. */
+  width: 100%;
+  min-width: 0;
+}
+
+.providers-shell .settings-header-row strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sk-text);
+}
+
+.providers-shell .project-create-note {
+  color: var(--sk-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.providers-shell .settings-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+/* ── CLIProxy account accordions ─────────────────────────────────────────────────────────────── */
+.providers-shell .providers-account-card {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.providers-shell .providers-account-summary {
+  width: 100%;
+  border: 0;
+  padding: 14px 16px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  font: inherit;
+}
+
+.providers-shell .providers-account-summary:focus-visible {
+  outline: none;
+  background: var(--sk-accent-soft);
+  box-shadow: inset 0 0 0 2px var(--sk-accent);
+  border-radius: calc(var(--sk-radius-card) - 1px);
+}
+
+.providers-shell .providers-account-summary-identity,
+.providers-shell .providers-account-quota-label {
+  color: var(--sk-muted);
+  font-size: 12px;
+}
+
+.providers-shell .providers-account-chevron {
+  color: var(--sk-muted);
+  transition: transform 160ms ease;
+}
+
+.providers-shell .providers-account-card.expanded .providers-account-chevron {
+  transform: rotate(180deg);
+}
+
+.providers-shell .providers-account-body {
+  display: grid;
+  gap: 10px;
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--sk-border);
+}
+
+.providers-shell .providers-action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Usage meter — keep the long pill shape, use accent gradient. ─────────────────────────────── */
+.providers-shell .providers-usage-meter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 40px;
+  overflow: hidden;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface-alt);
+}
+
+.providers-shell .providers-usage-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
+  border-radius: inherit;
+}
+
+.providers-shell .providers-usage-meter-text {
+  position: relative;
+  z-index: 1;
+  padding: 0 14px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--sk-text);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+html[data-theme="dark"] .providers-shell .providers-usage-meter-fill {
+  background: linear-gradient(90deg, #3b82f6 0%, #22d3ee 100%);
+}
+
+html[data-theme="dark"] .providers-shell .providers-usage-meter-text {
+  color: #eef4ff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────────────────────────── */
+.providers-shell .providers-empty {
+  border: 1px dashed var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  padding: 14px;
+  font-size: 13px;
+  color: var(--sk-muted);
+  background: var(--sk-surface-alt);
+  text-align: center;
+}
+
+/* ── Provider auth modals — fields rendered inside ActionModal need the same pill treatment.
+   Scoped via .providers-auth-modal-fields (unique to provider/cliproxy modals) so the shared
+   ActionModal infrastructure is not affected for other modals (DangerConfirmModal etc.). ────── */
+.providers-auth-modal-fields {
+  --sk-surface: #ffffff;
+  --sk-surface-alt: #f6f9ff;
+  --sk-border: #dde6f5;
+  --sk-text: #0f172a;
+  --sk-muted: #5b6b85;
+  --sk-accent: #1d4ed8;
+  --sk-accent-soft: rgba(29, 78, 216, 0.08);
+  --sk-radius-pill: 999px;
+  --sk-tap: 44px;
+
+  display: grid;
+  gap: 10px;
+}
+
+html[data-theme="dark"] .providers-auth-modal-fields {
+  --sk-surface: #131c2e;
+  --sk-surface-alt: #0f1726;
+  --sk-border: #2a3a58;
+  --sk-text: #e6efff;
+  --sk-muted: #97a8c7;
+  --sk-accent: #60a5fa;
+  --sk-accent-soft: rgba(96, 165, 250, 0.16);
+}
+
+.providers-auth-modal-fields .input {
+  min-height: var(--sk-tap);
+  padding: 0 14px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 14px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.providers-auth-modal-fields .input:focus,
+.providers-auth-modal-fields .input:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+.providers-auth-modal-fields .btn,
+.providers-auth-modal-fields .btn.outline {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.providers-auth-modal-fields .btn.outline {
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+}
+
+.providers-auth-modal-fields .btn.outline:hover:not(:disabled) {
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.providers-auth-modal-link {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ── Wider screens — providers list/methods become two-column grids. ─────────────────────────── */
+@media (min-width: 640px) {
+  .providers-shell .providers-list,
+  .providers-shell .providers-method-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .providers-shell {
+    gap: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .providers-shell .providers-list,
+  .providers-shell .providers-method-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

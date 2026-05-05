@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Plus, Search, X } from "lucide-react";
+import { ExternalLink, KanbanSquare, Plus, Search, X } from "lucide-react";
 
 import { useDraggableScroll } from "../hooks/use-draggable-scroll";
 import { CreateKanbanTaskPayload, UpdateKanbanTaskPayload } from "../hooks/use-kanban";
@@ -17,6 +17,22 @@ import { KanbanPriority, KanbanStatus, KanbanTask, ProjectRecord } from "../type
 import { ThemeMode } from "../utils/theme";
 
 const COLUMN_PAGE_SIZE = 10;
+
+const pluralizeRu = (count: number, one: string, few: string, many: string): string => {
+  /* Russian task counters need the 11-14 exception before the last-digit rule. */
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return one;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return few;
+  }
+
+  return many;
+};
 
 const COLUMNS: Array<{ status: KanbanStatus; label: string; emptyText: string }> = [
   { status: "backlog", label: "Backlog", emptyText: "Store raw ideas here before grooming starts." },
@@ -264,6 +280,18 @@ export const KanbanBoard = (props: Props) => {
 
   return (
     <section className="kanban-shell">
+      <header className="tab-hero">
+        <div className="tab-hero-title">
+          <KanbanSquare size={18} aria-hidden />
+          <span>Канбан</span>
+        </div>
+        <div className="tab-hero-meta">
+          <span className="tab-hero-counter">
+            {props.tasks.length} {pluralizeRu(props.tasks.length, "задача", "задачи", "задач")}
+          </span>
+        </div>
+      </header>
+
       <div className={isSearchOpen ? "kanban-toolbar kanban-toolbar-search-open" : "kanban-toolbar"}>
         {isSearchOpen ? (
           <div className="kanban-search-shell">

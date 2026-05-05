@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { GitBranch } from "lucide-react";
 
 import { GitFileStatus, GitOverview as GitOverviewModel } from "../types";
 
@@ -60,6 +61,18 @@ export const GitHubTab = (props: Props) => {
 
   return (
     <section className="git-tab-shell">
+      <header className="tab-hero">
+        <div className="tab-hero-title">
+          <GitBranch size={18} aria-hidden />
+          <span>Git</span>
+        </div>
+        <div className="tab-hero-meta">
+          <span className="tab-hero-counter">
+            {props.overview?.currentBranch ?? (props.activeId ? "репозиторий не найден" : "проект не выбран")}
+          </span>
+        </div>
+      </header>
+
       {!props.activeId ? (
         <div className="placeholder">Select a project first.</div>
       ) : null}

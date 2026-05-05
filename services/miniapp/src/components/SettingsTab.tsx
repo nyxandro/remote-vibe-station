@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Settings as SettingsIcon, FolderGit2 } from "lucide-react";
 import {
   CliproxyAccountState,
   ManagedRuntimeServiceId,
@@ -272,6 +273,20 @@ export const SettingsTab = (props: Props) => {
 
   return (
     <section className="settings-shell">
+      {/* Hero — sectional title with active project badge to mirror the Skills tab layout. */}
+      <header className="settings-hero">
+        <div className="settings-hero-title">
+          <SettingsIcon size={18} aria-hidden />
+          <span>Настройки</span>
+        </div>
+        <div className="settings-hero-meta">
+          <span className="settings-hero-counter">
+            <FolderGit2 size={14} aria-hidden />
+            {props.activeId ? props.activeId : "проект не выбран"}
+          </span>
+        </div>
+      </header>
+
       {props.runtimeServices ? (
         <SettingsRuntimeDashboard
           overview={props.overview}

@@ -1,0 +1,958 @@
+/**
+ * @fileoverview Mobile-first unified skin for the remaining tabs (Projects, Files, Containers,
+ * GitHub, Kanban) — visually parity with the OpenCode Skills tab.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by the listed tabs).
+ *
+ * Strategy:
+ * - Apply the same --sk-* design tokens used by SkillsTab to each tab's root shell.
+ * - Override every legacy class so cards, lists, badges, inputs, buttons share one visual language.
+ * - Scope under per-shell selectors so other surfaces (modals, kanban standalone screen) keep
+ *   their layout while still benefiting from token unification.
+ */
+
+/* ── Shared token block (light + dark) applied to each tab shell. ─────────────────────────────── */
+.projects-shell,
+.containers-shell,
+.files-shell,
+.git-tab-shell,
+.kanban-shell {
+  --sk-surface: #ffffff;
+  --sk-surface-alt: #f6f9ff;
+  --sk-border: #dde6f5;
+  --sk-border-strong: #c5d3ec;
+  --sk-text: #0f172a;
+  --sk-muted: #5b6b85;
+  --sk-accent: #1d4ed8;
+  --sk-accent-soft: rgba(29, 78, 216, 0.08);
+  --sk-success: #166534;
+  --sk-success-bg: #ecfdf5;
+  --sk-success-border: #86efac;
+  --sk-warning: #92400e;
+  --sk-warning-bg: #fff7ed;
+  --sk-warning-border: #fcd34d;
+  --sk-danger: #b91c1c;
+  --sk-danger-bg: #fef2f2;
+  --sk-danger-border: #fca5a5;
+  --sk-shadow-card: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  --sk-radius-card: 16px;
+  --sk-radius-pill: 999px;
+  --sk-tap: 44px;
+  --sk-terminal-bg: #0b1220;
+  --sk-terminal-fg: #e2e8f0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--sk-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-theme="dark"] :is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) {
+  --sk-surface: #131c2e;
+  --sk-surface-alt: #0f1726;
+  --sk-border: #2a3a58;
+  --sk-border-strong: #345083;
+  --sk-text: #e6efff;
+  --sk-muted: #97a8c7;
+  --sk-accent: #60a5fa;
+  --sk-accent-soft: rgba(96, 165, 250, 0.16);
+  --sk-success: #86efac;
+  --sk-success-bg: rgba(34, 197, 94, 0.12);
+  --sk-success-border: rgba(34, 197, 94, 0.4);
+  --sk-warning: #fbbf24;
+  --sk-warning-bg: rgba(245, 158, 11, 0.14);
+  --sk-warning-border: rgba(245, 158, 11, 0.4);
+  --sk-danger: #fca5a5;
+  --sk-danger-bg: rgba(220, 38, 38, 0.12);
+  --sk-danger-border: rgba(220, 38, 38, 0.4);
+  --sk-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --sk-terminal-bg: #060b16;
+}
+
+/* ── Hero block (shared layout). ──────────────────────────────────────────────────────────────── */
+.tab-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--sk-radius-card);
+  background: linear-gradient(135deg, #eef4ff 0%, #f5f9ff 60%, #e8f5ff 100%);
+  border: 1px solid var(--sk-border-strong);
+}
+
+html[data-theme="dark"] .tab-hero {
+  background: linear-gradient(135deg, #0f1c33 0%, #11203b 60%, #0d2433 100%);
+  border-color: #2c4570;
+}
+
+.tab-hero-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--sk-text);
+}
+
+.tab-hero-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-hero-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Native button reset for buttons that don't carry .btn (file rows, container icons). ─────── */
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) button {
+  font: inherit;
+  text-align: inherit;
+}
+
+/* ── Buttons — pill controls aligned with skills/settings vibe. ───────────────────────────────── */
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn,
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.outline,
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.ghost,
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.primary {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn:not(.outline):not(.ghost):not(.danger),
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.primary {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.outline {
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sk-muted);
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn:active:not(:disabled),
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.outline:active:not(:disabled),
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn.ghost:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Inputs and selects — pill-shaped, accent focus ring. ─────────────────────────────────────── */
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .input,
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) input.input,
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) select.input {
+  min-height: var(--sk-tap);
+  padding: 0 14px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) select.input {
+  /* Same chevron technique as Settings/Providers — two CSS gradients form a v-mark, no SVG data
+     URI so Telegram WebView can never tile the icon across the field. */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 40px;
+  cursor: pointer;
+  line-height: calc(var(--sk-tap) - 2px);
+  background:
+    linear-gradient(135deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    var(--sk-surface);
+  background-position: right 20px center, right 12px center, 0 0;
+  background-size: 8px 8px, 8px 8px, auto;
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) select.input::-ms-expand {
+  display: none;
+}
+
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .input:focus,
+:is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) .input:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   PROJECTS TAB
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.projects-shell .panel-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.projects-shell .project-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.projects-shell .project-create-btn {
+  flex: 0 0 auto;
+  width: var(--sk-tap);
+  height: var(--sk-tap);
+  padding: 0;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.projects-shell .project-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.projects-shell .project-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.projects-shell .project-card:hover {
+  border-color: var(--sk-border-strong);
+  transform: translateY(-1px);
+}
+
+.projects-shell .project-card.active {
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft), var(--sk-shadow-card);
+}
+
+.projects-shell .project-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--sk-text);
+  overflow-wrap: anywhere;
+}
+
+.projects-shell .project-path {
+  font-size: 12px;
+  color: var(--sk-muted);
+  overflow-wrap: anywhere;
+}
+
+.projects-shell .project-git-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sk-muted);
+  width: fit-content;
+}
+
+.projects-shell .project-git-branch {
+  color: var(--sk-text);
+}
+
+.projects-shell .project-git-plus { color: var(--sk-success); }
+.projects-shell .project-git-minus { color: var(--sk-danger); }
+
+.projects-shell .project-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--sk-radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.projects-shell .project-health-healthy { background: var(--sk-success-bg); color: var(--sk-success); border: 1px solid var(--sk-success-border); }
+.projects-shell .project-health-degraded { background: var(--sk-warning-bg); color: var(--sk-warning); border: 1px solid var(--sk-warning-border); }
+.projects-shell .project-health-down { background: var(--sk-danger-bg); color: var(--sk-danger); border: 1px solid var(--sk-danger-border); }
+
+.projects-shell .project-actions {
+  border-top: 1px solid var(--sk-border);
+  padding-top: 10px;
+}
+
+.projects-shell .project-actions-footer {
+  display: flex;
+  gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   CONTAINERS TAB
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.containers-shell .compose-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  box-shadow: var(--sk-shadow-card);
+}
+
+.containers-shell .compose-controls-label {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--sk-text);
+}
+
+.containers-shell .compose-controls-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.containers-shell .icon-action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.containers-shell .icon-action-btn:hover:not(:disabled) {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.containers-shell .icon-action-btn-stop:hover:not(:disabled) {
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+.containers-shell .icon-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.containers-shell .container-list {
+  display: grid;
+  gap: 10px;
+}
+
+.containers-shell .container-row {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.containers-shell .container-row-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--sk-text);
+  overflow-wrap: anywhere;
+}
+
+.containers-shell .container-row-state {
+  font-size: 12px;
+  color: var(--sk-muted);
+}
+
+.containers-shell .container-row-ports {
+  font-size: 12px;
+  color: var(--sk-muted);
+  overflow-wrap: anywhere;
+}
+
+.containers-shell .container-row-actions {
+  margin-top: 8px;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.containers-shell .container-logs-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.containers-shell .log-box {
+  margin: 0;
+  border-radius: var(--sk-radius-card);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  background: var(--sk-terminal-bg);
+  color: var(--sk-terminal-fg);
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  box-shadow: var(--sk-shadow-card);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 360px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.containers-shell .log-box::-webkit-scrollbar { width: 8px; height: 8px; }
+.containers-shell .log-box::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   FILES TAB
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.files-shell .files-location-strip {
+  padding: 8px 14px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.files-shell .files-toolbar {
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  padding: 8px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+.files-shell .files-toolbar-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.files-shell .icon-tool-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.files-shell .icon-tool-btn:hover:not(:disabled) {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.files-shell .icon-tool-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.files-shell .files-grid {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  overflow: hidden;
+}
+
+.files-shell .files-list {
+  max-height: min(560px, 64vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.files-shell .files-list::-webkit-scrollbar { width: 8px; }
+.files-shell .files-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.files-shell .file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--sk-border);
+  background: transparent;
+  color: var(--sk-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.files-shell .file-item:last-child {
+  border-bottom: 0;
+}
+
+.files-shell .file-item:hover {
+  background: var(--sk-surface-alt);
+}
+
+.files-shell .file-item:focus,
+.files-shell .file-item:focus-visible {
+  outline: 2px solid var(--sk-accent);
+  outline-offset: -2px;
+  background: var(--sk-accent-soft);
+}
+
+.files-shell .file-item.dir .file-name {
+  font-weight: 600;
+  color: var(--sk-text);
+}
+
+.files-shell .file-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--sk-muted);
+}
+
+.files-shell .file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.files-shell .file-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: var(--sk-muted);
+  font-size: 12px;
+}
+
+.files-shell .file-size {
+  font-variant-numeric: tabular-nums;
+}
+
+.files-shell .placeholder {
+  padding: 16px;
+  text-align: center;
+  color: var(--sk-muted);
+  font-size: 13px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   GITHUB / GIT TAB
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.git-tab-shell .git-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.git-tab-shell .git-card > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.git-tab-shell .git-branch-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.git-tab-shell .git-branch-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--sk-text);
+  overflow-wrap: anywhere;
+}
+
+.git-tab-shell .git-upstream-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sk-muted);
+}
+
+.git-tab-shell .git-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sk-muted);
+}
+
+.git-tab-shell .git-actions-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.git-tab-shell .git-actions-row .input,
+.git-tab-shell .git-actions-row select.input,
+.git-tab-shell .git-actions-row input.input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.git-tab-shell .git-actions-row .btn {
+  flex: 0 0 auto;
+}
+
+.git-tab-shell .git-file-list {
+  display: grid;
+  gap: 6px;
+  max-height: min(420px, 50vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.git-tab-shell .git-file-list::-webkit-scrollbar { width: 8px; }
+.git-tab-shell .git-file-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.git-tab-shell .git-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--sk-border);
+  border-radius: 12px;
+  background: var(--sk-surface-alt);
+}
+
+.git-tab-shell .git-file-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.git-tab-shell .git-file-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-muted);
+  flex: 0 0 auto;
+}
+
+.git-tab-shell .git-file-status-added { background: var(--sk-success-bg); color: var(--sk-success); border-color: var(--sk-success-border); }
+.git-tab-shell .git-file-status-modified { background: var(--sk-warning-bg); color: var(--sk-warning); border-color: var(--sk-warning-border); }
+.git-tab-shell .git-file-status-deleted,
+.git-tab-shell .git-file-status-conflict { background: var(--sk-danger-bg); color: var(--sk-danger); border-color: var(--sk-danger-border); }
+.git-tab-shell .git-file-status-renamed { background: var(--sk-accent-soft); color: var(--sk-accent); border-color: var(--sk-accent); }
+.git-tab-shell .git-file-status-untracked { background: var(--sk-surface-alt); color: var(--sk-muted); border-color: var(--sk-border-strong); }
+
+.git-tab-shell .git-file-path {
+  font-size: 13px;
+  color: var(--sk-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+}
+
+.git-tab-shell .git-file-delta {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-tab-shell .project-git-plus { color: var(--sk-success); }
+.git-tab-shell .project-git-minus { color: var(--sk-danger); }
+
+.git-tab-shell .placeholder {
+  padding: 14px;
+  border: 1px dashed var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  text-align: center;
+  color: var(--sk-muted);
+  font-size: 13px;
+  background: var(--sk-surface-alt);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   KANBAN
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.kanban-shell .kanban-toolbar-actions,
+.kanban-shell .kanban-toolbar-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kanban-shell .kanban-toolbar-icon-button {
+  min-height: var(--sk-tap);
+  height: var(--sk-tap);
+  min-width: var(--sk-tap);
+  padding: 0 12px;
+  border-radius: var(--sk-radius-pill);
+}
+
+.kanban-shell .kanban-search-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: var(--sk-tap);
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+}
+
+.kanban-shell .kanban-search-shell-icon {
+  color: var(--sk-muted);
+  flex: 0 0 auto;
+}
+
+.kanban-shell .kanban-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.kanban-shell .kanban-project-filter,
+.kanban-shell .kanban-project-filter-compact {
+  height: var(--sk-tap);
+  min-height: var(--sk-tap);
+}
+
+.kanban-shell .kanban-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--sk-radius-card) var(--sk-radius-card) 0 0;
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  border-bottom: 0;
+}
+
+.kanban-shell .kanban-column-header-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kanban-shell .kanban-column-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--sk-text);
+  letter-spacing: 0.02em;
+}
+
+.kanban-shell .kanban-column-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-accent-soft);
+  border: 1px solid var(--sk-accent);
+  color: var(--sk-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.kanban-shell .kanban-column-count-empty {
+  background: var(--sk-surface);
+  border-color: var(--sk-border);
+  color: var(--sk-muted);
+}
+
+.kanban-shell .kanban-column-body {
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  border-top: 0;
+  border-radius: 0 0 var(--sk-radius-card) var(--sk-radius-card);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  min-height: 80px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.kanban-shell .kanban-column-body::-webkit-scrollbar { width: 8px; }
+.kanban-shell .kanban-column-body::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.kanban-shell .kanban-card-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--sk-text);
+  line-height: 1.35;
+}
+
+.kanban-shell .kanban-card-progress {
+  font-size: 11px;
+  color: var(--sk-muted);
+}
+
+.kanban-shell .kanban-project-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.kanban-shell .kanban-duration-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-accent-soft);
+  border: 1px solid var(--sk-accent);
+  color: var(--sk-accent);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kanban-shell .kanban-empty-state {
+  padding: 14px;
+  border: 1px dashed var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.kanban-shell .kanban-load-more-button {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ── Wider screens — denser grids on tablet/desktop. ─────────────────────────────────────────── */
+@media (min-width: 640px) {
+  :is(.projects-shell, .containers-shell, .files-shell, .git-tab-shell, .kanban-shell) {
+    gap: 14px;
+  }
+
+  .projects-shell .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .projects-shell .project-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

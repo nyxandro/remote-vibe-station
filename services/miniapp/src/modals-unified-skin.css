@@ -1,0 +1,1186 @@
+/**
+ * @fileoverview Mobile-first unified skin for every modal/overlay surface in Mini App.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by the listed modals).
+ *
+ * Strategy:
+ * - Apply --sk-* tokens to every modal shell so cards, buttons, inputs, status pills, badges,
+ *   mode-toggles share the visual language of the Skills tab.
+ * - Mobile UX (≤640px): convert centered modals into bottom sheets with a drag-handle indicator,
+ *   round only the top corners, slide up from the bottom, sticky footer respecting safe-area inset.
+ * - Touch targets stay ≥44px; close button is enlarged to a comfortable tap zone.
+ *
+ * Scope:
+ * - .action-modal (ProjectAddModal, FileUploadModal, ProviderAuthModal, CliproxyAuthModal,
+ *   DangerConfirmModal).
+ * - .kanban-modal (KanbanTaskEditorModal).
+ * - .service-health-modal (ServiceHealthModal).
+ * - .settings-editor-modal (SettingsEditorModal / FullscreenCodeModal).
+ * - .miniapp-blocking-overlay.
+ * - .markdown-toolbar (shared rich-text toolbar).
+ */
+
+/* ── Token block applied to every modal so children share the design system. ──────────────────── */
+.action-modal,
+.kanban-modal,
+.service-health-modal,
+.settings-editor-modal,
+.miniapp-blocking-card,
+.markdown-toolbar {
+  --sk-surface: #ffffff;
+  --sk-surface-alt: #f6f9ff;
+  --sk-border: #dde6f5;
+  --sk-border-strong: #c5d3ec;
+  --sk-text: #0f172a;
+  --sk-muted: #5b6b85;
+  --sk-accent: #1d4ed8;
+  --sk-accent-soft: rgba(29, 78, 216, 0.08);
+  --sk-success: #166534;
+  --sk-success-bg: #ecfdf5;
+  --sk-success-border: #86efac;
+  --sk-warning: #92400e;
+  --sk-warning-bg: #fff7ed;
+  --sk-warning-border: #fcd34d;
+  --sk-danger: #b91c1c;
+  --sk-danger-bg: #fef2f2;
+  --sk-danger-border: #fca5a5;
+  --sk-shadow-card: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  --sk-radius-card: 16px;
+  --sk-radius-pill: 999px;
+  --sk-tap: 44px;
+  color: var(--sk-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-theme="dark"] :is(.action-modal, .kanban-modal, .service-health-modal, .settings-editor-modal, .miniapp-blocking-card, .markdown-toolbar) {
+  --sk-surface: #131c2e;
+  --sk-surface-alt: #0f1726;
+  --sk-border: #2a3a58;
+  --sk-border-strong: #345083;
+  --sk-text: #e6efff;
+  --sk-muted: #97a8c7;
+  --sk-accent: #60a5fa;
+  --sk-accent-soft: rgba(96, 165, 250, 0.16);
+  --sk-success: #86efac;
+  --sk-success-bg: rgba(34, 197, 94, 0.12);
+  --sk-success-border: rgba(34, 197, 94, 0.4);
+  --sk-warning: #fbbf24;
+  --sk-warning-bg: rgba(245, 158, 11, 0.14);
+  --sk-warning-border: rgba(245, 158, 11, 0.4);
+  --sk-danger: #fca5a5;
+  --sk-danger-bg: rgba(220, 38, 38, 0.12);
+  --sk-danger-border: rgba(220, 38, 38, 0.4);
+  --sk-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   ACTION MODAL — overrides the legacy gradients/radii to match Skills aesthetic.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.action-modal-backdrop {
+  background: rgba(7, 12, 22, 0.5);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+html[data-theme="dark"] .action-modal-backdrop {
+  background: rgba(2, 6, 18, 0.62);
+}
+
+.action-modal {
+  width: min(480px, 100%);
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border-strong);
+  background: var(--sk-surface);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+  padding: 20px;
+  gap: 16px;
+}
+
+html[data-theme="dark"] .action-modal {
+  background: var(--sk-surface);
+  border-color: var(--sk-border-strong);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
+}
+
+.action-modal[data-tone="danger"] {
+  border-color: var(--sk-danger-border);
+  background: var(--sk-surface);
+}
+
+.action-modal-header {
+  padding-right: 52px;
+}
+
+.action-modal-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
+  box-shadow: 0 12px 24px rgba(29, 78, 216, 0.22);
+}
+
+.action-modal-icon[data-tone="danger"] {
+  background: linear-gradient(135deg, #ef4444 0%, #fb7185 100%);
+  box-shadow: 0 12px 24px rgba(239, 68, 68, 0.28);
+}
+
+html[data-theme="dark"] .action-modal-icon {
+  background: linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%);
+}
+
+.action-modal-eyebrow,
+.action-modal-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sk-muted);
+}
+
+.action-modal-title {
+  font-size: 19px;
+  line-height: 1.2;
+  color: var(--sk-text);
+  font-weight: 700;
+}
+
+.action-modal-description {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--sk-muted);
+}
+
+.action-modal-close {
+  /* Mobile-friendly tap target — at least 44×44 px; previous design relied on a 4px-padding icon. */
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--sk-tap);
+  height: var(--sk-tap);
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-modal-close:hover:not(:disabled) {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+html[data-theme="dark"] .action-modal-close {
+  background: var(--sk-surface-alt);
+  border-color: var(--sk-border);
+  color: var(--sk-muted);
+}
+
+html[data-theme="dark"] .action-modal-close:hover:not(:disabled) {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.action-modal-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  padding: 14px;
+  background: var(--sk-surface-alt);
+}
+
+.action-modal-card-title {
+  font-size: 15px;
+  color: var(--sk-text);
+}
+
+.action-modal-card-meta span {
+  padding: 5px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  font-size: 12px;
+}
+
+.action-modal[data-tone="danger"] .action-modal-card {
+  border-color: var(--sk-danger-border);
+  background: var(--sk-danger-bg);
+}
+
+.action-modal[data-tone="danger"] .action-modal-card-meta span {
+  border-color: var(--sk-danger-border);
+  background: var(--sk-surface);
+  color: var(--sk-danger);
+}
+
+/* Mode-toggle (project-add-modal-mode-row + project-add-modal-mode-btn): segmented pill control. */
+.action-modal .project-add-modal-mode-row {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.action-modal .project-add-modal-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--sk-muted);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--sk-radius-pill);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.action-modal .project-add-modal-mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-modal .project-add-modal-mode-btn-active {
+  background: var(--sk-surface);
+  color: var(--sk-accent);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+/* Form rows inside action modal use the same gap/structure as Skills cards. */
+.action-modal .project-add-modal-form,
+.action-modal .files-upload-field {
+  display: grid;
+  gap: 10px;
+}
+
+.action-modal .project-create-note,
+.action-modal .files-upload-note,
+.action-modal .files-upload-field-label {
+  color: var(--sk-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.action-modal .files-upload-field-label {
+  font-weight: 600;
+  color: var(--sk-text);
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+/* Drop-zone — large tap target with dashed border and accent hover. */
+.action-modal .files-upload-dropzone {
+  width: 100%;
+  min-height: 140px;
+  border: 2px dashed var(--sk-border-strong);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.action-modal .files-upload-dropzone:hover {
+  border-color: var(--sk-accent);
+  background: var(--sk-accent-soft);
+}
+
+.action-modal .files-upload-dropzone-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--sk-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.action-modal .files-upload-dropzone-icon {
+  color: var(--sk-accent);
+}
+
+.action-modal .files-upload-mobile-picker {
+  width: 100%;
+  justify-content: center;
+}
+
+.action-modal .files-upload-device-input {
+  /* Hidden native picker — intentionally invisible but accessible via keyboard. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.action-modal .files-upload-selected-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-accent-soft);
+  border: 1px solid var(--sk-accent);
+  color: var(--sk-text);
+}
+
+.action-modal .files-upload-selected-icon {
+  color: var(--sk-accent);
+  flex: 0 0 auto;
+}
+
+.action-modal .files-upload-selected-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.action-modal .files-upload-selected-remove {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--sk-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.action-modal .files-upload-selected-remove:hover {
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+/* Action modal inputs and buttons — pill controls inheriting the design system. */
+.action-modal .input,
+.action-modal input.input,
+.action-modal select.input {
+  min-height: var(--sk-tap);
+  padding: 0 14px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.action-modal select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 40px;
+  cursor: pointer;
+  background:
+    linear-gradient(135deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    var(--sk-surface);
+  background-position: right 20px center, right 12px center, 0 0;
+  background-size: 8px 8px, 8px 8px, auto;
+}
+
+.action-modal .input:focus,
+.action-modal .input:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+.action-modal .btn,
+.action-modal .btn.outline,
+.action-modal .btn.ghost,
+.action-modal .btn.primary {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.action-modal .btn:not(.outline):not(.ghost):not(.danger):not(.danger-confirm-primary),
+.action-modal .btn.primary {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.action-modal .btn.outline {
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+}
+
+.action-modal .btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sk-muted);
+}
+
+.action-modal .btn.ghost:hover:not(:disabled) {
+  background: var(--sk-surface-alt);
+  color: var(--sk-text);
+}
+
+.action-modal .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Danger confirm button keeps gradient flair but uses unified danger palette. */
+.action-modal .danger-confirm-primary {
+  background: linear-gradient(135deg, #ef4444 0%, #fb7185 100%);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(239, 68, 68, 0.24);
+}
+
+.action-modal .danger-confirm-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 16px 30px rgba(239, 68, 68, 0.3);
+}
+
+.action-modal .alert {
+  padding: 10px 12px;
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-danger-border);
+  background: var(--sk-danger-bg);
+  color: var(--sk-danger);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   KANBAN TASK EDITOR MODAL
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.kanban-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(7, 12, 22, 0.5);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+/* Visual-only overrides — keep the legacy three-zone flex layout (header / scrollable form-grid /
+   sticky actions) from kanban.css intact, just swap out colours, radii, and borders. */
+.kanban-modal {
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border-strong);
+  background: var(--sk-surface);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+}
+
+.kanban-modal-header {
+  background: var(--sk-surface-alt);
+  border-bottom: 1px solid var(--sk-border);
+}
+
+.kanban-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--sk-text);
+  overflow-wrap: anywhere;
+}
+
+.kanban-modal .modal-close-btn {
+  width: var(--sk-tap) !important;
+  height: var(--sk-tap) !important;
+  border-radius: var(--sk-radius-pill) !important;
+  background: var(--sk-surface) !important;
+  border: 1px solid var(--sk-border) !important;
+  color: var(--sk-muted) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  padding: 0 !important;
+  /* Reset legacy `transform: rotate(90deg)` hover trick — disorienting for assistive tech. */
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease !important;
+}
+
+.kanban-modal .modal-close-btn:hover {
+  background: var(--sk-accent-soft) !important;
+  border-color: var(--sk-accent) !important;
+  color: var(--sk-accent) !important;
+  transform: none !important;
+}
+
+.kanban-modal .kanban-form-grid {
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.kanban-modal .kanban-form-grid::-webkit-scrollbar { width: 8px; }
+.kanban-modal .kanban-form-grid::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.kanban-modal-actions {
+  background: var(--sk-surface-alt);
+  border-top: 1px solid var(--sk-border);
+}
+
+/* Form sections inside the editor — keep them as transparent layout blocks (legacy behaviour) so
+   nested inputs/segmented controls don't get a double card frame on a card background. */
+.kanban-modal .kanban-form-section {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.kanban-modal .kanban-form-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sk-muted);
+}
+
+.kanban-modal .kanban-field {
+  display: grid;
+  gap: 6px;
+}
+
+.kanban-modal .kanban-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sk-muted);
+}
+
+.kanban-modal .input,
+.kanban-modal input.input,
+.kanban-modal select.input,
+.kanban-modal textarea.input {
+  min-height: var(--sk-tap);
+  padding: 12px 14px;
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.kanban-modal select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 40px;
+  background:
+    linear-gradient(135deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    var(--sk-surface);
+  background-position: right 20px center, right 12px center, 0 0;
+  background-size: 8px 8px, 8px 8px, auto;
+}
+
+.kanban-modal textarea.input {
+  min-height: 88px;
+  line-height: 1.5;
+}
+
+.kanban-modal .input:focus,
+.kanban-modal .input:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+/* Priority segmented control — flex pill bar (low/medium/high). */
+.kanban-modal .kanban-segmented-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+}
+
+.kanban-modal .kanban-segment-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  min-height: 36px;
+  border-radius: var(--sk-radius-pill);
+  background: transparent;
+  color: var(--sk-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0;
+  user-select: none;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.kanban-modal .kanban-segment-item.active {
+  background: var(--sk-surface);
+  color: var(--sk-accent);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+/* Status segmented control — icon-only segments that expand to show label when active. */
+.kanban-modal .kanban-segmented-control-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+}
+
+.kanban-modal .kanban-segment-status-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--sk-radius-pill);
+  background: transparent;
+  color: var(--sk-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.kanban-modal .kanban-segment-status-item:hover {
+  background: var(--sk-accent-soft);
+  color: var(--sk-accent);
+}
+
+.kanban-modal .kanban-segment-status-item.active {
+  background: var(--sk-surface);
+  color: var(--sk-accent);
+  padding: 0 14px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.kanban-modal .kanban-segment-status-label {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kanban-modal .kanban-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sk-border);
+  flex-wrap: wrap;
+}
+
+.kanban-modal .btn,
+.kanban-modal .btn.outline,
+.kanban-modal .btn.ghost,
+.kanban-modal .btn.primary {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.kanban-modal .btn.primary {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.kanban-modal .btn.outline {
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+}
+
+.kanban-modal .btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sk-muted);
+}
+
+.kanban-modal .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kanban-modal .kanban-delete-icon-button {
+  width: var(--sk-tap);
+  padding: 0;
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+.kanban-modal .placeholder {
+  padding: 14px;
+  border: 1px dashed var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  text-align: center;
+  color: var(--sk-muted);
+  font-size: 12px;
+  background: var(--sk-surface-alt);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   SERVICE HEALTH MODAL
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.service-health-modal-backdrop {
+  background: rgba(7, 12, 22, 0.5);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+.service-health-modal {
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border-strong);
+  background: var(--sk-surface);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+  padding: 20px;
+  gap: 14px;
+}
+
+.service-health-modal-title {
+  font-size: 17px;
+  color: var(--sk-text);
+}
+
+.service-health-modal .service-health-detail-card,
+.service-health-modal .service-health-message-box,
+.service-health-modal .service-health-children {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface-alt);
+  padding: 14px;
+}
+
+.service-health-modal .service-health-detail-label {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--sk-muted);
+}
+
+.service-health-modal .service-health-detail-value {
+  margin-top: 6px;
+  border-radius: var(--sk-radius-pill);
+  padding: 4px 10px;
+  font-size: 13px;
+  background: var(--sk-surface);
+  color: var(--sk-text);
+}
+
+.service-health-modal .service-health-detail-value.healthy { background: var(--sk-success-bg); color: var(--sk-success); }
+.service-health-modal .service-health-detail-value.degraded { background: var(--sk-warning-bg); color: var(--sk-warning); }
+.service-health-modal .service-health-detail-value.down { background: var(--sk-danger-bg); color: var(--sk-danger); }
+
+.service-health-modal .service-health-detail-value.small {
+  background: transparent;
+  padding: 0;
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.service-health-modal .service-health-message-box {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sk-text);
+}
+
+.service-health-modal .btn,
+.service-health-modal .btn.outline,
+.service-health-modal .btn.ghost,
+.service-health-modal .btn.primary {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.service-health-modal .btn.primary {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.service-health-modal .btn.outline {
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+}
+
+.service-health-modal .btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sk-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   SETTINGS / FULLSCREEN CODE EDITOR MODAL
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.settings-editor-modal-backdrop {
+  background: rgba(7, 12, 22, 0.55);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+.settings-editor-modal {
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border-strong);
+  background: var(--sk-surface);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.32);
+}
+
+.settings-editor-modal-header,
+.settings-editor-modal-footer {
+  background: var(--sk-surface);
+  border-color: var(--sk-border);
+}
+
+.settings-editor-modal-header {
+  border-bottom: 1px solid var(--sk-border);
+}
+
+.settings-editor-modal-footer {
+  border-top: 1px solid var(--sk-border);
+  flex-wrap: wrap;
+}
+
+.settings-editor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-editor-actions .btn-icon {
+  width: var(--sk-tap);
+  height: var(--sk-tap);
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.settings-editor-actions .btn-icon:hover {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.settings-editor-modal .btn,
+.settings-editor-modal .btn.outline,
+.settings-editor-modal .btn.primary {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.settings-editor-modal .btn.primary {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.settings-editor-modal .btn.outline {
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+}
+
+.settings-editor-modal .settings-editor-status {
+  font-size: 12px;
+  color: var(--sk-muted);
+}
+
+.settings-editor-modal .settings-editor-status.error {
+  color: var(--sk-danger);
+}
+
+.settings-editor-modal .settings-editor-shortcut {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  margin-left: 8px;
+  border-radius: 6px;
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  color: var(--sk-muted);
+}
+
+.settings-editor-language-badge {
+  background: linear-gradient(135deg, #2563eb 0%, #38bdf8 100%);
+  border-radius: var(--sk-radius-pill);
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(29, 78, 216, 0.18);
+}
+
+.settings-editor-meta {
+  font-size: 11px;
+  color: var(--sk-muted);
+  word-break: break-all;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   MARKDOWN TOOLBAR — pill icon bar shared by visual editors and inputs.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+}
+
+.markdown-toolbar-btn {
+  width: var(--sk-tap);
+  height: var(--sk-tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--sk-radius-pill);
+  border: 0;
+  background: transparent;
+  color: var(--sk-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.markdown-toolbar-btn:hover:not(:disabled) {
+  background: var(--sk-accent-soft);
+  color: var(--sk-accent);
+}
+
+.markdown-toolbar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.markdown-toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--sk-border);
+  margin: 0 4px;
+}
+
+.visual-markdown-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.visual-markdown-editor-content {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  padding: 12px 14px;
+  min-height: 120px;
+  color: var(--sk-text);
+}
+
+.visual-markdown-editor-content:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   MINIAPP BLOCKING OVERLAY
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.miniapp-blocking-overlay {
+  background: rgba(7, 12, 22, 0.62);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+}
+
+.miniapp-blocking-card {
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border-strong);
+  background: var(--sk-surface);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.32);
+  padding: 24px;
+}
+
+.miniapp-blocking-title {
+  color: var(--sk-text);
+}
+
+.miniapp-blocking-text {
+  color: var(--sk-muted);
+}
+
+.miniapp-blocking-retry {
+  min-height: var(--sk-tap);
+  padding: 0 18px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-accent-soft);
+  border: 1px solid var(--sk-accent);
+  color: var(--sk-accent);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   MOBILE BOTTOM-SHEET ADAPTATION (≤640px) — applies only to centered modals so reachability
+   improves on small screens. Fullscreen editors/preview already cover the viewport.
+   ═════════════════════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* All three centered modals dock to the bottom edge of the viewport so the user can reach
+     primary controls with one thumb. */
+  .action-modal-backdrop,
+  .kanban-modal-backdrop,
+  .service-health-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .action-modal,
+  .kanban-modal,
+  .service-health-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* ActionModal owns its full padding so we extend it to consume the safe-area inset cleanly.
+     Kanban and ServiceHealth modals keep their per-zone padding from the legacy layout — only
+     the safe-area inset is added to push the bottom edge above the home indicator. */
+  .action-modal {
+    padding: 16px 18px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  /* Slide-up animation only applies to ActionModal because that's the only shell that emits a
+     `data-state` attribute. The Kanban and ServiceHealth modals don't manage open/close state via
+     a data-attribute, so we keep them statically positioned at the bottom — otherwise they would
+     stay translated 100% off-screen and never appear (the actual bug in the kanban editor). */
+  .action-modal {
+    transform: translateY(100%);
+  }
+
+  .action-modal[data-state="open"] {
+    transform: translateY(0);
+  }
+
+  /* Drag handle indicator — visual cue for the bottom-sheet pattern, no JS required. */
+  .action-modal::before {
+    content: "";
+    display: block;
+    width: 44px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--sk-border-strong);
+    margin: -4px auto 6px;
+  }
+
+  /* Stack ActionModal CTA buttons full-width — legacy behaviour from action-modal.css preserved. */
+  .action-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-modal-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Independently scrollable body so sticky header/footer in kanban-modal stay visible. */
+  .action-modal-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .action-modal-header {
+    padding-right: var(--sk-tap);
+  }
+
+  .action-modal-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+}

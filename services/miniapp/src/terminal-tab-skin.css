@@ -1,0 +1,210 @@
+/**
+ * @fileoverview Mobile-first skin for the Terminal tab — visual parity with OpenCode Skills tab.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by TerminalTab).
+ *
+ * Strategy:
+ * - Apply the same --sk-* design tokens used by SkillsTab to .terminal-shell.
+ * - Hero header with icon + active-project counter.
+ * - Output frame styled as a dark card with --sk-radius-card.
+ * - Input row: pill-shaped text field, circular accent send button.
+ */
+
+.terminal-shell {
+  --sk-surface: #ffffff;
+  --sk-surface-alt: #f6f9ff;
+  --sk-border: #dde6f5;
+  --sk-border-strong: #c5d3ec;
+  --sk-text: #0f172a;
+  --sk-muted: #5b6b85;
+  --sk-accent: #1d4ed8;
+  --sk-accent-soft: rgba(29, 78, 216, 0.08);
+  --sk-shadow-card: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  --sk-radius-card: 16px;
+  --sk-radius-pill: 999px;
+  --sk-tap: 44px;
+  --sk-terminal-bg: #0b1220;
+  --sk-terminal-fg: #e2e8f0;
+  --sk-terminal-border: rgba(96, 165, 250, 0.18);
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--sk-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-theme="dark"] .terminal-shell {
+  --sk-surface: #131c2e;
+  --sk-surface-alt: #0f1726;
+  --sk-border: #2a3a58;
+  --sk-border-strong: #345083;
+  --sk-text: #e6efff;
+  --sk-muted: #97a8c7;
+  --sk-accent: #60a5fa;
+  --sk-accent-soft: rgba(96, 165, 250, 0.16);
+  --sk-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.32);
+  --sk-terminal-bg: #060b16;
+  --sk-terminal-border: rgba(96, 165, 250, 0.22);
+}
+
+/* Hero — title bar with running-state counter. */
+.terminal-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--sk-radius-card);
+  background: linear-gradient(135deg, #eef4ff 0%, #f5f9ff 60%, #e8f5ff 100%);
+  border: 1px solid var(--sk-border-strong);
+}
+
+html[data-theme="dark"] .terminal-hero {
+  background: linear-gradient(135deg, #0f1c33 0%, #11203b 60%, #0d2433 100%);
+  border-color: #2c4570;
+}
+
+.terminal-hero-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--sk-text);
+}
+
+.terminal-hero-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-hero-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Output frame — dark IDE-style card; the .log-box keeps its dark palette but is reframed
+   so corners and borders align with the skills aesthetic. */
+.terminal-shell .log-box.terminal-output {
+  margin: 0;
+  flex: 1 1 auto;
+  min-height: 280px;
+  max-height: none;
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-terminal-border);
+  background: var(--sk-terminal-bg);
+  color: var(--sk-terminal-fg);
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  box-shadow: var(--sk-shadow-card);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
+}
+
+.terminal-shell .log-box.terminal-output::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.terminal-shell .log-box.terminal-output::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+
+.terminal-shell .log-box.terminal-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Input row — pill input + accent send button, sits just under the output. */
+.terminal-shell .terminal-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+  margin-top: 0;
+}
+
+.terminal-shell .terminal-input-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--sk-tap);
+  padding: 0 14px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface-alt);
+  color: var(--sk-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.terminal-shell .terminal-input-field:focus,
+.terminal-shell .terminal-input-field:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  background: var(--sk-surface);
+  box-shadow: 0 0 0 2px var(--sk-surface), 0 0 0 5px var(--sk-accent);
+}
+
+.terminal-shell .terminal-send-btn {
+  flex: 0 0 auto;
+  width: var(--sk-tap);
+  height: var(--sk-tap);
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-accent);
+  background: var(--sk-accent-soft);
+  color: var(--sk-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: filter 120ms ease;
+}
+
+.terminal-shell .terminal-send-btn:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.terminal-shell .terminal-send-btn:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.terminal-shell .terminal-send-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+html[data-theme="dark"] .terminal-shell .terminal-send-btn {
+  color: #cfe1ff;
+}
+
+/* Wider screens — keep the same column layout and increase the shell gap to 14px. */
+@media (min-width: 640px) {
+  .terminal-shell {
+    gap: 14px;
+  }
+}

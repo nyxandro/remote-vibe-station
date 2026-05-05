@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { ArrowUp, FolderOpen, Plus } from "lucide-react";
+import { ArrowUp, FolderOpen, FolderTree, Plus } from "lucide-react";
 
 import { FileListResponse, FileReadResponse } from "../types";
 import { ThemeMode } from "../utils/theme";
@@ -33,6 +33,22 @@ const KILOBYTE_UNIT = 1024;
 const MEGABYTE_UNIT = 1024 * 1024;
 const GIGABYTE_UNIT = 1024 * 1024 * 1024;
 const ROOT_PATH_LABEL = "/";
+
+const pluralizeRu = (count: number, one: string, few: string, many: string): string => {
+  /* Shared 3-form Russian rule for compact counters in the files header. */
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return one;
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return few;
+  }
+
+  return many;
+};
 
 const formatFileSize = (sizeBytes?: number): string | null => {
   /* Directory rows and unknown metadata should keep the trailing slot empty. */
@@ -87,6 +103,20 @@ export const FilesTab = (props: Props) => {
 
   return (
     <div className="files-shell">
+      <header className="tab-hero">
+        <div className="tab-hero-title">
+          <FolderTree size={18} aria-hidden />
+          <span>Файлы</span>
+        </div>
+        <div className="tab-hero-meta">
+          <span className="tab-hero-counter">
+            {props.activeId
+              ? `${props.fileList?.entries?.length ?? 0} ${pluralizeRu(props.fileList?.entries?.length ?? 0, "элемент", "элемента", "элементов")}`
+              : "проект не выбран"}
+          </span>
+        </div>
+      </header>
+
       <div className="files-location-strip">{currentFolderLabel}</div>
 
       <div className="files-toolbar">

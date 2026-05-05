@@ -6,7 +6,7 @@
  */
 
 import { ContainerAction, ProjectStatus } from "../types";
-import { Play, RotateCw, Square } from "lucide-react";
+import { Boxes, Play, RotateCw, Square } from "lucide-react";
 
 type Props = {
   activeId: string | null;
@@ -15,6 +15,22 @@ type Props = {
   onRunComposeAction: (action: ContainerAction) => void;
   onRunContainerAction: (service: string, action: ContainerAction) => void;
   onLoadLogs: () => void;
+};
+
+const pluralizeServices = (count: number): string => {
+  /* Russian counters need mod100 guard so 11-14 always use the many form. */
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return "сервис";
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return "сервиса";
+  }
+
+  return "сервисов";
 };
 
 export const ContainersTab = (props: Props) => {
@@ -43,7 +59,19 @@ export const ContainersTab = (props: Props) => {
   };
 
   return (
-    <>
+    <section className="containers-shell">
+      <header className="tab-hero">
+        <div className="tab-hero-title">
+          <Boxes size={18} aria-hidden />
+          <span>Контейнеры</span>
+        </div>
+        <div className="tab-hero-meta">
+          <span className="tab-hero-counter">
+            {props.activeId ? `${props.status?.length ?? 0} ${pluralizeServices(props.status?.length ?? 0)}` : "проект не выбран"}
+          </span>
+        </div>
+      </header>
+
       <div className="compose-controls">
         <span className="compose-controls-label">Compose Controls</span>
         <div className="compose-controls-actions">
@@ -107,6 +135,6 @@ export const ContainersTab = (props: Props) => {
         </button>
       </div>
       {props.activeId && hasLogs ? <pre className="log-box">{props.logs}</pre> : "Click Load Logs to fetch output."}
-    </>
+    </section>
   );
 };

@@ -6,7 +6,7 @@
  */
 
 import { ChangeEvent, useState } from "react";
-import { Container, GitCommitHorizontal, Plus } from "lucide-react";
+import { Container, FolderKanban, GitCommitHorizontal, Plus } from "lucide-react";
 
 import { ProjectAddModal } from "./ProjectAddModal";
 import { ProjectGitSummary, ProjectRecord, ProjectStatus } from "../types";
@@ -24,6 +24,22 @@ type Props = {
   onCloneRepository: (repositoryUrl: string, folderName?: string) => Promise<void> | void;
 };
 
+const pluralizeProjects = (count: number): string => {
+  /* Russian project counters use one/few/many forms, including 21/22/25 edge cases. */
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return "проект";
+  }
+
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return "проекта";
+  }
+
+  return "проектов";
+};
+
 export const ProjectsTab = (props: Props) => {
   /* Projects list keeps only local view state; add-project inputs now live in a dedicated modal component. */
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -34,7 +50,19 @@ export const ProjectsTab = (props: Props) => {
   };
 
   return (
-    <>
+    <section className="projects-shell">
+      <header className="tab-hero">
+        <div className="tab-hero-title">
+          <FolderKanban size={18} aria-hidden />
+          <span>Проекты</span>
+        </div>
+        <div className="tab-hero-meta">
+          <span className="tab-hero-counter">
+            {props.visibleProjects.length} {pluralizeProjects(props.visibleProjects.length)}
+          </span>
+        </div>
+      </header>
+
       <div className="panel-toolbar">
         <input
           className="input project-search-input"
@@ -151,6 +179,6 @@ export const ProjectsTab = (props: Props) => {
           );
         })}
       </div>
-    </>
+    </section>
   );
 };

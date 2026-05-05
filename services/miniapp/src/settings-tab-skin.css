@@ -1,0 +1,665 @@
+/**
+ * @fileoverview Mobile-first skin for the Settings tab — visually unified with the OpenCode Skills tab.
+ *
+ * Exports:
+ * - none (global CSS classes consumed by SettingsTab and its embedded sub-sections).
+ *
+ * Strategy:
+ * - Apply the same --sk-* design tokens the Skills tab uses to .settings-shell, then override every
+ *   sub-component class that renders inside the Settings tab so the entire screen shares one visual
+ *   language: card surfaces with --sk-radius-card, pill controls, accent-soft action buttons, muted
+ *   chip metadata, and consistent dark-mode token swaps.
+ * - Scope overrides under .settings-shell so reusable sub-components (e.g. ServiceHealthModal,
+ *   GitHub on the dedicated tab) keep working unchanged outside the Settings screen.
+ */
+
+/* ── Design tokens for the Settings tab — mirror Skills tab exactly. ───────────────────────────── */
+.settings-shell {
+  --sk-surface: #ffffff;
+  --sk-surface-alt: #f6f9ff;
+  --sk-border: #dde6f5;
+  --sk-border-strong: #c5d3ec;
+  --sk-text: #0f172a;
+  --sk-muted: #5b6b85;
+  --sk-accent: #1d4ed8;
+  --sk-accent-soft: rgba(29, 78, 216, 0.08);
+  --sk-success: #166534;
+  --sk-success-bg: #ecfdf5;
+  --sk-success-border: #86efac;
+  --sk-warning: #92400e;
+  --sk-warning-bg: #fff7ed;
+  --sk-warning-border: #fcd34d;
+  --sk-danger: #b91c1c;
+  --sk-danger-bg: #fef2f2;
+  --sk-danger-border: #fca5a5;
+  --sk-shadow-card: 0 1px 0 rgba(15, 23, 42, 0.04), 0 4px 14px rgba(15, 23, 42, 0.05);
+  --sk-radius-card: 16px;
+  --sk-radius-pill: 999px;
+  --sk-tap: 44px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--sk-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-theme="dark"] .settings-shell {
+  --sk-surface: #131c2e;
+  --sk-surface-alt: #0f1726;
+  --sk-border: #2a3a58;
+  --sk-border-strong: #345083;
+  --sk-text: #e6efff;
+  --sk-muted: #97a8c7;
+  --sk-accent: #60a5fa;
+  --sk-accent-soft: rgba(96, 165, 250, 0.16);
+  --sk-success: #86efac;
+  --sk-success-bg: rgba(34, 197, 94, 0.12);
+  --sk-success-border: rgba(34, 197, 94, 0.4);
+  --sk-warning: #fbbf24;
+  --sk-warning-bg: rgba(245, 158, 11, 0.14);
+  --sk-warning-border: rgba(245, 158, 11, 0.4);
+  --sk-danger: #fca5a5;
+  --sk-danger-bg: rgba(220, 38, 38, 0.12);
+  --sk-danger-border: rgba(220, 38, 38, 0.4);
+  --sk-shadow-card: 0 1px 0 rgba(0, 0, 0, 0.2), 0 8px 24px rgba(0, 0, 0, 0.32);
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────────────────────────── */
+.settings-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--sk-radius-card);
+  background: linear-gradient(135deg, #eef4ff 0%, #f5f9ff 60%, #e8f5ff 100%);
+  border: 1px solid var(--sk-border-strong);
+}
+
+html[data-theme="dark"] .settings-hero {
+  background: linear-gradient(135deg, #0f1c33 0%, #11203b 60%, #0d2433 100%);
+  border-color: #2c4570;
+}
+
+.settings-hero-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--sk-text);
+}
+
+.settings-hero-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-hero-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+  color: var(--sk-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Accordion sections — every <details class="settings-accordion-item"> is a card. ──────────── */
+.settings-shell .settings-accordion-item {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+  overflow: hidden;
+  transition: border-color 120ms ease;
+}
+
+.settings-shell .settings-accordion-item[open] {
+  border-color: var(--sk-border-strong);
+}
+
+.settings-shell .settings-accordion-item > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--sk-text);
+  user-select: none;
+}
+
+.settings-shell .settings-accordion-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Chevron indicator — rotates on open. */
+.settings-shell .settings-accordion-item > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--sk-muted);
+  border-bottom: 2px solid var(--sk-muted);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+}
+
+.settings-shell .settings-accordion-item[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.settings-shell .settings-accordion-body {
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--sk-surface);
+  border-top: 1px solid var(--sk-border);
+}
+
+/* ── Buttons inside Settings — pill controls, accent-soft for primary, neutral for outline. ───── */
+/* Reset native <button> styling for buttons that aren't .btn (e.g. service-health-card buttons). */
+.settings-shell button {
+  font: inherit;
+  text-align: inherit;
+}
+
+.settings-shell .btn,
+.settings-shell .btn.outline,
+.settings-shell .btn.ghost,
+.settings-shell .btn.primary {
+  min-height: var(--sk-tap);
+  padding: 0 16px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.settings-shell .btn:not(.outline):not(.ghost):not(.danger),
+.settings-shell .btn.primary {
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+}
+
+.settings-shell .btn.outline {
+  background: var(--sk-surface-alt);
+  color: var(--sk-muted);
+}
+
+.settings-shell .btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sk-muted);
+}
+
+.settings-shell .btn.ghost:hover:not(:disabled) {
+  background: var(--sk-surface-alt);
+  color: var(--sk-text);
+}
+
+.settings-shell .btn.outline.danger,
+.settings-shell .btn.danger {
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+  color: var(--sk-danger);
+}
+
+.settings-shell .btn:active:not(:disabled),
+.settings-shell .btn.outline:active:not(:disabled),
+.settings-shell .btn.ghost:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.settings-shell .btn:disabled,
+.settings-shell .btn.outline:disabled,
+.settings-shell .btn.ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Inputs — pill-shaped, with the Skills tab focus ring. ────────────────────────────────────── */
+.settings-shell .input,
+.settings-shell input.input,
+.settings-shell select.input,
+.settings-shell .input.settings-input-compact {
+  min-height: var(--sk-tap);
+  padding: 0 14px;
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  color: var(--sk-text);
+  font-size: 14px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* Native <select> needs an explicit appearance reset and a custom chevron so it doesn't render
+   the platform combobox style that ignores our pill border-radius. Drawn with two CSS gradients
+   (no data-URI SVG) — Telegram WebView previously tiled the SVG layer when the cascade lost
+   `background-repeat: no-repeat`, this approach uses the `background:` shorthand once. */
+.settings-shell select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 40px;
+  cursor: pointer;
+  line-height: calc(var(--sk-tap) - 2px);
+  background:
+    linear-gradient(135deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    linear-gradient(45deg, transparent 50%, var(--sk-muted) 50%, var(--sk-muted) calc(50% + 2px), transparent calc(50% + 2px)) no-repeat,
+    var(--sk-surface);
+  background-position:
+    right 20px center,
+    right 12px center,
+    0 0;
+  background-size:
+    8px 8px,
+    8px 8px,
+    auto;
+}
+
+.settings-shell select.input::-ms-expand {
+  display: none;
+}
+
+html[data-theme="dark"] .settings-shell select.input option {
+  background-color: #131c2e;
+  color: #e6efff;
+}
+
+.settings-shell .input:focus,
+.settings-shell .input:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+.settings-shell .settings-create-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-shell .settings-create-row .input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.settings-shell .settings-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+/* Notes / placeholders inside accordion bodies. */
+.settings-shell .placeholder,
+.settings-shell .project-create-note {
+  color: var(--sk-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 2px 2px;
+}
+
+/* ── Service health dashboard — embedded card cluster, restyled to skills card vibe. ──────────── */
+.settings-shell .service-health-shell {
+  padding: 14px;
+  border-radius: var(--sk-radius-card);
+  border: 1px solid var(--sk-border);
+  background: var(--sk-surface);
+  box-shadow: var(--sk-shadow-card);
+}
+
+.settings-shell .service-health-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sk-text);
+}
+
+.settings-shell .service-health-caption,
+.settings-shell .service-health-meta,
+.settings-shell .service-health-card-message {
+  color: var(--sk-muted);
+  font-size: 12px;
+}
+
+.settings-shell .service-health-grid {
+  gap: 10px;
+}
+
+.settings-shell .service-health-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface-alt);
+  box-shadow: var(--sk-shadow-card);
+  padding: 14px;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.settings-shell .service-health-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--sk-border-strong);
+}
+
+.settings-shell .service-health-card.healthy { border-color: var(--sk-success-border); }
+.settings-shell .service-health-card.degraded { border-color: var(--sk-warning-border); }
+.settings-shell .service-health-card.down { border-color: var(--sk-danger-border); }
+
+.settings-shell .service-health-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sk-text);
+}
+
+.settings-shell .service-health-pill {
+  border-radius: var(--sk-radius-pill);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.settings-shell .service-health-pill.healthy { background: var(--sk-success-bg); color: var(--sk-success); }
+.settings-shell .service-health-pill.degraded { background: var(--sk-warning-bg); color: var(--sk-warning); }
+.settings-shell .service-health-pill.down { background: var(--sk-danger-bg); color: var(--sk-danger); }
+
+.settings-shell .service-health-inline-action {
+  font-weight: 700;
+  color: var(--sk-accent);
+}
+
+/* ── Runtime version panel — versions, status pills, update progress ─────────────────────────── */
+.settings-shell .runtime-version-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-shell .runtime-version-summary {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface-alt);
+  padding: 14px;
+}
+
+.settings-shell .runtime-version-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.settings-shell .runtime-version-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sk-muted);
+}
+
+.settings-shell .runtime-version-value {
+  margin-top: 4px;
+  font-weight: 700;
+  color: var(--sk-text);
+  overflow-wrap: anywhere;
+}
+
+.settings-shell .runtime-version-status {
+  width: fit-content;
+  border-radius: var(--sk-radius-pill);
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.settings-shell .runtime-version-status.ok { color: var(--sk-success); background: var(--sk-success-bg); }
+.settings-shell .runtime-version-status.update { color: var(--sk-accent); background: var(--sk-accent-soft); }
+.settings-shell .runtime-version-status.progress { color: var(--sk-warning); background: var(--sk-warning-bg); }
+
+.settings-shell .runtime-update-progress {
+  border: 1px solid var(--sk-warning-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-warning-bg);
+  padding: 12px;
+}
+
+.settings-shell .runtime-update-step {
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sk-muted);
+  background: var(--sk-surface);
+  border: 1px solid var(--sk-border);
+}
+
+.settings-shell .runtime-update-step.completed {
+  color: var(--sk-success);
+  background: var(--sk-success-bg);
+  border-color: var(--sk-success-border);
+}
+
+.settings-shell .runtime-update-step.running {
+  color: var(--sk-accent);
+  background: var(--sk-accent-soft);
+  border-color: var(--sk-accent);
+}
+
+.settings-shell .runtime-update-step.failed {
+  color: var(--sk-danger);
+  background: var(--sk-danger-bg);
+  border-color: var(--sk-danger-border);
+}
+
+/* ── Server metrics cards — CPU/RAM/Disk/Net cluster ─────────────────────────────────────────── */
+.settings-shell .server-metrics-grid {
+  gap: 10px;
+}
+
+.settings-shell .server-metrics-card {
+  border: 1px solid var(--sk-border);
+  border-radius: var(--sk-radius-card);
+  background: var(--sk-surface-alt);
+  box-shadow: var(--sk-shadow-card);
+  padding: 14px;
+}
+
+.settings-shell .server-metrics-card:hover {
+  border-color: var(--sk-border-strong);
+}
+
+.settings-shell .server-metrics-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sk-muted);
+}
+
+.settings-shell .metric-label {
+  color: var(--sk-muted);
+  font-size: 12px;
+}
+
+.settings-shell .metric-value {
+  color: var(--sk-text);
+  font-weight: 700;
+}
+
+.settings-shell .metric-progress-bar {
+  /* Track must be visibly darker than the surrounding card; empty progress should still show. */
+  background: var(--sk-border);
+}
+
+.settings-shell .metric-progress-fill {
+  background: var(--sk-accent);
+}
+
+.settings-shell .cpu-load-bar-track {
+  /* Same contrast rule for the CPU mini-chart so empty bars remain visible against the card. */
+  background: var(--sk-border);
+  height: 100%;
+}
+
+/* Ensure each CPU bar group fills the chart vertically — `align-items: flex-end` on the chart
+   does not stretch items, so groups need an explicit 100% height for `height: 100%` on the
+   track inside to resolve correctly. */
+.settings-shell .cpu-load-bar-group {
+  height: 100%;
+}
+
+.settings-shell .cpu-load-label {
+  color: var(--sk-muted);
+}
+
+/* ── Save status indicator (voice / github) ──────────────────────────────────────────────────── */
+.settings-shell .settings-save-status {
+  font-size: 12px;
+  color: var(--sk-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-shell .settings-save-dot {
+  background: var(--sk-accent);
+}
+
+/* ── Theme toggle — pill chips matching the Skills filter chips.
+   ThemeModeToggle uses .theme-mode-toggle (legacy alias also accepts .settings-theme-toggle). */
+.settings-shell .theme-mode-toggle,
+.settings-shell .settings-theme-toggle {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  border-radius: var(--sk-radius-pill);
+  background: var(--sk-surface-alt);
+  border: 1px solid var(--sk-border);
+  width: fit-content;
+}
+
+.settings-shell .theme-mode-toggle .btn,
+.settings-shell .theme-mode-toggle .btn.outline,
+.settings-shell .settings-theme-toggle .btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--sk-radius-pill);
+  background: transparent;
+  border-color: transparent;
+  color: var(--sk-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-shell .theme-mode-toggle .btn.active,
+.settings-shell .theme-mode-toggle .btn.outline.active,
+.settings-shell .settings-theme-toggle .btn.active {
+  background: var(--sk-surface);
+  border-color: var(--sk-accent);
+  color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+.settings-shell .theme-mode-toggle .btn-icon,
+.settings-shell .settings-theme-toggle .btn-icon {
+  /* Lucide icons inside theme toggle — keep them tightly aligned with the label. */
+  margin-right: 2px;
+}
+
+/* Service health cards are <button> elements — strip default button chrome and make them
+   visually consistent with the .skill-card vibe (rounded surface card, status-tinted border). */
+.settings-shell .service-health-grid .service-health-card {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-shell .service-health-grid .service-health-card:focus-visible {
+  outline: none;
+  border-color: var(--sk-accent);
+  box-shadow: 0 0 0 3px var(--sk-accent-soft);
+}
+
+.settings-shell .settings-general-runtime-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sk-muted);
+}
+
+/* ── Floating save toast — match skills toast palette. ───────────────────────────────────────── */
+.settings-shell ~ .settings-toast,
+.settings-toast {
+  border-radius: var(--sk-radius-pill);
+  border: 1px solid transparent;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 26px rgba(8, 17, 35, 0.22);
+}
+
+.settings-toast.success {
+  background: var(--sk-success-bg, #ecfdf5);
+  border-color: var(--sk-success-border, #86efac);
+  color: var(--sk-success, #166534);
+}
+
+.settings-toast.error {
+  background: var(--sk-danger-bg, #fef2f2);
+  border-color: var(--sk-danger-border, #fca5a5);
+  color: var(--sk-danger, #b91c1c);
+}
+
+/* ── Dark mode tweaks for elements that reference hard-coded light colors. ───────────────────── */
+html[data-theme="dark"] .settings-shell .service-health-shell,
+html[data-theme="dark"] .settings-shell .server-metrics-card,
+html[data-theme="dark"] .settings-shell .runtime-version-summary,
+html[data-theme="dark"] .settings-shell .service-health-card {
+  background: var(--sk-surface-alt);
+}
+
+html[data-theme="dark"] .settings-shell .btn:not(.outline):not(.ghost):not(.danger) {
+  /* Same accent-soft pattern works on dark — accent text needs a slightly lighter pop. */
+  color: #cfe1ff;
+}
+
+/* ── Wider screens — keep accordion stack single-column for editor readability. ──────────────── */
+@media (min-width: 640px) {
+  .settings-shell {
+    gap: 14px;
+  }
+
+  .settings-shell .settings-accordion-body {
+    padding: 14px 18px 18px;
+  }
+}

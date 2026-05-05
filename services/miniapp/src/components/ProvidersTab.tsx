@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { Plug, PlugZap } from "lucide-react";
 
 import {
   CliproxyAccountState,
@@ -161,6 +162,20 @@ export const ProvidersTab = (props: Props) => {
 
   return (
     <section className="providers-shell">
+      {/* Hero — sectional title with a live counter of currently connected providers. */}
+      <header className="providers-hero">
+        <div className="providers-hero-title">
+          <Plug size={18} aria-hidden />
+          <span>Провайдеры</span>
+        </div>
+        <div className="providers-hero-meta">
+          <span className="providers-hero-counter">
+            <PlugZap size={14} aria-hidden />
+            {connectedProviders.length} подключено
+          </span>
+        </div>
+      </header>
+
       <div className="providers-list">
         {connectedProviders.map((provider) => (
           <div key={provider.id} className="providers-item-card">
