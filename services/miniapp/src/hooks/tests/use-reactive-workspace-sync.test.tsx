@@ -39,6 +39,7 @@ const buildInput = (overrides: Partial<HookInput> = {}): HookInput => ({
   loadRuntimeServices: vi.fn().mockResolvedValue(undefined),
   checkRuntimeVersion: vi.fn().mockResolvedValue(undefined),
   loadProviderOverview: vi.fn().mockResolvedValue(undefined),
+  loadSkills: vi.fn().mockResolvedValue(undefined),
   loadProxySettings: vi.fn().mockResolvedValue(undefined),
   loadCliproxyAccounts: vi.fn().mockResolvedValue(undefined),
   ...overrides
@@ -158,7 +159,19 @@ describe("useReactiveWorkspaceSync", () => {
       expect(input.loadFiles).not.toHaveBeenCalled();
       expect(input.loadSettingsOverview).not.toHaveBeenCalled();
       expect(input.loadProviderOverview).not.toHaveBeenCalled();
+      expect(input.loadSkills).not.toHaveBeenCalled();
     }
+  });
+
+  it("loads skills catalog when skills tab opens", async () => {
+    /* Skills tab needs a catalog/local-state refresh on entry because installs can change outside the tab. */
+    const input = buildInput({ activeTab: "skills", activeId: null });
+
+    renderHook(() => useReactiveWorkspaceSync(input));
+
+    await act(async () => undefined);
+
+    expect(input.loadSkills).toHaveBeenCalledTimes(1);
   });
 
   it("pauses polling while the document is hidden and catches up when visible again", async () => {
