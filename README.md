@@ -1,147 +1,62 @@
+<div align="center">
+
+<img src="./RVS.png" alt="Remote Vibe Station" width="640" />
+
 # Remote Vibe Station
 
-Remote Vibe Station is a Docker-based remote development workspace built around OpenCode, Telegram, and a browser-accessible control surface.
+**A Docker-based remote development workspace built around OpenCode, Telegram, and a browser-accessible control surface.**
 
-It is designed for a server-first workflow: deploy the stack on a remote Linux host, manage coding sessions from Telegram, open the Mini App for visual operations, and jump into OpenCode Web UI when you need a larger screen.
+*Deploy the stack on a remote host. Code from your phone. Open the dashboard when you need a bigger screen.*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-1d4ed8.svg?style=flat-square)](#license)
+[![Stack](https://img.shields.io/badge/Stack-Docker%20%E2%80%A2%20NestJS%20%E2%80%A2%20React%20%E2%80%A2%20Telegraf-1d4ed8.svg?style=flat-square)](#architecture)
+[![Runtime](https://img.shields.io/badge/Runtime-Image%E2%80%91based-1d4ed8.svg?style=flat-square)](#deployment)
+[![Platform](https://img.shields.io/badge/Platform-Linux-1d4ed8.svg?style=flat-square)](#runtime-requirements)
+
+[**Quick start**](#-quick-start) ·
+[**Architecture**](#-architecture) ·
+[**Mini App**](#-mini-app) ·
+[**Deployment**](#-deployment) ·
+[**Local dev**](#-local-development)
+
+</div>
+
+---
 
 ## Why this project exists
 
-- Run an AI-assisted coding environment on a remote server instead of your local machine.
-- Control the environment from Telegram, including prompts, sessions, approvals, project selection, and operational actions.
-- Expose a secure browser UI for OpenCode and a Telegram Mini App for project management.
-- Route model access through CLIProxy so the runtime can work with multiple model providers and account types.
-- Keep the runtime deployable as Docker images without requiring a source checkout on the target host.
+Remote Vibe Station is a server-first AI coding workspace. Instead of running OpenCode on your laptop, you put it on a Linux host you actually trust with `Docker access`, `/hostfs`, and host-level operations — then drive it from anywhere.
 
-## Core capabilities
+- **Telegram-first control plane** — prompts, slash commands, approvals, runtime notices, voice messages.
+- **Mini App for visual ops** — projects, files, Git, containers, providers, runtime updates.
+- **Browser access on demand** — magic-link gated entry to OpenCode Web UI through Traefik forward-auth.
+- **Pluggable model gateway** — CLIProxy fronts multiple provider accounts behind a single OpenAI-compatible surface.
+- **Image-only runtime** — published Docker images deploy straight to a clean Ubuntu host. No source checkout on the server.
 
-- Telegram-first OpenCode workflow for prompts, slash commands, progress, approvals, runtime notices, and session control.
-- Telegram Mini App for project selection, file browsing, Git operations, runtime settings, providers, and project tools.
-- Secure browser access to OpenCode Web UI through magic-link/forward-auth flow.
-- CLIProxy-backed model catalog with dynamic model discovery for the OpenCode runtime.
-- Runtime service management for backend, bot, Mini App, OpenCode, reverse proxy, and auxiliary infrastructure.
-- Voice control support for Telegram voice messages via Groq transcription.
-- Persistent outbox/event bridge so Telegram receives assistant replies, tool progress, todo updates, and permission prompts reliably.
+> [!TIP]
+> The bootstrap installer takes a fresh Ubuntu/Debian box and brings up the entire stack with TLS, firewall hardening, and Docker log rotation in one command.
 
-## Architecture overview
+---
 
-The runtime is split into a small number of focused services:
+## Highlights
 
-| Service | Purpose |
+| Capability | What you get |
 | --- | --- |
-| `services/bot` | Telegram bot built with Telegraf. Accepts admin commands, forwards prompts, polls backend outbox, and grants browser access to OpenCode. |
-| `services/backend` | NestJS orchestration layer. Owns projects, prompts, sessions, runtime events, file APIs, provider management, and Telegram-facing APIs. |
-| `services/miniapp` | React + Vite Telegram Mini App for visual workspace management. |
-| `services/opencode` | OpenCode server runtime exposed behind Traefik and configured dynamically at container startup. |
-| `cliproxy` | OpenAI-compatible model gateway used by OpenCode for provider/model access. |
-| `proxy` | Traefik reverse proxy handling TLS, host/path routing, and OpenCode auth middleware. |
+| **Telegram workflow** | Prompts, slash commands, progress streams, approval prompts, runtime notices, voice transcription via Groq. |
+| **Mini App** | Project switcher, file browser, terminal, Git ops, container controls, provider settings, runtime updates. |
+| **Secure web access** | Time-limited browser links to OpenCode Web UI, gated by Traefik forward-auth. |
+| **Multi-provider models** | CLIProxy aggregates upstream accounts and exposes a single `/v1/models` catalog to OpenCode. |
+| **Image-based ops** | One-shot bootstrap → versioned releases → in-app `Update runtime` with `Rollback` to last `.env` snapshot. |
+| **VLESS-aware** | Optional outbound proxy mode, configured from Mini App and applied to selected services without redeploys. |
 
-## How it works
+---
 
-### Telegram prompt flow
+## ⚡ Quick start
 
-1. An admin sends a prompt or command to the Telegram bot.
-2. The bot forwards the request to the backend.
-3. The backend resolves the active project, selected OpenCode session, model, thinking mode, and agent.
-4. The backend sends the request to OpenCode over HTTP.
-5. In parallel, the backend listens to OpenCode runtime events and converts them into Telegram-friendly updates.
-6. The bot polls the backend outbox and delivers text replies, progress updates, todo changes, cooldown notices, and approval prompts to Telegram.
+> [!IMPORTANT]
+> Use a clean Ubuntu/Debian-compatible host. The installer performs host-level setup (Docker, UFW, fail2ban, systemd timers) and is designed for a dedicated remote runtime, not a shared workstation.
 
-### Web UI flow
-
-- OpenCode runs in server mode and is not exposed directly.
-- Traefik protects OpenCode Web UI with forward-auth.
-- The bot can issue a browser access flow so the admin opens OpenCode safely from Telegram.
-
-### Model and mode flow
-
-- OpenCode discovers available models dynamically from CLIProxy `/v1/models` at container startup.
-- Telegram mode selection is persisted in backend preferences.
-- Backend requests override OpenCode prompt model/agent explicitly.
-- The backend also syncs Telegram-selected model/agent into OpenCode config defaults so fresh Web UI sessions start with the same execution mode.
-
-## Main modules
-
-### Backend
-
-The backend is the heart of the system. It provides:
-
-- project discovery, activation, creation, cloning, and deletion;
-- OpenCode session management and prompt dispatch;
-- runtime event subscription and Telegram outbox generation;
-- file, terminal, Git, and settings APIs for the Mini App;
-- provider and CLIProxy account management;
-- browser access token and auth flows for OpenCode Web UI.
-
-Important areas:
-
-- `services/backend/src/projects/` - project lifecycle, files, Git, terminal
-- `services/backend/src/prompt/` - prompt orchestration into OpenCode
-- `services/backend/src/open-code/` - OpenCode HTTP/SSE integration
-- `services/backend/src/telegram/` - Telegram APIs, preferences, outbox bridge, provider settings
-- `services/backend/src/proxy/` - CLIProxy account and mode management
-- `services/backend/src/system/` - runtime services and operational endpoints
-
-### Telegram bot
-
-The bot is intentionally lightweight. It focuses on:
-
-- receiving prompts and admin commands;
-- opening Mini App and OpenCode access flows;
-- processing callback buttons and inline keyboards;
-- polling backend outbox and delivering messages reliably;
-- driving user-facing controls such as `/mode`, `/sessions`, `/stop`, and browser access.
-
-### Mini App
-
-The Mini App provides a richer control plane for tasks that are awkward in plain chat:
-
-- project switching;
-- file browsing and uploads;
-- Git operations and status;
-- project file, terminal, and container inspection actions;
-- provider/runtime/settings management;
-- Kanban/task board, runtime details, and operational views.
-
-### OpenCode runtime
-
-The OpenCode container starts in server mode and is configured dynamically.
-It is intentionally trusted as the remote admin-agent runtime: it has host Docker access, `/hostfs`, host PID namespace, and the `rvs-host` helper for server-level installs/configuration.
-
-At startup, the entrypoint:
-
-- loads the current CLIProxy model catalog;
-- generates the managed provider block for `opencode.json`;
-- preserves unrelated config sections;
-- keeps auth/config state in persistent Docker volumes.
-
-### CLIProxy integration
-
-CLIProxy acts as the model gateway used by OpenCode. It allows the runtime to work with multiple upstream accounts/providers while exposing a single OpenAI-compatible surface.
-
-## Repository layout
-
-```text
-.
-├── services/
-│   ├── backend/
-│   ├── bot/
-│   ├── miniapp/
-│   └── opencode/
-├── infra/
-├── scripts/
-├── docker-compose.yml
-└── README.md
-```
-
-## Installation
-
-### Recommended: image-only runtime install
-
-The recommended production setup installs a runtime directory on the server without cloning the full repository there. The host receives only a runtime folder with `.env`, Compose files, and infrastructure config, while all services run from published Docker images.
-
-Use a clean Ubuntu/Debian-compatible server when possible. The installer performs host-level setup and is designed for a dedicated remote runtime.
-
-Use the bootstrap script:
+**One-line install with auto-domain (`sslip.io`-based):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master/scripts/bootstrap-runtime.sh | sudo bash -s -- \
@@ -151,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master
   --tls-email "<YOUR_EMAIL>"
 ```
 
-You can also use your own domain:
+**Custom domain:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master/scripts/bootstrap-runtime.sh | sudo bash -s -- \
@@ -161,38 +76,233 @@ curl -fsSL https://raw.githubusercontent.com/nyxandro/remote-vibe-station/master
   --tls-email "ops@example.com"
 ```
 
-When `--domain auto` is used, the installer resolves the public IPv4 and builds domains like:
+When `--domain auto` is used, the installer resolves the public IPv4 and produces:
 
 ```text
-<ip>.sslip.io
-code.<ip>.sslip.io
+<ip>.sslip.io           # Mini App + backend
+code.<ip>.sslip.io      # OpenCode Web UI
 ```
 
-### What gets installed and configured
+After the installer finishes, open Telegram, send a prompt to your bot, or `/start` and follow the menu.
 
-The bootstrap script downloads only the runtime install assets and then runs `scripts/install-runtime.sh`.
+---
 
-The installer:
+## 🏗 Architecture
 
-- installs baseline host packages such as `ca-certificates`, `curl`, `git`, `iproute2`, `jq`, `openssl`, `ufw`, and `fail2ban`;
-- installs Docker if Docker is not already present;
-- creates the runtime directory, by default `/opt/remote-vibe-station-runtime`;
-- creates the projects root, by default `/srv/projects`;
-- generates runtime secrets and writes `.env`;
-- writes `docker-compose.yml`, `docker-compose.vless.yml`, Traefik config, CLIProxy config, and optional VLESS placeholders;
-- configures Docker log rotation;
-- enables SSH hardening in key-only mode when authorized SSH keys already exist on the host;
-- opens `22`, `80`, and `443` in UFW;
-- enables `fail2ban` for SSH;
-- installs a systemd timer for Docker cleanup;
-- runs preflight checks before bringing the stack up;
-- pulls images and starts the runtime with Docker Compose.
+The runtime is split into a small number of focused services orchestrated by Docker Compose and fronted by Traefik:
 
-The installer never copies project source code into the runtime directory.
+```mermaid
+flowchart LR
+  subgraph User["👤 Operator"]
+    TG[Telegram]
+    BR[Browser]
+  end
 
-### What the runtime contains
+  subgraph Edge["🌐 Traefik"]
+    PROXY[Reverse proxy + TLS]
+  end
 
-The generated runtime directory looks like this:
+  subgraph Apps["🧠 Application layer"]
+    BOT[bot — Telegraf]
+    BACK[backend — NestJS]
+    MINI[miniapp — React + Vite]
+    OC[opencode — server mode]
+  end
+
+  subgraph Models["🔌 Model gateway"]
+    CLI[CLIProxy]
+  end
+
+  TG --> BOT
+  BR --> PROXY
+  PROXY --> MINI
+  PROXY --> OC
+  BOT <--> BACK
+  MINI <--> BACK
+  BACK <--> OC
+  OC --> CLI
+  CLI -->|OpenAI-compatible| Providers[(Upstream model providers)]
+```
+
+| Service | Purpose |
+| --- | --- |
+| `services/bot` | Telegram bot (Telegraf). Accepts admin commands, forwards prompts, polls the backend outbox, grants browser access. |
+| `services/backend` | NestJS orchestration layer. Owns projects, prompts, sessions, runtime events, file APIs, provider management. |
+| `services/miniapp` | React + Vite Telegram Mini App for visual workspace management. |
+| `services/opencode` | OpenCode runtime in server mode, exposed behind Traefik and configured dynamically at startup. |
+| `cliproxy` | OpenAI-compatible model gateway used by OpenCode for provider/model access. |
+| `proxy` | Traefik reverse proxy: TLS, host/path routing, OpenCode forward-auth middleware. |
+
+### Telegram prompt flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Admin
+  participant Bot as Telegram bot
+  participant Back as Backend
+  participant OC as OpenCode
+
+  Admin->>Bot: prompt / command
+  Bot->>Back: forward request
+  Back->>Back: resolve project, session, model, agent
+  Back->>OC: HTTP request
+  OC-->>Back: SSE runtime events
+  Back-->>Bot: outbox: replies, progress, todos, approvals
+  Bot-->>Admin: messages, buttons, prompts
+```
+
+### Model and mode flow
+
+- OpenCode discovers available models dynamically from `cliproxy /v1/models` at container startup.
+- Telegram-selected mode is persisted in backend preferences.
+- Backend overrides OpenCode prompt model/agent explicitly per request.
+- OpenCode config defaults are kept in sync, so a fresh Web UI session starts in the same execution mode.
+
+---
+
+## 📲 Mini App
+
+The Mini App is the richer surface for tasks that are awkward in chat. The whole UI follows one design language: pill buttons, card-style sections, accent-soft primaries, and a unified token system in light and dark themes.
+
+| Surface | Highlights |
+| --- | --- |
+| **Projects** | Searchable card grid, active-project badge, Git stats and container health pills, sticky toolbar. |
+| **Files** | Card-framed list, monospace path strip, native upload modal with drop-zone, fullscreen preview. |
+| **Terminal** | IDE-styled output card, pill input with monospace font, accent-soft send button. |
+| **Git** | Branch card with ahead/behind pill, switch/merge/commit cards, file-list with status chips. |
+| **Containers** | Compose controls, per-container card with start/restart/stop pill icon-buttons, terminal-styled logs. |
+| **Providers** | Connected-provider cards with status badges, picker grid with internal scroll, CLIProxy runtime panel. |
+| **Skills** | NeuralDeep catalog with search/filter, one-click install with live progress, paginated load-more. |
+| **Kanban** | Column board with drag-and-drop, segmented status/priority controls, mobile bottom-sheet editor. |
+| **Settings** | Accordion sections, runtime dashboard, runtime updater, server metrics, theme toggle, voice-control. |
+
+> [!NOTE]
+> Modals on mobile turn into bottom sheets with a drag-handle indicator, sticky CTA footer, and `env(safe-area-inset-bottom)` so primary actions stay above the home indicator.
+
+---
+
+## 🚀 Deployment
+
+This repository is designed around image-based deployment.
+
+### CI/CD pipeline
+
+- Pushes to `master` trigger image builds and publication to GHCR.
+- Stable runtime updates are discovered from GitHub Releases (e.g. `v0.2.1`).
+- The Mini App checks the latest release and offers **Update runtime** when a newer release exists.
+- Updates save the previous `.env` as `.env.previous`, pull new images, and restart the stack.
+- **Rollback** restores the previous `.env` snapshot and reapplies Compose.
+
+Relevant workflows:
+
+- `.github/workflows/build-images.yml`
+- `.github/workflows/deploy-runtime.yml`
+
+`Deploy Runtime` is kept as a manual emergency workflow. The normal production path is image build + Mini App runtime update.
+
+### Runtime update flow in Mini App
+
+1. Open Mini App.
+2. Go to **Settings → Runtime updates**.
+3. Press **Check**.
+4. If a newer release exists, press **Update runtime**.
+5. During restart the Mini App may briefly disconnect; it reconnects and shows persisted state.
+6. If the new release is broken, press **Rollback** to return to the previous runtime snapshot.
+
+> [!TIP]
+> `Check` compares the current runtime version to the latest GitHub Release. It does not treat every `master` commit as a production update.
+
+<details>
+<summary><b>Manual emergency rollout</b> — when CI/CD is temporarily unavailable</summary>
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml pull
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
+```
+
+</details>
+
+<details>
+<summary><b>VLESS / outbound proxy runtime</b></summary>
+
+Fresh installs keep VLESS disabled. The installer writes a no-op `docker-compose.vless.yml` and empty proxy placeholders so the runtime never starts with fake credentials.
+
+To enable:
+
+1. Open Mini App.
+2. Go to **Providers → CLIProxy runtime**.
+3. Switch to `vless` mode.
+4. Paste the real `vless://...` config URL.
+5. Test, then save settings.
+6. Press **Apply runtime now**.
+
+The backend rewrites VLESS files and restarts the selected services with proxy routing.
+
+</details>
+
+<details>
+<summary><b>Verification after install or update</b></summary>
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml ps
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml logs --tail=100 \
+  backend bot miniapp opencode cliproxy proxy
+```
+
+Expected URLs:
+
+```text
+https://<domain>/miniapp
+https://<opencode-domain>
+```
+
+</details>
+
+<details>
+<summary><b>Stop or remove the runtime</b></summary>
+
+Stop the runtime without deleting data:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml stop
+```
+
+Remove containers without deleting named volumes:
+
+```bash
+cd /opt/remote-vibe-station-runtime
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml down
+```
+
+</details>
+
+---
+
+## 🔧 What the installer does
+
+The bootstrap script downloads only the runtime install assets and runs `scripts/install-runtime.sh`.
+
+| Step | Action |
+| --- | --- |
+| **Host packages** | Installs `ca-certificates`, `curl`, `git`, `iproute2`, `jq`, `openssl`, `ufw`, `fail2ban`. |
+| **Docker** | Installs Docker if not already present. |
+| **Runtime tree** | Creates `/opt/remote-vibe-station-runtime`, projects root `/srv/projects`. |
+| **Secrets** | Generates runtime secrets and writes `.env`. |
+| **Compose & infra** | Writes `docker-compose.yml`, `docker-compose.vless.yml`, Traefik config, CLIProxy config, VLESS placeholders. |
+| **Logging** | Configures Docker log rotation. |
+| **SSH** | Hardens SSH to key-only mode when authorized keys already exist. |
+| **Firewall** | Opens `22`, `80`, `443` in UFW; enables `fail2ban` for SSH. |
+| **Maintenance** | Installs a systemd timer for Docker cleanup. |
+| **Bring-up** | Runs preflight checks, pulls images, starts the stack. |
+
+> [!IMPORTANT]
+> The installer never copies project source code into the runtime directory. Services run from published Docker images. Source-controlled code remains in this Git repository, and CI/CD publishes runtime images.
+
+### Runtime tree
 
 ```text
 /opt/remote-vibe-station-runtime/
@@ -211,40 +321,19 @@ The generated runtime directory looks like this:
         └── xray.json
 ```
 
-Key runtime files:
+---
 
-- `/opt/remote-vibe-station-runtime/.env` - runtime secrets, versions, image refs, domains, and paths;
-- `/opt/remote-vibe-station-runtime/docker-compose.yml` - the main image-only stack;
-- `/opt/remote-vibe-station-runtime/docker-compose.vless.yml` - optional VLESS override;
-- `/opt/remote-vibe-station-runtime/infra/` - Traefik, CLIProxy, and proxy-related config.
+## ⚙️ Runtime requirements
 
-## Runtime requirements
+- Linux host with Docker support.
+- Telegram bot token.
+- One or more Telegram admin IDs.
+- A public domain, or `auto` for `sslip.io`-based setup.
+- An email address for Let's Encrypt.
+- Network access for pulling GHCR images and reaching model/provider endpoints.
 
-At minimum you need:
-
-- a Linux host with Docker support;
-- a Telegram bot token;
-- one or more Telegram admin IDs;
-- a public domain, or `auto` for `sslip.io`-based setup;
-- an email address for Let's Encrypt;
-- network access for pulling GHCR images and reaching model/provider endpoints.
-
-## Configuration
-
-The runtime directory is typically:
-
-```text
-/opt/remote-vibe-station-runtime
-```
-
-Important files:
-
-- `/opt/remote-vibe-station-runtime/.env` - runtime images, versions, and environment variables
-- `/opt/remote-vibe-station-runtime/docker-compose.yml` - main Compose file
-- `/opt/remote-vibe-station-runtime/docker-compose.vless.yml` - optional override for VLESS/proxy mode
-- `/opt/remote-vibe-station-runtime/infra/` - Traefik, CLIProxy, and related configuration
-
-Important runtime variables written by the installer include:
+<details>
+<summary><b>Runtime variables written by the installer</b></summary>
 
 ```text
 COMPOSE_PROJECT_NAME=remote-vibe-station
@@ -269,19 +358,47 @@ RVS_OPENCODE_IMAGE=<image>
 RVS_CLIPROXY_IMAGE=<image>
 ```
 
-`RVS_RUNTIME_VERSION` is the human-readable release version shown in the UI. `RVS_RUNTIME_IMAGE_TAG` is the actual Docker image tag used for deploys, for example `v0.2.1` or `sha-<commit>`.
+`RVS_RUNTIME_VERSION` is the human-readable release shown in the UI.
+`RVS_RUNTIME_IMAGE_TAG` is the actual Docker image tag used for deploys (`v0.2.1`, `sha-<commit>`, …).
 
-Important note:
+</details>
 
-- this runtime directory is not a source checkout;
-- services run from published Docker images;
-- source-controlled code remains in the Git repository and CI/CD publishes the runtime images.
+---
 
-## Local development
+## 🧱 Repository layout
+
+```text
+.
+├── services/
+│   ├── backend/    # NestJS orchestration, project/git/file/runtime APIs
+│   ├── bot/        # Telegraf bot, outbox poller, callback handlers
+│   ├── miniapp/    # React + Vite mini-app
+│   └── opencode/   # OpenCode runtime image with provider sync entrypoint
+├── infra/          # Traefik, CLIProxy, VLESS placeholders
+├── scripts/        # Bootstrap, install-runtime, preflight, templates
+├── ops/            # Operational helpers
+├── templates/      # Runtime templates rendered by the installer
+├── docker-compose.yml
+└── README.md
+```
+
+### Backend areas
+
+- `services/backend/src/projects/` — project lifecycle, files, Git, terminal.
+- `services/backend/src/prompt/` — prompt orchestration into OpenCode.
+- `services/backend/src/open-code/` — OpenCode HTTP/SSE integration.
+- `services/backend/src/telegram/` — Telegram APIs, preferences, outbox bridge, provider settings.
+- `services/backend/src/proxy/` — CLIProxy account and mode management.
+- `services/backend/src/system/` — runtime services and operational endpoints.
+
+---
+
+## 💻 Local development
 
 Each service is developed independently.
 
-### Backend
+<details open>
+<summary><b>Backend</b></summary>
 
 ```bash
 cd services/backend
@@ -289,7 +406,10 @@ npm install
 npm run start:dev
 ```
 
-### Bot
+</details>
+
+<details>
+<summary><b>Bot</b></summary>
 
 ```bash
 cd services/bot
@@ -297,7 +417,10 @@ npm install
 npm run start:dev
 ```
 
-### Mini App
+</details>
+
+<details>
+<summary><b>Mini App</b></summary>
 
 ```bash
 cd services/miniapp
@@ -305,155 +428,66 @@ npm install
 npm run dev
 ```
 
-## Testing
+</details>
 
-Examples:
+### Testing
 
 ```bash
-cd services/backend && npm test
-cd services/backend && npm run typecheck
-
-cd services/bot && npm test
-cd services/bot && npm run typecheck
-
+cd services/backend && npm test && npm run typecheck
+cd services/bot     && npm test && npm run typecheck
 cd services/miniapp && npm test
 ```
 
 The backend and bot contain focused tests for Telegram bridging, runtime orchestration, session control, and provider flows.
 
-## Deployment model
+---
 
-This repository is designed around image-based deployment.
+## 🗺 Supported user workflows
 
-### CI/CD
+- Chat with OpenCode from Telegram.
+- Switch projects and sessions remotely.
+- Open OpenCode Web UI securely from Telegram.
+- Review tool progress, file updates, todos, and permission prompts in chat.
+- Configure model/provider/agent preferences.
+- Connect provider accounts and CLIProxy-backed model sources.
+- Manage project files, Git, and terminal access from the Mini App.
+- Operate voice-control flows for Telegram voice messages.
 
-In the standard runtime flow:
+---
 
-- pushes to `master` trigger image builds and publication to GHCR;
-- stable runtime updates are discovered from GitHub Releases such as `v0.2.1`;
-- the Mini App checks the latest release and offers `Update runtime` when a newer release exists;
-- runtime updates save the previous `.env` as `.env.previous`, pull the new images, and restart the stack;
-- `Rollback` restores the previous `.env` snapshot and reapplies Compose.
+## 🛠 Scripts and infrastructure
 
-Relevant workflows:
+| Asset | Purpose |
+| --- | --- |
+| `scripts/bootstrap-runtime.sh` | One-command bootstrap installer. |
+| `scripts/install-runtime.sh` | Main runtime installation script. |
+| `scripts/install-runtime-preflight.sh` | Host validation / preflight checks. |
+| `scripts/templates/runtime-docker-compose.yml` | Runtime Compose template. |
+| `infra/traefik/traefik.yml` | Traefik base configuration. |
+| `infra/traefik/dynamic/opencode-auth.yml` | OpenCode forward-auth middleware. |
+| `infra/cliproxy/config.yaml` | CLIProxy configuration. |
 
-- `.github/workflows/build-images.yml`
-- `.github/workflows/deploy-runtime.yml`
+---
 
-`Deploy Runtime` is kept as a manual emergency workflow. The normal production path is image build + Mini App runtime update.
+## 📋 Operational notes
 
-### Manual emergency rollout
+> [!WARNING]
+> Treat merges into `master` as deployment triggers. Production Docker images are built only from the canonical CI pipeline on `master`. Manual or local builds on the server from outdated sources are forbidden — they desynchronise code from configuration.
 
-If CI/CD is temporarily unavailable, you can refresh the runtime manually:
-
-```bash
-cd /opt/remote-vibe-station-runtime
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml pull
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml up -d --remove-orphans
-```
-
-### Runtime update flow in Mini App
-
-The production update path is intentionally user-driven:
-
-1. Open Mini App.
-2. Go to `Settings -> Runtime updates`.
-3. Press `Check`.
-4. If a newer release exists, press `Update runtime`.
-5. During restart the Mini App can briefly disconnect; it reconnects and shows persisted progress/state.
-6. If the new release is broken, press `Rollback` to return to the previous runtime snapshot.
-
-`Check` compares the current runtime version to the latest GitHub Release. It does not treat every `master` commit as a production update.
-
-### VLESS and proxy runtime
-
-Fresh installs keep VLESS disabled by default. The installer writes a no-op `docker-compose.vless.yml` and empty proxy config placeholders so the runtime does not start with fake credentials.
-
-The intended flow is:
-
-1. Open Mini App.
-2. Go to Providers / CLIProxy runtime settings.
-3. Switch to `vless` mode.
-4. Paste the real `vless://...` config URL.
-5. Test and save settings.
-6. Apply runtime now.
-
-The backend then rewrites the VLESS files and restarts the selected services with proxy routing.
-
-### Verification after install or update
-
-```bash
-cd /opt/remote-vibe-station-runtime
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml ps
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml logs --tail=100 backend bot miniapp opencode cliproxy proxy
-```
-
-Expected URLs:
-
-```text
-https://<domain>/miniapp
-https://<opencode-domain>
-```
-
-### Maintenance
-
-The installer creates `runtime-maintenance.sh` and the systemd timer `remote-vibe-station-maintenance.timer`.
-
-That maintenance job safely prunes:
-
-- unused Docker images older than the configured window;
-- stopped containers;
-- unused networks;
-- Docker build cache.
-
-It does not delete Docker volumes.
-
-### Stop or remove runtime
-
-Stop the runtime without deleting data:
-
-```bash
-cd /opt/remote-vibe-station-runtime
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml stop
-```
-
-Remove containers without deleting named volumes:
-
-```bash
-cd /opt/remote-vibe-station-runtime
-docker compose --env-file .env -f docker-compose.yml -f docker-compose.vless.yml down
-```
-
-## Supported user workflows
-
-- chat with OpenCode from Telegram;
-- switch projects and sessions remotely;
-- open OpenCode Web UI securely from Telegram;
-- review tool progress, file updates, todos, and permission prompts in chat;
-- configure model/provider/agent preferences;
-- connect provider accounts and CLIProxy-backed model sources;
-- manage project files, Git, and terminal access from the Mini App;
-- operate voice-control flows for Telegram voice messages.
-
-## Scripts and infrastructure
-
-Important assets:
-
-- `scripts/bootstrap-runtime.sh` - one-command bootstrap installer
-- `scripts/install-runtime.sh` - main runtime installation script
-- `scripts/install-runtime-preflight.sh` - host validation/preflight checks
-- `scripts/templates/runtime-docker-compose.yml` - runtime Compose template
-- `infra/traefik/traefik.yml` - Traefik base configuration
-- `infra/traefik/dynamic/opencode-auth.yml` - OpenCode forward-auth middleware
-- `infra/cliproxy/config.yaml` - CLIProxy configuration
-
-## Operational notes
-
-- Treat merges into `master` as deployment triggers.
 - Prefer Docker Compose `stop`/`start` for dev/runtime operations when data persistence matters.
-- Run database or runtime migrations inside the appropriate containers.
+- Run database/runtime migrations inside the appropriate containers.
 - Do not rely on local manual server builds from stale source trees; use published images from CI whenever possible.
 
-## License
+---
+
+## 📜 License
 
 MIT
+
+<div align="center">
+
+—
+
+<sub>Remote Vibe Station · server-first AI coding workspace · made for operators who like calm tools.</sub>
+
+</div>
