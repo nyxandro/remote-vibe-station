@@ -5,7 +5,7 @@
  * - OpenCodeController - Routes for OpenCode-related actions.
  */
 
-import { BadRequestException, Body, Controller, Get, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Request } from "express";
 
 import { EventsService } from "../events/events.service";
@@ -15,6 +15,7 @@ import { AppAuthGuard } from "../security/app-auth.guard";
 import { OpenCodeProjectSyncService } from "./opencode-project-sync.service";
 import { OpenCodeRuntimeService } from "./opencode-runtime.service";
 import { OpenCodeSettingsKind, OpenCodeSettingsService } from "./opencode-settings.service";
+import { OpenCodeSkillsService, SkillCatalogFilter } from "./opencode-skills.service";
 
 @Controller("api/opencode")
 @UseGuards(AppAuthGuard)
@@ -22,6 +23,7 @@ export class OpenCodeController {
   public constructor(
     private readonly sync: OpenCodeProjectSyncService,
     private readonly settings: OpenCodeSettingsService,
+    private readonly skills: OpenCodeSkillsService,
     private readonly runtime: OpenCodeRuntimeService,
     private readonly events: EventsService
   ) {}
@@ -280,6 +282,120 @@ export class OpenCodeController {
           fallbackCode: "APP_OPENCODE_SETTINGS_CREATE_FAILED",
           fallbackMessage: "Failed to create OpenCode settings file.",
           fallbackHint: "Check target folder permissions and retry file creation."
+        })
+      );
+    }
+  }
+
+  @Get("skills")
+  public async searchSkills(
+    @Query("q") query?: string,
+    @Query("installed") installed?: SkillCatalogFilter
+  ) {
+    /* Search remote NeuralDeep catalog and mark skills already present in OpenCode config. */
+    try {
+      return await this.skills.searchCatalog({ query, installed: installed ?? "all" });
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_OPENCODE_SKILLS_SEARCH_FAILED",
+          fallbackMessage: "Failed to search OpenCode skills catalog.",
+          fallbackHint: "Check outbound access to neuraldeep.ru and retry the search."
+        })
+      );
+    }
+  }
+
+  @Get("skills/installed")
+  public listInstalledSkills() {
+    /* Return locally installed skills from the shared OpenCode config volume. */
+    try {
+      return this.skills.listInstalledSkills();
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_OPENCODE_SKILLS_INSTALLED_FAILED",
+          fallbackMessage: "Failed to list installed OpenCode skills.",
+          fallbackHint: "Check OpenCode config volume permissions and retry."
+        })
+      );
+    }
+  }
+
+  @Post("skills/install")
+  public async installSkill(
+    @Body() body: { id?: string; name?: string; owner?: string | null; repo?: string | null; version?: string | null },
+    @Req() req: Request
+  ) {
+    /* Install selected NeuralDeep skill into ~/.config/opencode/skills and notify settings surfaces. */
+    if (!body?.id || !body.name) {
+      throw new BadRequestException(
+        createAppErrorBody({
+          code: "APP_OPENCODE_SKILL_INSTALL_INPUT_REQUIRED",
+          message: "Skill id and name are required for installation.",
+          hint: "Select a skill from the catalog and retry installation."
+        })
+      );
+    }
+
+    try {
+      const result = await this.skills.installSkill({
+        id: body.id,
+        name: body.name,
+        owner: body.owner,
+        repo: body.repo,
+        version: body.version
+      });
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["settings"],
+        reason: "opencode.skills.install"
+      });
+      return result;
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_OPENCODE_SKILL_INSTALL_FAILED",
+          fallbackMessage: "Failed to install OpenCode skill.",
+          fallbackHint: "Check the selected skill and OpenCode config volume permissions, then retry."
+        })
+      );
+    }
+  }
+
+  @Delete("skills/uninstall")
+  public async uninstallSkill(@Body() body: { name?: string }, @Req() req: Request) {
+    /* Uninstall one local skill by folder name. */
+    if (!body?.name) {
+      throw new BadRequestException(
+        createAppErrorBody({
+          code: "APP_OPENCODE_SKILL_NAME_REQUIRED",
+          message: "Skill name is required for removal.",
+          hint: "Choose an installed skill and retry removal."
+        })
+      );
+    }
+
+    try {
+      const result = await this.skills.uninstallSkill(body.name);
+      publishWorkspaceStateChangedEvent({
+        events: this.events,
+        adminId: (req as Request & { authAdminId?: number }).authAdminId,
+        surfaces: ["settings"],
+        reason: "opencode.skills.uninstall"
+      });
+      return result;
+    } catch (error) {
+      throw new BadRequestException(
+        normalizeUnknownErrorToAppError({
+          error,
+          fallbackCode: "APP_OPENCODE_SKILL_UNINSTALL_FAILED",
+          fallbackMessage: "Failed to remove OpenCode skill.",
+          fallbackHint: "Check the skill name and OpenCode config volume permissions, then retry."
         })
       );
     }

@@ -27,7 +27,9 @@ const bootstrap = async (): Promise<void> => {
   /* Create and configure NestJS app. */
   const config = loadConfig();
   const isDevelopment = process.env.NODE_ENV === "development";
-  const allowedOrigins = new Set<string>(isDevelopment ? DEV_ALLOWED_ORIGINS : []);
+  /* Local Docker preview uses production NODE_ENV but still needs localhost Mini App origin when explicitly opted in. */
+  const allowsLocalPreview = isDevelopment || config.allowUnsafeLocalAuth;
+  const allowedOrigins = new Set<string>(allowsLocalPreview ? DEV_ALLOWED_ORIGINS : []);
   try {
     const publicOrigin = new URL(config.publicBaseUrl).origin;
     allowedOrigins.add(publicOrigin);
